@@ -15,5 +15,7 @@ export interface WikiSummary {
 
 export interface WikiPageSummary {
   readonly id: number;
+  readonly isParentPage: boolean;
+  readonly order: number;
   readonly path: string;
 }

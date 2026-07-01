@@ -8,12 +8,3 @@ export function sanitizeRenderedHtml(html: string): string {
     }
   });
 }
-
-export function sanitizeRenderedSvg(svg: string): string {
-  return DOMPurify.sanitize(svg, {
-    USE_PROFILES: {
-      svg: true,
-      svgFilters: true
-    }
-  });
-}

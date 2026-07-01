@@ -66,12 +66,32 @@ function mermaidContainerPlugin(md: MarkdownIt): void {
 }
 
 export function createMarkdownRenderer(): MarkdownIt {
-  return new MarkdownIt({
+  const md = new MarkdownIt({
     breaks: false,
     html: true,
     linkify: true,
-    typographer: true
+    typographer: true,
   })
     .use(markdownItAnchor)
     .use(mermaidContainerPlugin);
+
+  // Override the fence renderer so that ```mermaid``` (and our ":::mermaid"
+  // container plugin which produces the same fence token) emit
+  // <pre class="mermaid">ESCAPED_SOURCE</pre>. This is the exact contract
+  // mermaid.run() expects — no HTML wrappers, no <code> tag, source as
+  // escaped text content. Non-mermaid fences fall through to the default
+  // renderer for normal syntax-highlighted code blocks.
+  const defaultFence = md.renderer.rules.fence;
+  md.renderer.rules.fence = (tokens, idx, options, env, slf) => {
+    const token = tokens[idx];
+    const info = token.info.trim().toLowerCase();
+    if (info === "mermaid") {
+      return `<pre class="mermaid">${md.utils.escapeHtml(token.content)}</pre>\n`;
+    }
+    return defaultFence
+      ? defaultFence(tokens, idx, options, env, slf)
+      : slf.renderToken(tokens, idx, options);
+  };
+
+  return md;
 }

@@ -5,10 +5,11 @@ import type { WikiPageTreeNode } from "../../wiki/WikiPageTree";
 interface WikiPageTreeProps {
   readonly activePath?: string;
   readonly nodes: readonly WikiPageTreeNode[];
+  readonly onNodeExpand?: (path: string) => void;
   readonly onPageSelected: (path: string) => void;
 }
 
-export function WikiPageTree({ activePath, nodes, onPageSelected }: WikiPageTreeProps) {
+export function WikiPageTree({ activePath, nodes, onNodeExpand, onPageSelected }: WikiPageTreeProps) {
   const activeAncestors = useMemo(() => findActiveAncestors(nodes, activePath), [activePath, nodes]);
 
   if (nodes.length === 0) {
@@ -20,9 +21,20 @@ export function WikiPageTree({ activePath, nodes, onPageSelected }: WikiPageTree
       {nodes.map((node) => (
         <WikiPageTreeItem
           activePath={activePath}
-          initialExpanded={activeAncestors.has(node.path)}
+          // A node should be expanded if it is an ancestor of the active page.
+          // We combine two strategies so it works both before and after lazy
+          // children are loaded:
+          //   1. Tree traversal (findActiveAncestors): works once children are
+          //      in memory.
+          //   2. Path-string prefix check: works immediately, even when the
+          //      subtree hasn't been fetched yet. This is what lets the tree
+          //      auto-cascade-expand on deep-link restore without pre-loading.
+          initialExpanded={
+            activeAncestors.has(node.path) || isAncestorOfActivePath(node.path, activePath)
+          }
           key={node.path}
           node={node}
+          onNodeExpand={onNodeExpand}
           onPageSelected={onPageSelected}
         />
       ))}
@@ -34,6 +46,7 @@ interface WikiPageTreeItemProps {
   readonly activePath?: string;
   readonly initialExpanded?: boolean;
   readonly node: WikiPageTreeNode;
+  readonly onNodeExpand?: (path: string) => void;
   readonly onPageSelected: (path: string) => void;
 }
 
@@ -41,10 +54,10 @@ function WikiPageTreeItem({
   activePath,
   initialExpanded,
   node,
+  onNodeExpand,
   onPageSelected
 }: WikiPageTreeItemProps) {
   const isActive = activePath === node.path;
-  const canSelect = node.id !== undefined;
   const [expanded, setExpanded] = useState(Boolean(initialExpanded));
 
   useEffect(() => {
@@ -52,6 +65,17 @@ function WikiPageTreeItem({
       setExpanded(true);
     }
   }, [initialExpanded]);
+
+  // When this node is first expanded and its children haven't been loaded yet,
+  // ask the parent to fetch them.
+  useEffect(() => {
+    if (expanded && node.hasChildren && !node.childrenLoaded) {
+      onNodeExpand?.(node.path);
+    }
+  }, [expanded, node.hasChildren, node.childrenLoaded, node.path, onNodeExpand]);
+
+  const showChildren = expanded && node.children.length > 0;
+  const showLoadingIndicator = expanded && node.hasChildren && !node.childrenLoaded;
 
   return (
     <li>
@@ -63,22 +87,24 @@ function WikiPageTreeItem({
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
-          {node.hasChildren ? (expanded ? "v" : ">") : ""}
+          {node.hasChildren ? (expanded ? "▾" : "▸") : ""}
         </button>
         <button
           aria-current={isActive ? "page" : undefined}
           className={isActive ? "active" : undefined}
-          disabled={!canSelect}
           onClick={() => onPageSelected(node.path)}
           type="button"
         >
           {node.name}
         </button>
       </div>
-      {expanded && node.children.length > 0 ? (
+      {showLoadingIndicator ? (
+        <p className="wiki-tree-loading" aria-live="polite">Loading…</p>
+      ) : showChildren ? (
         <WikiPageTree
           activePath={activePath}
           nodes={node.children}
+          onNodeExpand={onNodeExpand}
           onPageSelected={onPageSelected}
         />
       ) : null}
@@ -121,4 +147,12 @@ function findActivePath(
   }
 
   return false;
+}
+
+/** Returns true when nodePath is a strict ancestor of activePath by path segments. */
+function isAncestorOfActivePath(nodePath: string, activePath: string | undefined): boolean {
+  if (!activePath) {
+    return false;
+  }
+  return activePath.startsWith(nodePath + "/");
 }

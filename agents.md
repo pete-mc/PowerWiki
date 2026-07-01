@@ -78,3 +78,11 @@ Renderer dependencies should be easy to upgrade independently from the Azure Dev
 Update `README.md` when the project gains concrete setup, build, packaging, or publishing steps.
 
 When implementing features, document any difference from the built-in Azure DevOps Wiki behavior, especially if the difference affects stored Markdown, links, attachments, permissions, or page history.
+
+## Publishing
+
+After every set of changes, always publish to the marketplace:
+
+1. Increment only the patch version (the third number) in both `package.json` and `vss-extension.json`. Never change the major or minor version.
+2. Run `npm run build`.
+3. Run: `$pat = (Get-Content C:\Users\peter\sources\repos\PowerWiki\ado.pat -Raw).Trim(); npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat`

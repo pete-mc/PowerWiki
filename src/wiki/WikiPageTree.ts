@@ -1,119 +1,77 @@
 import type { WikiPageSummary } from "./WikiPage";
 
-export type WikiOrderMap = ReadonlyMap<string, readonly string[]>;
-
 export interface WikiPageTreeNode {
   readonly children: WikiPageTreeNode[];
+  /** True once getChildPages has been called for this node's path. */
+  readonly childrenLoaded: boolean;
   readonly hasChildren: boolean;
   readonly id?: number;
   readonly name: string;
+  readonly order: number;
   readonly path: string;
 }
 
 interface MutableWikiPageTreeNode {
   children: MutableWikiPageTreeNode[];
+  childrenLoaded: boolean;
   hasChildren: boolean;
   id?: number;
   name: string;
+  order: number;
   path: string;
 }
 
+/**
+ * Builds a display tree from the flat list of fetched pages.
+ *
+ * @param pages      All pages fetched so far (may be a subset of the full wiki).
+ * @param loadedPaths Paths for which getChildPages has already been called.
+ *                    Controls whether a node shows a load-on-expand indicator.
+ */
 export function buildWikiPageTree(
   pages: readonly WikiPageSummary[],
-  orderMap: WikiOrderMap = new Map()
+  loadedPaths: ReadonlySet<string> = new Set()
 ): WikiPageTreeNode[] {
-  const roots: MutableWikiPageTreeNode[] = [];
   const nodesByPath = new Map<string, MutableWikiPageTreeNode>();
 
-  for (const page of [...pages].sort(comparePagePaths)) {
-    const segments = splitPagePath(page.path);
-    let parentChildren = roots;
-    let currentPath = "";
+  for (const page of pages) {
+    const segments = page.path.split("/").filter(Boolean);
+    const name = segments.at(-1) ?? page.path;
 
-    segments.forEach((segment, index) => {
-      currentPath = `${currentPath}/${segment}`;
-      let node = nodesByPath.get(currentPath);
-
-      if (!node) {
-        node = {
-          children: [],
-          hasChildren: false,
-          name: segment,
-          path: currentPath
-        };
-        nodesByPath.set(currentPath, node);
-        parentChildren.push(node);
-      }
-
-      if (index === segments.length - 1) {
-        node.id = page.id;
-      }
-
-      if (index < segments.length - 1) {
-        node.hasChildren = true;
-      }
-
-      parentChildren = node.children;
+    nodesByPath.set(page.path, {
+      children: [],
+      childrenLoaded: loadedPaths.has(page.path),
+      hasChildren: page.isParentPage,
+      id: page.id,
+      name,
+      order: page.order,
+      path: page.path,
     });
   }
 
-  return sortTree(roots, "/", orderMap);
-}
+  const roots: MutableWikiPageTreeNode[] = [];
 
-function comparePagePaths(left: WikiPageSummary, right: WikiPageSummary): number {
-  return left.path.localeCompare(right.path, undefined, { sensitivity: "base" });
-}
+  for (const node of nodesByPath.values()) {
+    const segments = node.path.split("/").filter(Boolean);
+    const parentPath =
+      segments.length <= 1 ? null : "/" + segments.slice(0, -1).join("/");
 
-function splitPagePath(path: string): string[] {
-  const normalizedPath = path === "/" ? "/Home" : path;
-  return normalizedPath.split("/").filter(Boolean);
-}
+    const parent = parentPath ? nodesByPath.get(parentPath) : null;
 
-function sortTree(
-  nodes: MutableWikiPageTreeNode[],
-  parentPath: string,
-  orderMap: WikiOrderMap
-): WikiPageTreeNode[] {
-  const order = buildOrderIndex(orderMap.get(parentPath) ?? []);
-
-  return nodes
-    .sort((left, right) => compareNodes(left, right, order))
-    .map((node) => ({
-      children: sortTree(node.children, node.path, orderMap),
-      hasChildren: node.hasChildren || node.children.length > 0,
-      id: node.id,
-      name: node.name,
-      path: node.path
-    }));
-}
-
-function buildOrderIndex(order: readonly string[]): ReadonlyMap<string, number> {
-  return new Map(order.map((name, index) => [normalizeOrderName(name), index]));
-}
-
-function compareNodes(
-  left: MutableWikiPageTreeNode,
-  right: MutableWikiPageTreeNode,
-  order: ReadonlyMap<string, number>
-): number {
-  const leftOrder = order.get(normalizeOrderName(left.name));
-  const rightOrder = order.get(normalizeOrderName(right.name));
-
-  if (leftOrder !== undefined && rightOrder !== undefined) {
-    return leftOrder - rightOrder;
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
   }
 
-  if (leftOrder !== undefined) {
-    return -1;
-  }
-
-  if (rightOrder !== undefined) {
-    return 1;
-  }
-
-  return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  sortByOrder(roots);
+  return roots;
 }
 
-function normalizeOrderName(name: string): string {
-  return name.replace(/\.md$/i, "").toLocaleLowerCase();
+function sortByOrder(nodes: MutableWikiPageTreeNode[]): void {
+  nodes.sort((a, b) => a.order - b.order);
+  for (const node of nodes) {
+    sortByOrder(node.children);
+  }
 }

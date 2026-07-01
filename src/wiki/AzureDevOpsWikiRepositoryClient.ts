@@ -1,17 +1,35 @@
 import { getClient } from "azure-devops-extension-api/Common";
-import { GitRestClient, VersionControlRecursionType } from "azure-devops-extension-api/Git";
-import { WikiRestClient, type WikiPagesBatchRequest } from "azure-devops-extension-api/Wiki";
+import { VersionControlRecursionType } from "azure-devops-extension-api/Git";
+import { WikiRestClient, type WikiPage as WikiApiPage } from "azure-devops-extension-api/Wiki";
 
 import type { WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
-import type { WikiOrderMap } from "./WikiPageTree";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
 
-const pageBatchSize = 100;
-const orderFileName = ".order";
+// Subclasses WikiRestClient to expose the same pages endpoint but requesting
+// JSON instead of text/plain, which returns the full WikiPage object including
+// subPages, order, and isParentPage.
+class WikiJsonClient extends WikiRestClient {
+  public getPageJson(
+    project: string,
+    wikiIdentifier: string,
+    path: string
+  ): Promise<WikiApiPage> {
+    return this.beginRequest<WikiApiPage>({
+      apiVersion: "5.2-preview.1",
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages",
+      routeValues: { project, wikiIdentifier },
+      queryParams: {
+        path,
+        recursionLevel: VersionControlRecursionType.OneLevel,
+        includeContent: false,
+      },
+    });
+  }
+}
 
 export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
-  private readonly gitClient = getClient(GitRestClient);
   private readonly wikiClient = getClient(WikiRestClient);
+  private readonly wikiJsonClient = getClient(WikiJsonClient);
 
   public constructor(private readonly projectName: string) {}
 
@@ -23,70 +41,19 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       mappedPath: normalizeMappedPath(wiki.mappedPath),
       name: wiki.name,
       repositoryId: wiki.repositoryId,
-      remoteUrl: wiki.remoteUrl
+      remoteUrl: wiki.remoteUrl,
     }));
   }
 
-  public async getOrderMap(wiki: WikiSummary): Promise<WikiOrderMap> {
-    if (!wiki.repositoryId) {
-      return new Map();
-    }
+  public async getChildPages(wikiId: string, parentPath: string): Promise<WikiPageSummary[]> {
+    const page = await this.wikiJsonClient.getPageJson(this.projectName, wikiId, parentPath);
 
-    const mappedPath = wiki.mappedPath ?? "/";
-    const items = await this.gitClient.getItems(
-      wiki.repositoryId,
-      this.projectName,
-      mappedPath,
-      VersionControlRecursionType.Full
-    );
-    const orderPaths = items
-      .map((item) => item.path)
-      .filter((path) => path.endsWith(`/${orderFileName}`) || path === `/${orderFileName}`);
-    const orderEntries = await Promise.all(
-      orderPaths.map(async (path) => {
-        const content = await this.gitClient.getItemText(
-          wiki.repositoryId as string,
-          path,
-          this.projectName
-        );
-
-        return [toWikiDirectoryPath(path, mappedPath), parseOrderFile(content)] as const;
-      })
-    );
-
-    return new Map(orderEntries);
-  }
-
-  public async getPageList(wikiId: string): Promise<WikiPageSummary[]> {
-    const pages: WikiPageSummary[] = [];
-    let continuationToken: string | undefined;
-
-    do {
-      const request: WikiPagesBatchRequest = {
-        pageViewsForDays: 0,
-        top: pageBatchSize
-      } as WikiPagesBatchRequest;
-
-      if (continuationToken) {
-        request.continuationToken = continuationToken;
-      }
-
-      const pageBatch = await this.wikiClient.getPagesBatch(
-        request,
-        this.projectName,
-        wikiId
-      );
-
-      pages.push(
-        ...pageBatch.map((page) => ({
-          id: page.id,
-          path: page.path
-        }))
-      );
-      continuationToken = pageBatch.continuationToken ?? undefined;
-    } while (continuationToken);
-
-    return pages;
+    return (page.subPages ?? []).map((subPage: WikiApiPage) => ({
+      id: subPage.id,
+      isParentPage: subPage.isParentPage ?? false,
+      order: subPage.order ?? 0,
+      path: subPage.path,
+    }));
   }
 
   public async getPage(wikiId: string, path: string): Promise<WikiPage> {
@@ -97,10 +64,7 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       VersionControlRecursionType.None
     );
 
-    return {
-      content,
-      path
-    };
+    return { content, path };
   }
 
   public async savePage(): Promise<WikiPage> {
@@ -114,22 +78,4 @@ function normalizeMappedPath(mappedPath: string | undefined): string {
   }
 
   return mappedPath.startsWith("/") ? mappedPath : `/${mappedPath}`;
-}
-
-function parseOrderFile(content: string): string[] {
-  return content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"));
-}
-
-function toWikiDirectoryPath(orderFilePath: string, mappedPath: string): string {
-  const normalizedMappedPath = normalizeMappedPath(mappedPath);
-  const gitDirectoryPath = orderFilePath.slice(0, -`/${orderFileName}`.length) || "/";
-  const relativePath =
-    normalizedMappedPath === "/"
-      ? gitDirectoryPath
-      : gitDirectoryPath.slice(normalizedMappedPath.length) || "/";
-
-  return relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
 }
