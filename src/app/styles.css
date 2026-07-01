@@ -1,0 +1,165 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: #1f1f1f;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.powerwiki-shell {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 24px;
+}
+
+.powerwiki-header {
+  align-items: center;
+  border-bottom: 1px solid #d7d7d7;
+  display: flex;
+  min-height: 72px;
+}
+
+.powerwiki-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.powerwiki-header p {
+  color: #605e5c;
+  margin: 0;
+}
+
+.powerwiki-layout {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  padding-top: 24px;
+}
+
+.powerwiki-nav,
+.powerwiki-panel {
+  border: 1px solid #d7d7d7;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.powerwiki-nav {
+  align-self: start;
+  max-height: calc(100vh - 144px);
+  overflow: auto;
+}
+
+.powerwiki-nav h2,
+.powerwiki-panel h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.powerwiki-nav p,
+.powerwiki-panel p {
+  color: #605e5c;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.powerwiki-content {
+  min-width: 0;
+}
+
+.wiki-selector {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.wiki-selector span {
+  color: #605e5c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wiki-selector select {
+  background: #ffffff;
+  border: 1px solid #8a8886;
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: #1f1f1f;
+  font: inherit;
+  min-height: 32px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.wiki-page-tree,
+.wiki-page-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wiki-page-tree ul {
+  margin-left: 12px;
+}
+
+.wiki-page-tree button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #1f1f1f;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  margin: 1px 0;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.wiki-page-tree button:hover:not(:disabled),
+.wiki-page-tree button.active {
+  background: #eff6fc;
+}
+
+.wiki-page-tree button:disabled {
+  color: #8a8886;
+  cursor: default;
+}
+
+.markdown-preview {
+  line-height: 1.5;
+}
+
+.markdown-preview h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+
+.markdown-preview pre {
+  background: #f6f8fa;
+  border: 1px solid #d7d7d7;
+  border-radius: 6px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.markdown-preview .mermaid-rendered {
+  overflow-x: auto;
+}
+
+@media (max-width: 760px) {
+  .powerwiki-shell {
+    padding: 16px;
+  }
+
+  .powerwiki-layout {
+    grid-template-columns: 1fr;
+  }
+}
