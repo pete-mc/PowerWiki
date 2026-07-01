@@ -7,7 +7,9 @@ export interface WikiPage {
 
 export interface WikiSummary {
   readonly id: string;
+  readonly mappedPath?: string;
   readonly name: string;
+  readonly repositoryId?: string;
   readonly remoteUrl?: string;
 }
 

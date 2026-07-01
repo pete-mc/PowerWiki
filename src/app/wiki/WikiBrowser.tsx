@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MarkdownPreview } from "../../rendering/MarkdownPreview";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
-import { buildWikiPageTree } from "../../wiki/WikiPageTree";
+import { buildWikiPageTree, type WikiOrderMap } from "../../wiki/WikiPageTree";
 import { StatusMessage } from "./StatusMessage";
 import { WikiPageTree } from "./WikiPageTree";
 import { WikiSelector } from "./WikiSelector";
@@ -19,13 +19,18 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [error, setError] = useState<string>();
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [orderMap, setOrderMap] = useState<WikiOrderMap>(new Map());
   const [pageList, setPageList] = useState<WikiPageSummary[]>([]);
   const [wikis, setWikis] = useState<WikiSummary[]>([]);
 
   const wikiClient = useMemo(() => {
     return projectName ? new AzureDevOpsWikiRepositoryClient(projectName) : undefined;
   }, [projectName]);
-  const pageTree = useMemo(() => buildWikiPageTree(pageList), [pageList]);
+  const activeWiki = useMemo(
+    () => wikis.find((wiki) => wiki.id === activeWikiId),
+    [activeWikiId, wikis]
+  );
+  const pageTree = useMemo(() => buildWikiPageTree(pageList, orderMap), [orderMap, pageList]);
 
   useEffect(() => {
     if (!wikiClient) {
@@ -73,7 +78,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
   }, [wikiClient]);
 
   useEffect(() => {
-    if (!wikiClient || !activeWikiId) {
+    if (!wikiClient || !activeWikiId || !activeWiki) {
       return;
     }
 
@@ -81,6 +86,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
 
     const client = wikiClient;
     const wikiId = activeWikiId;
+    const wiki = activeWiki;
 
     async function loadPages() {
       setLoadState("loading");
@@ -88,7 +94,10 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
       setActivePage(undefined);
 
       try {
-        const pages = await client.getPageList(wikiId);
+        const [pages, loadedOrderMap] = await Promise.all([
+          client.getPageList(wikiId),
+          client.getOrderMap(wiki)
+        ]);
         const firstPagePath = chooseInitialPagePath(pages);
         const firstPage = firstPagePath ? await client.getPage(wikiId, firstPagePath) : undefined;
 
@@ -97,6 +106,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
         }
 
         setPageList(pages);
+        setOrderMap(loadedOrderMap);
         setActivePage(firstPage);
         setLoadState("ready");
       } catch (loadError: unknown) {
@@ -112,7 +122,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeWikiId, wikiClient]);
+  }, [activeWiki, activeWikiId, wikiClient]);
 
   async function handlePageSelected(path: string) {
     if (!wikiClient || !activeWikiId) {
