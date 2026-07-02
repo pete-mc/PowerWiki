@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "id": "powerwiki",
-  "version": "0.2.32",
+  "version": "1.0.0",
   "name": "PowerWiki",
   "publisher": "dataversepowertools",
   "description": "An alternate Power Wiki experience for Azure DevOps Wikis with modern Markdown and Mermaid rendering.",
-  "public": false,
+  "public": true,
   "categories": ["Azure Repos"],
   "icons": {
     "default": "media/logo_new.png"
@@ -62,10 +62,6 @@
     {
       "path": "dist",
       "addressable": true
-    },
-    {
-      "path": "overview.md",
-      "addressable": false
     },
     {
       "path": "media/logo_new.png",
