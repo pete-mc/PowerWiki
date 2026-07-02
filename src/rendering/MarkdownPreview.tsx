@@ -1,16 +1,29 @@
 import { useEffect, useMemo, useRef } from "react";
 
+import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
+
+/** A direct child of the current page, used to fill the [[_TOSP_]] placeholder. */
+export interface WikiSubPage {
+  readonly path: string;
+  readonly title: string;
+}
 
 interface MarkdownPreviewProps {
   readonly markdown: string;
   /** Wiki path of the page being rendered; used to resolve relative links. */
   readonly currentPath?: string;
+  /** Direct child pages, rendered where a [[_TOSP_]] placeholder appears. */
+  readonly subPages?: readonly WikiSubPage[];
+  /** Resolves rendered image sources to browser-loadable URLs. */
+  readonly onResolveImageSrc?: (src: string, currentPath: string) => Promise<string | undefined>;
   /** Called when an internal wiki link is clicked, with the resolved wiki path. */
   readonly onNavigate?: (path: string) => void;
 }
+
+const TOSP_PLACEHOLDER_SELECTOR = `[${TOSP_PLACEHOLDER_ATTR}="${TOSP_PLACEHOLDER_VALUE}"]`;
 
 const markdownRenderer = createMarkdownRenderer();
 
@@ -48,7 +61,7 @@ function resolveInternalPath(href: string, currentPath: string): string | null {
   }
 }
 
-export function MarkdownPreview({ markdown, currentPath, onNavigate }: MarkdownPreviewProps) {
+export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, onResolveImageSrc }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const html = useMemo(
     () => sanitizeRenderedHtml(markdownRenderer.render(markdown)),
@@ -62,6 +75,77 @@ export function MarkdownPreview({ markdown, currentPath, onNavigate }: MarkdownP
 
     void renderMermaidDiagrams(previewRef.current);
   }, [html]);
+
+  useEffect(() => {
+    const container = previewRef.current;
+    if (!container) {
+      return;
+    }
+
+    const placeholders = Array.from(container.querySelectorAll(TOSP_PLACEHOLDER_SELECTOR));
+    for (const placeholder of placeholders) {
+      placeholder.replaceChildren();
+
+      if (!subPages || subPages.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "powerwiki-subpages-empty";
+        empty.textContent = "No subpages.";
+        placeholder.appendChild(empty);
+        continue;
+      }
+
+      const list = document.createElement("ul");
+      for (const subPage of subPages) {
+        const item = document.createElement("li");
+        const anchor = document.createElement("a");
+        // Absolute wiki path; handleClick resolves it to an in-app navigation.
+        anchor.setAttribute("href", encodeURI(subPage.path));
+        anchor.textContent = subPage.title;
+        item.appendChild(anchor);
+        list.appendChild(item);
+      }
+      placeholder.appendChild(list);
+    }
+  }, [html, subPages]);
+
+  useEffect(() => {
+    if (!previewRef.current || !currentPath || !onResolveImageSrc) {
+      return;
+    }
+
+    let cancelled = false;
+    const resolvedObjectUrls: string[] = [];
+    const images = Array.from(previewRef.current.querySelectorAll("img"));
+
+    for (const image of images) {
+      const src = image.getAttribute("src");
+      if (!src) {
+        continue;
+      }
+
+      void onResolveImageSrc(src, currentPath)
+        .then((resolvedSrc) => {
+          if (cancelled || !resolvedSrc) {
+            return;
+          }
+
+          if (resolvedSrc.startsWith("blob:")) {
+            resolvedObjectUrls.push(resolvedSrc);
+          }
+          image.setAttribute("src", resolvedSrc);
+        })
+        .catch(() => {
+          // Leave the original src in place so the browser shows the normal broken image state.
+        });
+    }
+
+    return () => {
+      cancelled = true;
+      for (const objectUrl of resolvedObjectUrls) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [currentPath, html, onResolveImageSrc]);
 
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {
     // Ignore modified clicks so users can still open links in a new tab.
@@ -102,4 +186,3 @@ export function MarkdownPreview({ markdown, currentPath, onNavigate }: MarkdownP
     />
   );
 }
-

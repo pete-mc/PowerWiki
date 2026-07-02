@@ -236,6 +236,35 @@ body {
   padding: 0;
 }
 
+.markdown-preview .powerwiki-toc {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  display: inline-block;
+  margin-bottom: 16px;
+  max-width: 100%;
+  padding: 8px 16px 8px 8px;
+}
+
+.markdown-preview .powerwiki-toc ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.markdown-preview .powerwiki-toc > ul {
+  padding-left: 8px;
+}
+
+.markdown-preview .powerwiki-toc li {
+  margin: 2px 0;
+}
+
+.markdown-preview .powerwiki-subpages-empty {
+  color: #57606a;
+  font-style: italic;
+}
+
 .markdown-preview .mermaid-rendered {
   background: #ffffff;
   border: 1px solid #d7d7d7;

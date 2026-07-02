@@ -1,6 +1,8 @@
 import MarkdownIt from "markdown-it";
 import markdownItAnchor from "markdown-it-anchor";
 
+import { adoPlaceholdersPlugin } from "./adoPlaceholdersPlugin";
+
 /**
  * Adds support for the Azure DevOps Wiki mermaid container syntax:
  *
@@ -73,7 +75,8 @@ export function createMarkdownRenderer(): MarkdownIt {
     typographer: true,
   })
     .use(markdownItAnchor)
-    .use(mermaidContainerPlugin);
+    .use(mermaidContainerPlugin)
+    .use(adoPlaceholdersPlugin);
 
   // Override the fence renderer so that ```mermaid``` (and our ":::mermaid"
   // container plugin which produces the same fence token) emit

@@ -1,7 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as SDK from "azure-devops-extension-sdk";
-import { MarkdownPreview } from "../../rendering/MarkdownPreview";
+import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
@@ -22,6 +22,10 @@ interface IHostNavigationService {
 }
 
 const HOST_NAVIGATION_SERVICE_ID = "ms.vss-features.host-navigation-service";
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+// Matches the Azure DevOps table-of-subpages placeholder in page content so we
+// only fetch child pages for pages that actually use it.
+const TOSP_PLACEHOLDER = /\[\[_?TOSP_?\]\]/i;
 
 async function getNavigationService(): Promise<IHostNavigationService | undefined> {
   try {
@@ -53,6 +57,81 @@ function buildNavigationHash(wikiId: string, pagePath: string): string {
   return `${wikiId}:${pagePath}`;
 }
 
+function resolveWikiImagePath(src: string, currentPath: string): string | undefined {
+  if (!src || src.startsWith("#") || src.startsWith("//") || HAS_SCHEME.test(src)) {
+    return undefined;
+  }
+
+  try {
+    const base = "http://wiki" + encodeURI(currentPath.startsWith("/") ? currentPath : `/${currentPath}`);
+    const resolved = new URL(src, base);
+    return safeDecode(resolved.pathname);
+  } catch {
+    return undefined;
+  }
+}
+
+function buildGitItemUrl(wiki: WikiSummary, projectName: string, wikiPath: string): string | undefined {
+  if (!wiki.repositoryId || !wiki.remoteUrl) {
+    return undefined;
+  }
+
+  const remoteUrl = new URL(wiki.remoteUrl);
+  const repositoryPath = joinRepositoryPath(wiki.mappedPath, wikiPath);
+
+  // On dev.azure.com the remoteUrl path is /{org}/{project}/_git/{repo}, so the
+  // Items API URL must be /{org}/{project}/_apis/... On legacy visualstudio.com
+  // the org is the subdomain and the path starts with /{project}/_git/{repo},
+  // so no extra prefix is needed.
+  const pathSegments = remoteUrl.pathname.split("/").filter(Boolean);
+  const orgPrefix = remoteUrl.hostname === "dev.azure.com" && pathSegments.length > 0
+    ? `/${pathSegments[0]}`
+    : "";
+
+  const url = new URL(
+    `${remoteUrl.origin}${orgPrefix}/${encodeURIComponent(projectName)}/_apis/git/repositories/${encodeURIComponent(wiki.repositoryId)}/Items`
+  );
+  url.searchParams.set("path", repositoryPath);
+  url.searchParams.set("download", "true");
+  return url.toString();
+}
+
+function joinRepositoryPath(mappedPath: string | undefined, wikiPath: string): string {
+  const normalizedMappedPath = !mappedPath || mappedPath === "/" ? "" : trimSlashes(mappedPath);
+  const normalizedWikiPath = trimSlashes(wikiPath);
+  const combined = [normalizedMappedPath, normalizedWikiPath].filter(Boolean).join("/");
+  return `/${combined}`;
+}
+
+function trimSlashes(value: string): string {
+  return value.replace(/^\/+|\/+$/g, "");
+}
+
+// Azure DevOps serves wiki attachments (images pasted into the editor) from
+// a CDN that requires an authenticated Bearer token. Hostnames we recognise:
+//   {org}.gallerycdn.vsassets.io  – older CDN pattern seen in the wild
+//   {org}.vsassets.io             – alternate CDN pattern
+//   dev.azure.com                 – direct API URLs
+//   {org}.visualstudio.com        – legacy host
+const AZURE_DEVOPS_HOSTNAMES = /(?:^|\.)(vsassets\.io|gallerycdn\.vsassets\.io|dev\.azure\.com|visualstudio\.com)$/i;
+
+function isAzureDevOpsUrl(src: string): boolean {
+  try {
+    return AZURE_DEVOPS_HOSTNAMES.test(new URL(src).hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function fetchAsBlob(url: string): Promise<string> {
+  const token = await SDK.getAccessToken();
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) {
+    throw new Error(`Image fetch failed: ${response.status}`);
+  }
+  return URL.createObjectURL(await response.blob());
+}
+
 /**
  * Returns the candidate page paths to try, in priority order.
  *
@@ -79,6 +158,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
   const [loadedPaths, setLoadedPaths] = useState<ReadonlySet<string>>(new Set());
   const [navigationReady, setNavigationReady] = useState(false);
   const [pageList, setPageList] = useState<WikiPageSummary[]>([]);
+  const [subPages, setSubPages] = useState<readonly WikiSubPage[]>([]);
   const [wikis, setWikis] = useState<WikiSummary[]>([]);
 
   const savedNavigation = useRef<{ wikiId: string; pagePath: string } | null>(null);
@@ -315,6 +395,42 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
     return () => { cancelled = true; };
   }, [activeWikiId, wikiClient]);
 
+  // Loads the direct children of the active page so a [[_TOSP_]] placeholder can
+  // be filled in. Scoped to pages that actually use the placeholder to avoid an
+  // extra API call on every page view.
+  useEffect(() => {
+    if (!wikiClient || !activeWikiId || !activePage || !TOSP_PLACEHOLDER.test(activePage.content)) {
+      setSubPages([]);
+      return;
+    }
+
+    let cancelled = false;
+    const client = wikiClient;
+    const wikiId = activeWikiId;
+    const parentPath = activePage.path;
+
+    async function loadSubPages() {
+      try {
+        const children = await client.getChildPages(wikiId, parentPath);
+        if (cancelled) {
+          return;
+        }
+        setSubPages(
+          [...children]
+            .sort((a, b) => a.order - b.order)
+            .map((child) => ({ path: child.path, title: pageTitle(child.path) }))
+        );
+      } catch {
+        if (!cancelled) {
+          setSubPages([]);
+        }
+      }
+    }
+
+    void loadSubPages();
+    return () => { cancelled = true; };
+  }, [activePage, activeWikiId, wikiClient]);
+
   async function handleNodeExpand(path: string): Promise<void> {
     if (!wikiClient || !activeWikiId || loadedPaths.has(path)) {
       return;
@@ -337,6 +453,26 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
   async function handlePageSelected(path: string) {
     await loadPageByPath(path, true);
   }
+
+  const resolveImageSrc = useCallback(
+    async (src: string, currentPath: string): Promise<string | undefined> => {
+      if (!activeWiki || !projectName) {
+        return undefined;
+      }
+
+      const path = resolveWikiImagePath(src, currentPath);
+      if (path) {
+        return buildGitItemUrl(activeWiki, projectName, path);
+      }
+
+      if (isAzureDevOpsUrl(src)) {
+        return fetchAsBlob(src);
+      }
+
+      return undefined;
+    },
+    [activeWiki, projectName]
+  );
 
   if (loadState === "failed") {
     return (
@@ -372,7 +508,9 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
           <MarkdownPreview
             markdown={activePage.content}
             currentPath={activePage.path}
+            subPages={subPages}
             onNavigate={(path) => void loadPageByPath(path, true)}
+            onResolveImageSrc={resolveImageSrc}
           />
         ) : (
           <StatusMessage
@@ -391,6 +529,11 @@ function formatError(error: unknown): string {
   }
 
   return "An unknown error occurred while loading wiki content.";
+}
+
+function pageTitle(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  return segments.at(-1) ?? path;
 }
 
 function chooseInitialPage(pages: readonly WikiPageSummary[]): string | undefined {

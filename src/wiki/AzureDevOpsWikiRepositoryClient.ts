@@ -5,6 +5,12 @@ import { WikiRestClient, type WikiPage as WikiApiPage } from "azure-devops-exten
 import type { WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
 
+interface WikiWithRepositoryFallback {
+  readonly repository?: {
+    readonly id?: string;
+  };
+}
+
 // Subclasses WikiRestClient to expose the same pages endpoint but requesting
 // JSON instead of text/plain, which returns the full WikiPage object including
 // subPages, order, and isParentPage.
@@ -40,7 +46,7 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       id: wiki.id,
       mappedPath: normalizeMappedPath(wiki.mappedPath),
       name: wiki.name,
-      repositoryId: wiki.repositoryId,
+      repositoryId: wiki.repositoryId ?? (wiki as WikiWithRepositoryFallback).repository?.id ?? wiki.id,
       remoteUrl: wiki.remoteUrl,
     }));
   }
