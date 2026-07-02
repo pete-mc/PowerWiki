@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs wc *)",
+      "Bash(npm run *)",
+      "PowerShell($pat = \\(Get-Content C:\\\\Users\\\\peter\\\\sources\\\\repos\\\\PowerWiki\\\\ado.pat -Raw\\).Trim\\(\\); npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat)"
+    ]
+  }
+}

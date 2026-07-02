@@ -460,11 +460,18 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
         return undefined;
       }
 
+      // Relative attachment (e.g. ".attachments/image.png"): read it from the
+      // wiki repo via the Items API. We fetch it with the extension's access
+      // token and return a blob: URL rather than setting the API URL as a raw
+      // <img src> — a cross-origin image request from the sandboxed extension
+      // iframe carries no credentials and comes back 403.
       const path = resolveWikiImagePath(src, currentPath);
       if (path) {
-        return buildGitItemUrl(activeWiki, projectName, path);
+        const itemUrl = buildGitItemUrl(activeWiki, projectName, path);
+        return itemUrl ? fetchAsBlob(itemUrl) : undefined;
       }
 
+      // Absolute Azure DevOps CDN attachment: same authenticated fetch.
       if (isAzureDevOpsUrl(src)) {
         return fetchAsBlob(src);
       }
