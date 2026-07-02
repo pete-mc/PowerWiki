@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
@@ -17,8 +17,8 @@ interface MarkdownPreviewProps {
   readonly currentPath?: string;
   /** Direct child pages, rendered where a [[_TOSP_]] placeholder appears. */
   readonly subPages?: readonly WikiSubPage[];
-  /** Resolves rendered image sources to browser-loadable URLs. */
-  readonly onResolveImageSrc?: (src: string, currentPath: string) => Promise<string | undefined>;
+  /** Resolves rendered image sources before the HTML is inserted into the DOM. */
+  readonly onResolveImageSrc?: (src: string, currentPath: string) => string | undefined;
   /** Called when an internal wiki link is clicked, with the resolved wiki path. */
   readonly onNavigate?: (path: string) => void;
 }
@@ -63,17 +63,33 @@ function resolveInternalPath(href: string, currentPath: string): string | null {
 
 export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, onResolveImageSrc }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
-  const html = useMemo(
-    () => sanitizeRenderedHtml(markdownRenderer.render(markdown)),
-    [markdown]
-  );
+  const html = useMemo(() => {
+    const sanitizedHtml = sanitizeRenderedHtml(markdownRenderer.render(markdown));
+    return currentPath && onResolveImageSrc
+      ? resolveImageSources(sanitizedHtml, currentPath, onResolveImageSrc)
+      : sanitizedHtml;
+  }, [currentPath, markdown, onResolveImageSrc]);
 
-  useEffect(() => {
-    if (!previewRef.current) {
-      return;
-    }
+  useLayoutEffect(() => {
+    let cancelled = false;
+    let animationFrame = 0;
 
-    void renderMermaidDiagrams(previewRef.current);
+    const renderDiagrams = () => {
+      const container = previewRef.current;
+      if (!container || cancelled) {
+        return;
+      }
+
+      void renderMermaidDiagrams(container);
+    };
+
+    renderDiagrams();
+    animationFrame = window.requestAnimationFrame(renderDiagrams);
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(animationFrame);
+    };
   }, [html]);
 
   useEffect(() => {
@@ -107,45 +123,6 @@ export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, o
       placeholder.appendChild(list);
     }
   }, [html, subPages]);
-
-  useEffect(() => {
-    if (!previewRef.current || !currentPath || !onResolveImageSrc) {
-      return;
-    }
-
-    let cancelled = false;
-    const resolvedObjectUrls: string[] = [];
-    const images = Array.from(previewRef.current.querySelectorAll("img"));
-
-    for (const image of images) {
-      const src = image.getAttribute("src");
-      if (!src) {
-        continue;
-      }
-
-      void onResolveImageSrc(src, currentPath)
-        .then((resolvedSrc) => {
-          if (cancelled || !resolvedSrc) {
-            return;
-          }
-
-          if (resolvedSrc.startsWith("blob:")) {
-            resolvedObjectUrls.push(resolvedSrc);
-          }
-          image.setAttribute("src", resolvedSrc);
-        })
-        .catch(() => {
-          // Leave the original src in place so the browser shows the normal broken image state.
-        });
-    }
-
-    return () => {
-      cancelled = true;
-      for (const objectUrl of resolvedObjectUrls) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [currentPath, html, onResolveImageSrc]);
 
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {
     // Ignore modified clicks so users can still open links in a new tab.
@@ -185,4 +162,27 @@ export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, o
       ref={previewRef}
     />
   );
+}
+
+function resolveImageSources(
+  html: string,
+  currentPath: string,
+  resolveImageSrc: (src: string, currentPath: string) => string | undefined
+): string {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  for (const image of Array.from(template.content.querySelectorAll("img"))) {
+    const src = image.getAttribute("src");
+    if (!src) {
+      continue;
+    }
+
+    const resolvedSrc = resolveImageSrc(src, currentPath);
+    if (resolvedSrc) {
+      image.setAttribute("src", resolvedSrc);
+    }
+  }
+
+  return template.innerHTML;
 }

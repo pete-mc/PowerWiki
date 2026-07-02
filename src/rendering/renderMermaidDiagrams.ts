@@ -1,6 +1,7 @@
 import mermaid from "mermaid";
 
 let currentTheme: string | null = null;
+let diagramId = 0;
 
 /**
  * Renders every unprocessed <pre class="mermaid"> block inside the container.
@@ -18,27 +19,34 @@ let currentTheme: string | null = null;
  *      string serialization).
  */
 export async function renderMermaidDiagrams(container: HTMLElement): Promise<void> {
-  const theme = resolveTheme();
-  ensureMermaidInitialized(theme);
+  normalizeMermaidCodeBlocks(container);
 
-  const nodes = container.querySelectorAll<HTMLElement>(
+  const nodes = Array.from(container.querySelectorAll<HTMLElement>(
     "pre.mermaid:not([data-processed='true'])"
-  );
+  ));
 
   if (nodes.length === 0) {
     return;
   }
 
   try {
-    await mermaid.run({ nodes, suppressErrors: true });
-  } catch {
-    // mermaid.run marks failing nodes with data-processed and inserts an
-    // error <text> element into the SVG, so we don't need to do anything here.
+    const theme = resolveTheme();
+    ensureMermaidInitialized(theme);
+
+    for (const node of nodes) {
+      await renderMermaidNode(node);
+    }
+  } catch (error: unknown) {
+    for (const node of nodes) {
+      renderMermaidError(node, error);
+    }
   }
 }
 
 function resolveTheme(): string {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "default";
 }
 
 function ensureMermaidInitialized(theme: string): void {
@@ -55,3 +63,53 @@ function ensureMermaidInitialized(theme: string): void {
   currentTheme = theme;
 }
 
+function normalizeMermaidCodeBlocks(container: HTMLElement): void {
+  const codeBlocks = container.querySelectorAll<HTMLElement>(
+    "pre > code.language-mermaid, pre > code.lang-mermaid"
+  );
+
+  for (const codeBlock of Array.from(codeBlocks)) {
+    const pre = codeBlock.parentElement;
+    if (!pre || pre.classList.contains("mermaid")) {
+      continue;
+    }
+
+    pre.classList.add("mermaid");
+    pre.textContent = codeBlock.textContent ?? "";
+  }
+}
+
+async function renderMermaidNode(node: HTMLElement): Promise<void> {
+  const source = node.textContent?.trim() ?? "";
+  if (!source) {
+    return;
+  }
+
+  node.setAttribute("data-processed", "true");
+
+  try {
+    const id = `powerwiki-mermaid-${++diagramId}`;
+    const { svg, bindFunctions } = await mermaid.render(id, source);
+    node.classList.remove("mermaid");
+    node.classList.add("mermaid-rendered");
+    node.innerHTML = svg;
+    bindFunctions?.(node);
+  } catch (error: unknown) {
+    renderMermaidError(node, error);
+  }
+}
+
+function renderMermaidError(node: HTMLElement, error: unknown): void {
+  node.setAttribute("data-processed", "true");
+  node.classList.remove("mermaid");
+  node.classList.add("mermaid-error");
+  node.textContent = formatMermaidError(error);
+}
+
+function formatMermaidError(error: unknown): string {
+  if (error instanceof Error) {
+    return `Unable to render Mermaid diagram: ${error.message}`;
+  }
+
+  return "Unable to render Mermaid diagram.";
+}

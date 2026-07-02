@@ -28,7 +28,7 @@ function mermaidContainerPlugin(md: MarkdownIt): void {
       const lineEnd = state.eMarks[startLine];
       const openingLine = state.src.slice(lineStart, lineEnd).trim();
 
-      if (openingLine !== "::: mermaid") {
+      if (!/^:::\s*mermaid\s*$/i.test(openingLine)) {
         return false;
       }
 
@@ -88,7 +88,7 @@ export function createMarkdownRenderer(): MarkdownIt {
   md.renderer.rules.fence = (tokens, idx, options, env, slf) => {
     const token = tokens[idx];
     const info = token.info.trim().toLowerCase();
-    if (info === "mermaid") {
+    if (isMermaidFence(info)) {
       return `<pre class="mermaid">${md.utils.escapeHtml(token.content)}</pre>\n`;
     }
     return defaultFence
@@ -97,4 +97,9 @@ export function createMarkdownRenderer(): MarkdownIt {
   };
 
   return md;
+}
+
+function isMermaidFence(info: string): boolean {
+  const language = info.split(/\s+/)[0];
+  return language === "mermaid" || language === "{mermaid}";
 }

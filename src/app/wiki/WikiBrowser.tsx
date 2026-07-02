@@ -107,8 +107,8 @@ function trimSlashes(value: string): string {
   return value.replace(/^\/+|\/+$/g, "");
 }
 
-// Azure DevOps serves wiki attachments (images pasted into the editor) from
-// a CDN that requires an authenticated Bearer token. Hostnames we recognise:
+// Azure DevOps serves some wiki attachments (images pasted into the editor) as
+// CDN URLs. Hostnames we recognise:
 //   {org}.gallerycdn.vsassets.io  – older CDN pattern seen in the wild
 //   {org}.vsassets.io             – alternate CDN pattern
 //   dev.azure.com                 – direct API URLs
@@ -123,13 +123,17 @@ function isAzureDevOpsUrl(src: string): boolean {
   }
 }
 
-async function fetchAsBlob(url: string): Promise<string> {
-  const token = await SDK.getAccessToken();
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) {
-    throw new Error(`Image fetch failed: ${response.status}`);
+function resolveAzureDevOpsImagePath(src: string): string | undefined {
+  try {
+    const url = new URL(src);
+    if (!AZURE_DEVOPS_HOSTNAMES.test(url.hostname)) {
+      return undefined;
+    }
+
+    return safeDecode(url.pathname);
+  } catch {
+    return undefined;
   }
-  return URL.createObjectURL(await response.blob());
 }
 
 /**
@@ -455,25 +459,21 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
   }
 
   const resolveImageSrc = useCallback(
-    async (src: string, currentPath: string): Promise<string | undefined> => {
+    (src: string, currentPath: string): string | undefined => {
       if (!activeWiki || !projectName) {
         return undefined;
       }
 
-      // Relative attachment (e.g. ".attachments/image.png"): read it from the
-      // wiki repo via the Items API. We fetch it with the extension's access
-      // token and return a blob: URL rather than setting the API URL as a raw
-      // <img src> — a cross-origin image request from the sandboxed extension
-      // iframe carries no credentials and comes back 403.
       const path = resolveWikiImagePath(src, currentPath);
       if (path) {
-        const itemUrl = buildGitItemUrl(activeWiki, projectName, path);
-        return itemUrl ? fetchAsBlob(itemUrl) : undefined;
+        return buildGitItemUrl(activeWiki, projectName, path);
       }
 
-      // Absolute Azure DevOps CDN attachment: same authenticated fetch.
       if (isAzureDevOpsUrl(src)) {
-        return fetchAsBlob(src);
+        const azureDevOpsPath = resolveAzureDevOpsImagePath(src);
+        return azureDevOpsPath
+          ? buildGitItemUrl(activeWiki, projectName, azureDevOpsPath)
+          : undefined;
       }
 
       return undefined;
