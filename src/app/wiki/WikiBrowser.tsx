@@ -504,6 +504,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
         />
         <WikiPageTree
           activePath={activePage?.path}
+          isLoading={loadState === "loading" && pageTree.length === 0}
           nodes={pageTree}
           onNodeExpand={handleNodeExpand}
           onPageSelected={handlePageSelected}

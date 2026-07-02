@@ -4,15 +4,20 @@ import type { WikiPageTreeNode } from "../../wiki/WikiPageTree";
 
 interface WikiPageTreeProps {
   readonly activePath?: string;
+  readonly isLoading?: boolean;
   readonly nodes: readonly WikiPageTreeNode[];
   readonly onNodeExpand?: (path: string) => void;
   readonly onPageSelected: (path: string) => void;
 }
 
-export function WikiPageTree({ activePath, nodes, onNodeExpand, onPageSelected }: WikiPageTreeProps) {
+export function WikiPageTree({ activePath, isLoading = false, nodes, onNodeExpand, onPageSelected }: WikiPageTreeProps) {
   const activeAncestors = useMemo(() => findActiveAncestors(nodes, activePath), [activePath, nodes]);
 
   if (nodes.length === 0) {
+    if (isLoading) {
+      return <p aria-live="polite">Loading wiki.</p>;
+    }
+
     return <p>No pages were found in this wiki.</p>;
   }
 
