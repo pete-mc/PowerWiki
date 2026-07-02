@@ -3,3 +3,4 @@ dist/
 *.vsix
 npm-debug.log*
 ado.pat
+mcps
