@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "powerwiki",
-  "version": "0.2.27",
+  "version": "0.2.28",
   "name": "PowerWiki",
   "publisher": "dataversepowertools",
   "description": "An alternate Power Wiki experience for Azure DevOps Wikis with modern Markdown and Mermaid rendering.",
@@ -22,7 +22,7 @@
   },
   "contributions": [
     {
-      "id": "powerwiki-hub-group",
+      "id": "group",
       "type": "ms.vss-web.hub-group",
       "description": "Adds Power Wiki as a project-level menu item.",
       "targets": ["ms.vss-web.project-hub-groups-collection"],
@@ -33,10 +33,10 @@
       }
     },
     {
-      "id": "powerwiki-hub",
+      "id": "wiki",
       "type": "ms.vss-web.hub",
       "description": "Adds the alternate Power Wiki screen.",
-      "targets": [".powerwiki-hub-group"],
+      "targets": [".group"],
       "properties": {
         "name": "Power Wiki",
         "order": 10,
@@ -45,7 +45,7 @@
       }
     },
     {
-      "id": "powerwiki-overview-hub",
+      "id": "overview",
       "type": "ms.vss-web.hub",
       "description": "Adds the alternate Power Wiki screen under Overview.",
       "targets": ["ms.vss-tfs-web.project-overview-hub-group"],
