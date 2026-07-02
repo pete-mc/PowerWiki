@@ -24,6 +24,13 @@ module.exports = {
       {
         test: /\.css$/,
         use: ["style-loader", "css-loader"]
+      },
+      {
+        test: /\.(ttf|woff2?)$/,
+        type: "asset/resource",
+        generator: {
+          filename: "assets/[name][ext]"
+        }
       }
     ]
   },
@@ -39,6 +46,10 @@ module.exports = {
         {
           from: path.resolve(__dirname, "public"),
           to: path.resolve(__dirname, "dist")
+        },
+        {
+          from: path.resolve(__dirname, "node_modules/monaco-editor/min/vs"),
+          to: path.resolve(__dirname, "dist/vs")
         }
       ]
     })

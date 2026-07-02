@@ -1,6 +1,6 @@
 {
   "name": "powerwiki",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "description": "PowerWiki is an Azure DevOps extension that adds a Power Wiki menu experience while continuing to use the standard Azure DevOps Wiki repositories as the source of truth.",
   "private": true,
   "main": "dist/powerwiki.js",
@@ -30,6 +30,7 @@
     "markdown-it": "^14.2.0",
     "markdown-it-anchor": "^9.2.0",
     "mermaid": "^11.16.0",
+    "monaco-editor": "^0.55.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

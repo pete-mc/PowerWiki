@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AzureDevOpsHostContext } from "../extension/azureDevOpsHost";
+import type { HeaderMenuAction } from "./HeaderMenuAction";
 import { WikiBrowser } from "./wiki/WikiBrowser";
 import packageMetadata from "../../package.json";
 
@@ -11,6 +12,9 @@ interface AppProps {
 }
 
 export function App({ error, hostContext, status }: AppProps) {
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+  const [headerMenuActions, setHeaderMenuActions] = useState<readonly HeaderMenuAction[]>([]);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [pageTitle, setPageTitle] = useState<string>();
   const statusText = useMemo(() => {
     if (status === "loading") {
@@ -43,8 +47,26 @@ export function App({ error, hostContext, status }: AppProps) {
   useEffect(() => {
     if (status !== "ready") {
       setPageTitle(undefined);
+      setHeaderMenuActions([]);
     }
   }, [status]);
+
+  useEffect(() => {
+    if (!isHeaderMenuOpen) {
+      return;
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (!headerMenuRef.current?.contains(event.target as Node)) {
+        setIsHeaderMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+    };
+  }, [isHeaderMenuOpen]);
 
   return (
     <main className="powerwiki-shell">
@@ -53,12 +75,46 @@ export function App({ error, hostContext, status }: AppProps) {
           <h1>{headerTitle}</h1>
           <p>{statusText}</p>
         </div>
-        <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>
-          <img alt="" src="../media/logo_new.png" />
-          <div>
-            <strong>PowerWiki</strong>
-            <span>Version {packageMetadata.version}</span>
+        <div className="powerwiki-header-right">
+          <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>
+            <img alt="" src="../media/logo_new.png" />
+            <div>
+              <strong>PowerWiki</strong>
+              <span>Version {packageMetadata.version}</span>
+            </div>
           </div>
+          {headerMenuActions.length > 0 ? (
+            <div className="powerwiki-header-menu" ref={headerMenuRef}>
+              <button
+                aria-expanded={isHeaderMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Page actions"
+                className="powerwiki-header-menu-button"
+                onClick={() => setIsHeaderMenuOpen((open) => !open)}
+                type="button"
+              >
+                ⋮
+              </button>
+              {isHeaderMenuOpen ? (
+                <div className="powerwiki-header-menu-popover" role="menu">
+                  {headerMenuActions.map((action) => (
+                    <button
+                      disabled={action.disabled}
+                      key={action.id}
+                      onClick={() => {
+                        setIsHeaderMenuOpen(false);
+                        action.onClick();
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </header>
 
@@ -69,6 +125,7 @@ export function App({ error, hostContext, status }: AppProps) {
         </section>
       ) : (
         <WikiBrowser
+          onHeaderMenuActionsChange={setHeaderMenuActions}
           onPageTitleChange={handlePageTitleChange}
           organizationIsHosted={hostContext?.organizationIsHosted}
           organizationName={hostContext?.organizationName}

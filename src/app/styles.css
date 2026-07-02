@@ -49,6 +49,13 @@ body {
   text-align: right;
 }
 
+.powerwiki-header-right {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
 .powerwiki-brand img {
   height: 32px;
   width: 32px;
@@ -67,6 +74,66 @@ body {
 .powerwiki-brand span {
   color: #605e5c;
   font-size: 12px;
+}
+
+.powerwiki-header-menu {
+  position: relative;
+}
+
+.powerwiki-header-menu-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #323130;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 24px;
+  height: 32px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+}
+
+.powerwiki-header-menu-button:hover,
+.powerwiki-header-menu-button[aria-expanded="true"] {
+  background: #eff6fc;
+}
+
+.powerwiki-header-menu-popover {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  min-width: 160px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+}
+
+.powerwiki-header-menu-popover button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #1f1f1f;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.powerwiki-header-menu-popover button:hover:not(:disabled) {
+  background: #eff6fc;
+}
+
+.powerwiki-header-menu-popover button:disabled {
+  color: #8a8886;
+  cursor: default;
 }
 
 .powerwiki-layout {
@@ -105,6 +172,80 @@ body {
 
 .powerwiki-content {
   min-width: 0;
+}
+
+.wiki-editor-shell {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wiki-editor-toolbar {
+  align-items: center;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.wiki-editor-toolbar strong,
+.wiki-editor-toolbar span {
+  display: block;
+}
+
+.wiki-editor-toolbar strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wiki-editor-toolbar span {
+  color: #605e5c;
+  font-size: 12px;
+}
+
+.wiki-editor-toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wiki-editor-toolbar-actions button {
+  background: #ffffff;
+  border: 1px solid #8a8886;
+  border-radius: 4px;
+  color: #1f1f1f;
+  cursor: pointer;
+  font: inherit;
+  min-height: 32px;
+  padding: 4px 12px;
+}
+
+.wiki-editor-toolbar-actions button:first-child {
+  background: #0078d4;
+  border-color: #0078d4;
+  color: #ffffff;
+}
+
+.wiki-editor-toolbar-actions button:disabled {
+  background: #f3f2f1;
+  border-color: #c8c6c4;
+  color: #8a8886;
+  cursor: default;
+}
+
+.wiki-editor-error {
+  background: #fde7e9;
+  border-bottom: 1px solid #f1aeb5;
+  color: #a80000;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.wiki-page-editor {
+  height: min(72vh, 820px);
+  min-height: 520px;
 }
 
 .wiki-selector {
@@ -442,7 +583,25 @@ body {
     align-items: flex-start;
   }
 
+  .powerwiki-header-right {
+    align-items: flex-end;
+  }
+
   .powerwiki-layout {
     grid-template-columns: 1fr;
+  }
+
+  .wiki-editor-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wiki-editor-toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .wiki-page-editor {
+    height: 68vh;
+    min-height: 360px;
   }
 }

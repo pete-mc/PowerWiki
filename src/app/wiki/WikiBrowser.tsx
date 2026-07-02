@@ -5,16 +5,19 @@ import {
   WorkItemTrackingServiceIds,
   type IWorkItemFormNavigationService
 } from "azure-devops-extension-api/WorkItemTracking";
+import type { HeaderMenuAction } from "../HeaderMenuAction";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import { StatusMessage } from "./StatusMessage";
+import { WikiPageEditor } from "./WikiPageEditor";
 import { WikiPageTree } from "./WikiPageTree";
 import { WikiSelector } from "./WikiSelector";
 
 interface WikiBrowserProps {
+  readonly onHeaderMenuActionsChange?: (actions: readonly HeaderMenuAction[]) => void;
   readonly onPageTitleChange?: (title: string | undefined) => void;
   readonly organizationIsHosted?: boolean;
   readonly organizationName?: string;
@@ -22,6 +25,7 @@ interface WikiBrowserProps {
 }
 
 type LoadState = "failed" | "loading" | "ready";
+type SaveState = "failed" | "idle" | "saving";
 
 interface IHostNavigationService {
   getHash(): Promise<string>;
@@ -236,17 +240,28 @@ function pagePathCandidates(rawPath: string): string[] {
   return candidates;
 }
 
-export function WikiBrowser({ onPageTitleChange, organizationIsHosted, organizationName, projectName }: WikiBrowserProps) {
+export function WikiBrowser({
+  onHeaderMenuActionsChange,
+  onPageTitleChange,
+  organizationIsHosted,
+  organizationName,
+  projectName
+}: WikiBrowserProps) {
   const [activePage, setActivePage] = useState<WikiPage>();
   const [activeWikiId, setActiveWikiId] = useState<string>();
+  const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string>();
+  const [isEditing, setIsEditing] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadedPaths, setLoadedPaths] = useState<ReadonlySet<string>>(new Set());
   const [navigationReady, setNavigationReady] = useState(false);
   const [pageList, setPageList] = useState<WikiPageSummary[]>([]);
+  const [saveError, setSaveError] = useState<string>();
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [subPages, setSubPages] = useState<readonly WikiSubPage[]>([]);
   const [wikis, setWikis] = useState<WikiSummary[]>([]);
 
+  const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
   const navigationServiceRef = useRef<IHostNavigationService | undefined>(undefined);
   // The last page path we navigated to. Used to ignore onHashChanged events that
@@ -267,6 +282,60 @@ export function WikiBrowser({ onPageTitleChange, organizationIsHosted, organizat
     () => buildWikiPageTree(pageList, loadedPaths),
     [loadedPaths, pageList]
   );
+  const hasUnsavedChanges = Boolean(activePage && isEditing && draftContent !== activePage.content);
+  const confirmDiscardEdits = useCallback(() => {
+    return !hasUnsavedChangesRef.current || window.confirm("Discard unsaved page edits?");
+  }, []);
+  const startEditing = useCallback(() => {
+    if (!activePage) {
+      return;
+    }
+
+    setDraftContent(activePage.content);
+    setSaveError(undefined);
+    setSaveState("idle");
+    setIsEditing(true);
+  }, [activePage]);
+  const cancelEditing = useCallback(() => {
+    if (!confirmDiscardEdits()) {
+      return;
+    }
+
+    setDraftContent(activePage?.content ?? "");
+    setSaveError(undefined);
+    setSaveState("idle");
+    setIsEditing(false);
+  }, [activePage?.content, confirmDiscardEdits]);
+
+  useEffect(() => {
+    hasUnsavedChangesRef.current = hasUnsavedChanges;
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    setDraftContent(activePage?.content ?? "");
+    setIsEditing(false);
+    setSaveError(undefined);
+    setSaveState("idle");
+  }, [activePage?.path]);
+
+  useEffect(() => {
+    if (!activePage) {
+      onHeaderMenuActionsChange?.([]);
+      return;
+    }
+
+    onHeaderMenuActionsChange?.([
+      {
+        id: isEditing ? "cancel-edit" : "edit-page",
+        label: isEditing ? "Cancel edit" : "Edit page",
+        onClick: isEditing ? cancelEditing : startEditing,
+      },
+    ]);
+
+    return () => {
+      onHeaderMenuActionsChange?.([]);
+    };
+  }, [activePage, cancelEditing, isEditing, onHeaderMenuActionsChange, startEditing]);
 
   // Loads a page by path, trying hyphen/space variants, and (optionally) syncs
   // the URL hash. This is the single entry point for all navigation:
@@ -316,6 +385,10 @@ export function WikiBrowser({ onPageTitleChange, organizationIsHosted, organizat
 
     const targetWikiId = findNavigationWikiId(parsed, wikis) ?? activeWikiId;
     if (!targetWikiId) {
+      return;
+    }
+
+    if (!confirmDiscardEdits()) {
       return;
     }
 
@@ -547,7 +620,34 @@ export function WikiBrowser({ onPageTitleChange, organizationIsHosted, organizat
   }
 
   async function handlePageSelected(path: string) {
+    if (!confirmDiscardEdits()) {
+      return;
+    }
+
     await loadPageByPath(path, true);
+  }
+
+  async function handleSavePage() {
+    if (!wikiClient || !activeWikiId || !activePage) {
+      return;
+    }
+
+    setSaveError(undefined);
+    setSaveState("saving");
+
+    try {
+      const savedPage = await wikiClient.savePage(activeWikiId, {
+        ...activePage,
+        content: draftContent,
+      });
+      setActivePage(savedPage);
+      setDraftContent(savedPage.content);
+      setIsEditing(false);
+      setSaveState("idle");
+    } catch (saveFailure: unknown) {
+      setSaveState("failed");
+      setSaveError(formatError(saveFailure));
+    }
   }
 
   const resolveImageSrc = useCallback(
@@ -629,6 +729,10 @@ export function WikiBrowser({ onPageTitleChange, organizationIsHosted, organizat
           activeWikiId={activeWikiId}
           disabled={loadState === "loading"}
           onWikiSelected={(wikiId) => {
+            if (!confirmDiscardEdits()) {
+              return;
+            }
+
             savedNavigation.current = null;
             setActiveWikiId(wikiId);
           }}
@@ -644,14 +748,51 @@ export function WikiBrowser({ onPageTitleChange, organizationIsHosted, organizat
       </aside>
 
       <article className="powerwiki-content">
-        {activePage ? (
+        {activePage && isEditing ? (
+          <section className="wiki-editor-shell" aria-label={`Editing ${pageTitle(activePage.path)}`}>
+            <div className="wiki-editor-toolbar">
+              <div>
+                <strong>{pageTitle(activePage.path)}</strong>
+                <span>{hasUnsavedChanges ? "Unsaved changes" : "No changes"}</span>
+              </div>
+              <div className="wiki-editor-toolbar-actions">
+                <button
+                  disabled={saveState === "saving" || !hasUnsavedChanges}
+                  onClick={() => void handleSavePage()}
+                  type="button"
+                >
+                  {saveState === "saving" ? "Saving" : "Save"}
+                </button>
+                <button
+                  disabled={saveState === "saving"}
+                  onClick={cancelEditing}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            {saveState === "failed" && saveError ? (
+              <p className="wiki-editor-error" role="alert">{saveError}</p>
+            ) : null}
+            <WikiPageEditor
+              disabled={saveState === "saving"}
+              onChange={setDraftContent}
+              value={draftContent}
+            />
+          </section>
+        ) : activePage ? (
           <MarkdownPreview
             markdown={activePage.content}
             currentPath={activePage.path}
             subPages={subPages}
             onLoadQueryTable={loadQueryTable}
             onLoadWorkItemBadge={loadWorkItemBadge}
-            onNavigate={(path) => void loadPageByPath(path, true)}
+            onNavigate={(path) => {
+              if (confirmDiscardEdits()) {
+                void loadPageByPath(path, true);
+              }
+            }}
             onOpenWorkItem={(id) => void openWorkItem(id)}
             onResolveImageSrc={resolveImageSrc}
           />

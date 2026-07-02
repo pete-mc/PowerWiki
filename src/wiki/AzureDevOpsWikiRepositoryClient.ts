@@ -1,6 +1,6 @@
 import { getClient } from "azure-devops-extension-api/Common";
 import { VersionControlRecursionType } from "azure-devops-extension-api/Git";
-import { WikiRestClient, type WikiPage as WikiApiPage } from "azure-devops-extension-api/Wiki";
+import { WikiRestClient, type WikiPage as WikiApiPage, type WikiPageResponse } from "azure-devops-extension-api/Wiki";
 
 import type { WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
@@ -30,6 +30,63 @@ class WikiJsonClient extends WikiRestClient {
         includeContent: false,
       },
     });
+  }
+
+  public async getPageTextWithVersion(
+    project: string,
+    wikiIdentifier: string,
+    path: string
+  ): Promise<{ content: string; version?: string }> {
+    const response = await this.beginRequest<Response>({
+      apiVersion: "5.2-preview.1",
+      httpResponseType: "text/plain",
+      returnRawResponse: true,
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages/{*path}",
+      routeValues: { project, wikiIdentifier },
+      queryParams: {
+        path,
+        recursionLevel: VersionControlRecursionType.None,
+      },
+    });
+
+    return {
+      content: await response.text(),
+      version: parseETag(response.headers.get("etag")),
+    };
+  }
+
+  public async savePage(
+    project: string,
+    wikiIdentifier: string,
+    page: WikiPage
+  ): Promise<WikiPage> {
+    const customHeaders: Record<string, string> = {};
+    if (page.version) {
+      customHeaders["If-Match"] = page.version;
+    }
+
+    const response = await this.beginRequest<Response>({
+      apiVersion: "5.2-preview.1",
+      customHeaders,
+      method: "PUT",
+      returnRawResponse: true,
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages/{*path}",
+      routeValues: { project, wikiIdentifier },
+      queryParams: {
+        path: page.path,
+      },
+      body: {
+        content: page.content,
+      },
+    });
+    const saved = await response.json() as WikiPageResponse;
+
+    return {
+      content: saved.page.content ?? page.content,
+      id: saved.page.id,
+      path: saved.page.path ?? page.path,
+      version: parseETag(response.headers.get("etag")) ?? saved.eTag?.[0] ?? page.version,
+    };
   }
 }
 
@@ -63,18 +120,17 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   }
 
   public async getPage(wikiId: string, path: string): Promise<WikiPage> {
-    const content = await this.wikiClient.getPageText(
+    const page = await this.wikiJsonClient.getPageTextWithVersion(
       this.projectName,
       wikiId,
-      path,
-      VersionControlRecursionType.None
+      path
     );
 
-    return { content, path };
+    return { content: page.content, path, version: page.version };
   }
 
-  public async savePage(): Promise<WikiPage> {
-    throw new Error("Editing is not implemented in the first PowerWiki slice.");
+  public async savePage(wikiId: string, page: WikiPage): Promise<WikiPage> {
+    return this.wikiJsonClient.savePage(this.projectName, wikiId, page);
   }
 }
 
@@ -84,4 +140,8 @@ function normalizeMappedPath(mappedPath: string | undefined): string {
   }
 
   return mappedPath.startsWith("/") ? mappedPath : `/${mappedPath}`;
+}
+
+function parseETag(value: string | null): string | undefined {
+  return value?.split(",")[0]?.trim();
 }

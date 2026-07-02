@@ -34,6 +34,7 @@ The current scaffold follows the Microsoft Azure DevOps web extension structure 
 - `azure-devops-extension-api` for Azure DevOps service clients.
 - Webpack and TypeScript for a production-style bundled hub page.
 - React for the initial wiki screen shell.
+- Monaco Editor for Markdown editing.
 - Markdown and Mermaid rendering isolated under `src/rendering`.
 
 The initial manifest contributes Power Wiki under the Azure DevOps project Overview menu. It intentionally does not replace or hide the default Azure DevOps Wiki, so teams can choose either experience.
@@ -104,8 +105,9 @@ The current implementation provides a first read-only Power Wiki experience:
 - Renders Mermaid diagrams through the bundled Mermaid runtime.
 - Renders inline work item references such as `#1234` as Azure Boards badges that open the native work item form.
 - Renders embedded saved query tables written as `::: query-table <query-id> :::`, with a native Azure DevOps query link when hosted by Azure DevOps Services.
+- Opens a Monaco-powered Markdown editor from the page actions menu and saves page content back through the Azure DevOps Wiki API.
 
-Editing, saving, attachments, history, and search are planned follow-up slices.
+Attachments, history, and search are planned follow-up slices.
 
 ## Azure Boards Markdown Enhancements
 

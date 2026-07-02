@@ -5,5 +5,5 @@ export interface WikiRepositoryClient {
   getChildPages(wikiId: string, parentPath: string): Promise<WikiPageSummary[]>;
   getPage(wikiId: string, path: string): Promise<WikiPage>;
   getWikis(): Promise<WikiSummary[]>;
-  savePage(page: WikiPage): Promise<WikiPage>;
+  savePage(wikiId: string, page: WikiPage): Promise<WikiPage>;
 }
