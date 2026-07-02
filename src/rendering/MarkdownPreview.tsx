@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
+import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
@@ -11,6 +12,30 @@ export interface WikiSubPage {
   readonly title: string;
 }
 
+export interface QueryTableColumn {
+  readonly name: string;
+  readonly referenceName: string;
+}
+
+export interface QueryTableRow {
+  readonly id: number;
+  readonly values: ReadonlyMap<string, string>;
+}
+
+export interface QueryTableResult {
+  readonly columns: readonly QueryTableColumn[];
+  readonly name?: string;
+  readonly nativeUrl?: string;
+  readonly rows: readonly QueryTableRow[];
+}
+
+export interface WorkItemBadgeDetails {
+  readonly id: number;
+  readonly state?: string;
+  readonly title?: string;
+  readonly type?: string;
+}
+
 interface MarkdownPreviewProps {
   readonly markdown: string;
   /** Wiki path of the page being rendered; used to resolve relative links. */
@@ -19,8 +44,14 @@ interface MarkdownPreviewProps {
   readonly subPages?: readonly WikiSubPage[];
   /** Resolves rendered image sources before the HTML is inserted into the DOM. */
   readonly onResolveImageSrc?: (src: string, currentPath: string) => string | undefined;
+  /** Loads an embedded Azure Boards query table. */
+  readonly onLoadQueryTable?: (queryId: string) => Promise<QueryTableResult>;
   /** Called when an internal wiki link is clicked, with the resolved wiki path. */
   readonly onNavigate?: (path: string) => void;
+  /** Opens the native Azure DevOps work item UI. */
+  readonly onOpenWorkItem?: (id: number) => void;
+  /** Loads details used to enrich inline work item badges. */
+  readonly onLoadWorkItemBadge?: (id: number) => Promise<WorkItemBadgeDetails>;
 }
 
 const TOSP_PLACEHOLDER_SELECTOR = `[${TOSP_PLACEHOLDER_ATTR}="${TOSP_PLACEHOLDER_VALUE}"]`;
@@ -61,7 +92,16 @@ function resolveInternalPath(href: string, currentPath: string): string | null {
   }
 }
 
-export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, onResolveImageSrc }: MarkdownPreviewProps) {
+export function MarkdownPreview({
+  markdown,
+  currentPath,
+  subPages,
+  onLoadQueryTable,
+  onLoadWorkItemBadge,
+  onNavigate,
+  onOpenWorkItem,
+  onResolveImageSrc
+}: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const renderMermaidInPreview = useCallback(() => {
     const container = previewRef.current;
@@ -153,9 +193,88 @@ export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, o
     }
   }, [html, subPages]);
 
+  useEffect(() => {
+    const container = previewRef.current;
+    if (!container) {
+      return;
+    }
+
+    let cancelled = false;
+    const queryTables = Array.from(container.querySelectorAll<HTMLElement>(QUERY_TABLE_SELECTOR));
+
+    for (const queryTable of queryTables) {
+      const queryId = queryTable.getAttribute(QUERY_TABLE_ATTR);
+      if (!queryId) {
+        continue;
+      }
+
+      renderQueryLoading(queryTable, queryId);
+
+      if (!onLoadQueryTable) {
+        renderQueryMessage(queryTable, "Azure Boards query rendering is unavailable.");
+        continue;
+      }
+
+      void onLoadQueryTable(queryId)
+        .then((result) => {
+          if (!cancelled) {
+            renderQueryResult(queryTable, result);
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            renderQueryMessage(queryTable, formatQueryError(error));
+          }
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [html, onLoadQueryTable]);
+
+  useEffect(() => {
+    const container = previewRef.current;
+    if (!container || !onLoadWorkItemBadge) {
+      return;
+    }
+
+    let cancelled = false;
+    const badges = Array.from(container.querySelectorAll<HTMLElement>(WORK_ITEM_SELECTOR));
+
+    for (const badge of badges) {
+      const id = Number(badge.getAttribute(WORK_ITEM_ATTR));
+      if (!Number.isInteger(id) || id <= 0) {
+        continue;
+      }
+
+      void onLoadWorkItemBadge(id)
+        .then((details) => {
+          if (!cancelled) {
+            enrichWorkItemBadge(badge, details);
+          }
+        })
+        .catch(() => {
+          // The badge still opens the native form; enrichment is best-effort.
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [html, onLoadWorkItemBadge]);
+
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {
     // Ignore modified clicks so users can still open links in a new tab.
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const workItemLink = (event.target as HTMLElement).closest<HTMLElement>(WORK_ITEM_SELECTOR);
+    const workItemId = workItemLink ? Number(workItemLink.getAttribute(WORK_ITEM_ATTR)) : 0;
+    if (workItemId > 0 && onOpenWorkItem) {
+      event.preventDefault();
+      onOpenWorkItem(workItemId);
       return;
     }
 
@@ -192,6 +311,129 @@ export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, o
       key={html}
     />
   );
+}
+
+function renderQueryLoading(container: HTMLElement, queryId: string): void {
+  container.replaceChildren();
+  container.classList.remove("powerwiki-query-table-error");
+
+  const message = document.createElement("p");
+  message.className = "powerwiki-query-table-status";
+  message.textContent = `Loading query ${queryId}.`;
+  container.appendChild(message);
+}
+
+function renderQueryMessage(container: HTMLElement, message: string): void {
+  container.replaceChildren();
+  container.classList.add("powerwiki-query-table-error");
+
+  const paragraph = document.createElement("p");
+  paragraph.className = "powerwiki-query-table-status";
+  paragraph.textContent = message;
+  container.appendChild(paragraph);
+}
+
+function renderQueryResult(container: HTMLElement, result: QueryTableResult): void {
+  container.replaceChildren();
+  container.classList.remove("powerwiki-query-table-error");
+
+  const header = document.createElement("div");
+  header.className = "powerwiki-query-table-header";
+
+  const title = document.createElement("strong");
+  title.textContent = result.name ?? "Azure Boards query";
+  header.appendChild(title);
+
+  const count = document.createElement("span");
+  count.textContent = `${result.rows.length} item${result.rows.length === 1 ? "" : "s"}`;
+  header.appendChild(count);
+
+  if (result.nativeUrl) {
+    const nativeLink = document.createElement("a");
+    nativeLink.href = result.nativeUrl;
+    nativeLink.rel = "noopener noreferrer";
+    nativeLink.target = "_blank";
+    nativeLink.textContent = "Open in Azure DevOps";
+    header.appendChild(nativeLink);
+  }
+
+  container.appendChild(header);
+
+  if (result.rows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "powerwiki-query-table-status";
+    empty.textContent = "No work items matched this query.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const scroller = document.createElement("div");
+  scroller.className = "powerwiki-query-table-scroll";
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+
+  for (const column of result.columns) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = column.name;
+    headRow.appendChild(cell);
+  }
+
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const body = document.createElement("tbody");
+  for (const row of result.rows) {
+    const tableRow = document.createElement("tr");
+
+    for (const column of result.columns) {
+      const cell = document.createElement("td");
+      const value = row.values.get(column.referenceName) ?? "";
+
+      if (column.referenceName === "System.Id") {
+        const link = document.createElement("a");
+        link.href = "#";
+        link.className = "powerwiki-work-item-badge";
+        link.setAttribute(WORK_ITEM_ATTR, String(row.id));
+        link.title = `Open work item ${row.id}`;
+        link.textContent = value || String(row.id);
+        cell.appendChild(link);
+      } else {
+        cell.textContent = value;
+      }
+
+      tableRow.appendChild(cell);
+    }
+
+    body.appendChild(tableRow);
+  }
+
+  table.appendChild(body);
+  scroller.appendChild(table);
+  container.appendChild(scroller);
+}
+
+function enrichWorkItemBadge(badge: HTMLElement, details: WorkItemBadgeDetails): void {
+  const titleParts = [
+    details.type,
+    `#${details.id}`,
+    details.title,
+    details.state ? `(${details.state})` : undefined
+  ].filter(Boolean);
+
+  badge.title = titleParts.join(" ");
+  if (details.state) {
+    badge.setAttribute("data-powerwiki-work-item-state", details.state);
+  }
+}
+
+function formatQueryError(error: unknown): string {
+  if (error instanceof Error) {
+    return `Unable to load query: ${error.message}`;
+  }
+
+  return "Unable to load query.";
 }
 
 function resolveImageSources(

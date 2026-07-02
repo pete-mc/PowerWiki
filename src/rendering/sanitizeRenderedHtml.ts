@@ -5,7 +5,15 @@ export function sanitizeRenderedHtml(html: string): string {
     // "id" is needed so heading anchors (from markdown-it-anchor) survive; the
     // [[_TOC_]] links target them via "#id". "class"/"target" keep mermaid
     // <pre class="mermaid"> and external-link targets intact.
-    ADD_ATTR: ["class", "id", "target"],
+    ADD_ATTR: [
+      "class",
+      "data-powerwiki-placeholder",
+      "data-powerwiki-query-id",
+      "data-powerwiki-work-item-id",
+      "id",
+      "target",
+      "title"
+    ],
     USE_PROFILES: {
       html: true
     }

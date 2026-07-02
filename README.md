@@ -102,8 +102,24 @@ The current implementation provides a first read-only Power Wiki experience:
 - Loads selected page Markdown from the standard Azure DevOps Wiki backing store.
 - Renders Markdown through the PowerWiki Markdown pipeline.
 - Renders Mermaid diagrams through the bundled Mermaid runtime.
+- Renders inline work item references such as `#1234` as Azure Boards badges that open the native work item form.
+- Renders embedded saved query tables written as `::: query-table <query-id> :::`, with a native Azure DevOps query link when hosted by Azure DevOps Services.
 
 Editing, saving, attachments, history, and search are planned follow-up slices.
+
+## Azure Boards Markdown Enhancements
+
+PowerWiki adds read-only Azure Boards rendering on top of normal wiki Markdown:
+
+```markdown
+::: query-table 9a0fb95d-55b7-4fd3-af6b-30b8921ada61 :::
+```
+
+The query table syntax runs the saved query by ID in the current project and renders up to 200 matching work items inside the page. The embedded table is PowerWiki UI because Azure DevOps does not expose the built-in query grid as a reusable extension control. The table includes a link to open the query in the native Azure DevOps query experience when a hosted organization URL can be built.
+
+Inline work item references like `#1234` render as clickable badges in PowerWiki. Clicking a badge opens the native Azure DevOps work item form through the Work Item Tracking extension service.
+
+In the built-in Azure DevOps Wiki, these remain readable as plain Markdown text rather than requiring a proprietary stored page format.
 
 ## Project Structure
 

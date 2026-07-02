@@ -329,6 +329,93 @@ body {
   font-style: italic;
 }
 
+.markdown-preview .powerwiki-work-item-badge {
+  background: #eff6fc;
+  border: 1px solid #c7e0f4;
+  border-radius: 999px;
+  color: #005a9e;
+  display: inline-block;
+  font-size: 0.88em;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0 7px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.markdown-preview .powerwiki-work-item-badge:hover {
+  background: #deecf9;
+  text-decoration: none;
+}
+
+.markdown-preview .powerwiki-query-table {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  margin: 0 0 16px;
+  overflow: hidden;
+}
+
+.markdown-preview .powerwiki-query-table-header {
+  align-items: center;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+  padding: 8px 12px;
+}
+
+.markdown-preview .powerwiki-query-table-header span {
+  color: #57606a;
+  font-size: 13px;
+  margin-right: auto;
+}
+
+.markdown-preview .powerwiki-query-table-header a {
+  font-size: 13px;
+}
+
+.markdown-preview .powerwiki-query-table-scroll {
+  overflow: auto;
+}
+
+.markdown-preview .powerwiki-query-table table {
+  border: 0;
+  border-collapse: collapse;
+  display: table;
+  margin: 0;
+  width: 100%;
+}
+
+.markdown-preview .powerwiki-query-table th,
+.markdown-preview .powerwiki-query-table td {
+  border-left: 0;
+  border-right: 0;
+  max-width: 420px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.markdown-preview .powerwiki-query-table tr:first-child th {
+  border-top: 0;
+}
+
+.markdown-preview .powerwiki-query-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-preview .powerwiki-query-table-status {
+  color: #57606a;
+  margin: 0;
+  padding: 12px;
+}
+
+.markdown-preview .powerwiki-query-table-error {
+  background: #fff4ce;
+  border-color: #f2c811;
+}
+
 .markdown-preview .mermaid-rendered {
   background: #ffffff;
   border: 1px solid #d7d7d7;

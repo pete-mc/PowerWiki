@@ -70,6 +70,8 @@ export function App({ error, hostContext, status }: AppProps) {
       ) : (
         <WikiBrowser
           onPageTitleChange={handlePageTitleChange}
+          organizationIsHosted={hostContext?.organizationIsHosted}
+          organizationName={hostContext?.organizationName}
           projectName={hostContext?.projectName}
         />
       )}

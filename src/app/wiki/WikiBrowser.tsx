@@ -1,7 +1,12 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as SDK from "azure-devops-extension-sdk";
+import {
+  WorkItemTrackingServiceIds,
+  type IWorkItemFormNavigationService
+} from "azure-devops-extension-api/WorkItemTracking";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
+import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
@@ -11,6 +16,8 @@ import { WikiSelector } from "./WikiSelector";
 
 interface WikiBrowserProps {
   readonly onPageTitleChange?: (title: string | undefined) => void;
+  readonly organizationIsHosted?: boolean;
+  readonly organizationName?: string;
   readonly projectName?: string;
 }
 
@@ -229,7 +236,7 @@ function pagePathCandidates(rawPath: string): string[] {
   return candidates;
 }
 
-export function WikiBrowser({ onPageTitleChange, projectName }: WikiBrowserProps) {
+export function WikiBrowser({ onPageTitleChange, organizationIsHosted, organizationName, projectName }: WikiBrowserProps) {
   const [activePage, setActivePage] = useState<WikiPage>();
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [error, setError] = useState<string>();
@@ -248,6 +255,9 @@ export function WikiBrowser({ onPageTitleChange, projectName }: WikiBrowserProps
 
   const wikiClient = useMemo(() => {
     return projectName ? new AzureDevOpsWikiRepositoryClient(projectName) : undefined;
+  }, [projectName]);
+  const workItemClient = useMemo(() => {
+    return projectName ? new AzureDevOpsWorkItemClient(projectName) : undefined;
   }, [projectName]);
   const activeWiki = useMemo(
     () => wikis.find((wiki) => wiki.id === activeWikiId),
@@ -562,6 +572,46 @@ export function WikiBrowser({ onPageTitleChange, projectName }: WikiBrowserProps
     },
     [activeWiki, projectName]
   );
+  const loadQueryTable = useCallback(
+    async (queryId: string) => {
+      if (!workItemClient) {
+        throw new Error("PowerWiki needs an Azure DevOps project context to load queries.");
+      }
+
+      const result = await workItemClient.getQueryTable(queryId);
+      return {
+        ...result,
+        nativeUrl: buildAzureDevOpsQueryUrl(organizationName, projectName, organizationIsHosted, queryId)
+      };
+    },
+    [organizationIsHosted, organizationName, projectName, workItemClient]
+  );
+  const loadWorkItemBadge = useCallback(
+    async (id: number) => {
+      if (!workItemClient) {
+        throw new Error("PowerWiki needs an Azure DevOps project context to load work items.");
+      }
+
+      return workItemClient.getWorkItemBadgeDetails(id);
+    },
+    [workItemClient]
+  );
+  const openWorkItem = useCallback(
+    async (id: number) => {
+      try {
+        const navigationService = await SDK.getService<IWorkItemFormNavigationService>(
+          WorkItemTrackingServiceIds.WorkItemFormNavigationService
+        );
+        await navigationService.openWorkItem(id);
+      } catch {
+        const workItemUrl = buildAzureDevOpsWorkItemUrl(organizationName, projectName, organizationIsHosted, id);
+        if (workItemUrl) {
+          window.open(workItemUrl, "_blank", "noopener,noreferrer");
+        }
+      }
+    },
+    [organizationIsHosted, organizationName, projectName]
+  );
 
   if (loadState === "failed") {
     return (
@@ -599,7 +649,10 @@ export function WikiBrowser({ onPageTitleChange, projectName }: WikiBrowserProps
             markdown={activePage.content}
             currentPath={activePage.path}
             subPages={subPages}
+            onLoadQueryTable={loadQueryTable}
+            onLoadWorkItemBadge={loadWorkItemBadge}
             onNavigate={(path) => void loadPageByPath(path, true)}
+            onOpenWorkItem={(id) => void openWorkItem(id)}
             onResolveImageSrc={resolveImageSrc}
           />
         ) : (
@@ -611,6 +664,32 @@ export function WikiBrowser({ onPageTitleChange, projectName }: WikiBrowserProps
       </article>
     </section>
   );
+}
+
+function buildAzureDevOpsQueryUrl(
+  organizationName: string | undefined,
+  projectName: string | undefined,
+  isHosted: boolean | undefined,
+  queryId: string
+): string | undefined {
+  if (!organizationName || !projectName || !isHosted) {
+    return undefined;
+  }
+
+  return `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}/_queries/query/${encodeURIComponent(queryId)}/`;
+}
+
+function buildAzureDevOpsWorkItemUrl(
+  organizationName: string | undefined,
+  projectName: string | undefined,
+  isHosted: boolean | undefined,
+  id: number
+): string | undefined {
+  if (!organizationName || !projectName || !isHosted) {
+    return undefined;
+  }
+
+  return `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}/_workitems/edit/${id}/`;
 }
 
 function formatError(error: unknown): string {
