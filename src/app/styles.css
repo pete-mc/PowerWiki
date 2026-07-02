@@ -20,18 +20,53 @@ body {
   align-items: center;
   border-bottom: 1px solid #d7d7d7;
   display: flex;
+  gap: 16px;
+  justify-content: space-between;
   min-height: 72px;
+}
+
+.powerwiki-header-title {
+  min-width: 0;
 }
 
 .powerwiki-header h1 {
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 4px;
+  overflow-wrap: anywhere;
 }
 
 .powerwiki-header p {
   color: #605e5c;
   margin: 0;
+}
+
+.powerwiki-brand {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  text-align: right;
+}
+
+.powerwiki-brand img {
+  height: 32px;
+  width: 32px;
+}
+
+.powerwiki-brand strong,
+.powerwiki-brand span {
+  display: block;
+}
+
+.powerwiki-brand strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.powerwiki-brand span {
+  color: #605e5c;
+  font-size: 12px;
 }
 
 .powerwiki-layout {
@@ -314,6 +349,10 @@ body {
 @media (max-width: 760px) {
   .powerwiki-shell {
     padding: 16px;
+  }
+
+  .powerwiki-header {
+    align-items: flex-start;
   }
 
   .powerwiki-layout {

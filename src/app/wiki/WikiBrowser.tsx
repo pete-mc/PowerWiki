@@ -10,6 +10,7 @@ import { WikiPageTree } from "./WikiPageTree";
 import { WikiSelector } from "./WikiSelector";
 
 interface WikiBrowserProps {
+  readonly onPageTitleChange?: (title: string | undefined) => void;
   readonly projectName?: string;
 }
 
@@ -19,6 +20,12 @@ interface IHostNavigationService {
   getHash(): Promise<string>;
   setHash(hash: string): Promise<void>;
   onHashChanged(callback: (hash: string) => void): void;
+}
+
+interface NavigationTarget {
+  readonly pagePath: string;
+  readonly wikiId?: string;
+  readonly wikiName?: string;
 }
 
 const HOST_NAVIGATION_SERVICE_ID = "ms.vss-features.host-navigation-service";
@@ -43,18 +50,86 @@ function safeDecode(value: string): string {
   }
 }
 
-function parseNavigationHash(hash: string): { wikiId: string; pagePath: string } | undefined {
-  const colonIndex = hash.indexOf(":");
-  if (colonIndex <= 0) {
-    return undefined;
-  }
-  const wikiId = hash.slice(0, colonIndex);
-  const rawPath = hash.slice(colonIndex + 1);
-  return { wikiId, pagePath: safeDecode(rawPath) };
+function normalizeHash(hash: string): string {
+  return hash.startsWith("#") ? hash.slice(1) : hash;
 }
 
-function buildNavigationHash(wikiId: string, pagePath: string): string {
-  return `${wikiId}:${pagePath}`;
+function normalizePagePath(path: string): string {
+  const decoded = safeDecode(path);
+  if (!decoded || decoded === "/") {
+    return "/";
+  }
+
+  return decoded.startsWith("/") ? decoded : `/${decoded}`;
+}
+
+function parseNavigationHash(hash: string): NavigationTarget | undefined {
+  const normalized = normalizeHash(hash).trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const wikiRoutePrefix = "/wikis/";
+  if (normalized.startsWith(wikiRoutePrefix)) {
+    const remainder = normalized.slice(wikiRoutePrefix.length);
+    const slashIndex = remainder.indexOf("/");
+    if (slashIndex <= 0) {
+      return undefined;
+    }
+
+    return {
+      pagePath: normalizePagePath(remainder.slice(slashIndex)),
+      wikiName: safeDecode(remainder.slice(0, slashIndex))
+    };
+  }
+
+  const colonIndex = normalized.indexOf(":");
+  if (colonIndex > 0 && !normalized.startsWith("/")) {
+    const wikiId = normalized.slice(0, colonIndex);
+    const rawPath = normalized.slice(colonIndex + 1);
+    return { wikiId, pagePath: normalizePagePath(rawPath) };
+  }
+
+  return { pagePath: normalizePagePath(normalized) };
+}
+
+function buildNavigationHash(wiki: WikiSummary | undefined, pagePath: string, wikis: readonly WikiSummary[]): string {
+  const encodedPath = encodeURI(normalizePagePath(pagePath));
+  if (!wiki || wikis.length <= 1 || wikis[0]?.id === wiki.id) {
+    return encodedPath;
+  }
+
+  return `/wikis/${encodeURIComponent(wiki.name)}${encodedPath}`;
+}
+
+function setNavigationHash(navService: IHostNavigationService | undefined, hash: string): void {
+  if (navService) {
+    void navService.setHash(hash);
+    return;
+  }
+
+  window.location.hash = hash;
+}
+
+function findNavigationWikiId(target: NavigationTarget | null, wikis: readonly WikiSummary[]): string | undefined {
+  if (!target) {
+    return undefined;
+  }
+
+  if (target.wikiId && wikis.some((wiki) => wiki.id === target.wikiId)) {
+    return target.wikiId;
+  }
+
+  if (target.wikiName) {
+    return wikis.find((wiki) => wiki.name === target.wikiName)?.id;
+  }
+
+  return undefined;
+}
+
+function navigationTargetsWiki(target: NavigationTarget | null, wikiId: string, wikis: readonly WikiSummary[]): boolean {
+  const targetWikiId = findNavigationWikiId(target, wikis);
+  return !targetWikiId || targetWikiId === wikiId;
 }
 
 function resolveWikiImagePath(src: string, currentPath: string): string | undefined {
@@ -154,7 +229,7 @@ function pagePathCandidates(rawPath: string): string[] {
   return candidates;
 }
 
-export function WikiBrowser({ projectName }: WikiBrowserProps) {
+export function WikiBrowser({ onPageTitleChange, projectName }: WikiBrowserProps) {
   const [activePage, setActivePage] = useState<WikiPage>();
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [error, setError] = useState<string>();
@@ -165,7 +240,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
   const [subPages, setSubPages] = useState<readonly WikiSubPage[]>([]);
   const [wikis, setWikis] = useState<WikiSummary[]>([]);
 
-  const savedNavigation = useRef<{ wikiId: string; pagePath: string } | null>(null);
+  const savedNavigation = useRef<NavigationTarget | null>(null);
   const navigationServiceRef = useRef<IHostNavigationService | undefined>(undefined);
   // The last page path we navigated to. Used to ignore onHashChanged events that
   // are echoes of our own setHash() calls, preventing navigation loops.
@@ -201,9 +276,10 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
           setActivePage(page);
           setLoadState("ready");
           lastNavigatedPathRef.current = page.path;
-          if (updateHash && navigationServiceRef.current) {
-            void navigationServiceRef.current.setHash(
-              buildNavigationHash(activeWikiId, page.path)
+          if (updateHash) {
+            setNavigationHash(
+              navigationServiceRef.current,
+              buildNavigationHash(activeWiki, page.path, wikis)
             );
           }
           return true;
@@ -216,7 +292,7 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
       setError(`Page not found: ${safeDecode(rawPath)}`);
       return false;
     },
-    [wikiClient, activeWikiId]
+    [activeWiki, activeWikiId, wikiClient, wikis]
   );
   // Handles URL hash changes that originate outside our own navigation:
   // browser back/forward, or the user editing the URL. Kept in a ref so the
@@ -228,19 +304,16 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
       return;
     }
 
-    // ADO's host emits hash-change events during its own routing whose values
-    // do not match our "wikiId:path" format. Only act when the parsed wikiId is
-    // a wiki we actually know about — otherwise we would switch to a bogus id
-    // and every subsequent API call would fail.
-    if (!wikis.some((wiki) => wiki.id === parsed.wikiId)) {
+    const targetWikiId = findNavigationWikiId(parsed, wikis) ?? activeWikiId;
+    if (!targetWikiId) {
       return;
     }
 
     // A different (known) wiki was requested via the URL — switch to it and let
     // the page-load effect restore the requested page.
-    if (parsed.wikiId !== activeWikiId) {
+    if (targetWikiId !== activeWikiId) {
       savedNavigation.current = parsed;
-      setActiveWikiId(parsed.wikiId);
+      setActiveWikiId(targetWikiId);
       return;
     }
 
@@ -256,15 +329,15 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
     async function initNavigation() {
       const navService = await getNavigationService();
       navigationServiceRef.current = navService;
+      const fallbackHash = window.location.hash;
       if (navService) {
         const hash = await navService.getHash();
-        const parsed = parseNavigationHash(hash);
-        if (parsed) {
-          savedNavigation.current = parsed;
-        }
+        savedNavigation.current = parseNavigationHash(hash) ?? parseNavigationHash(fallbackHash) ?? null;
         navService.onHashChanged((changedHash) => {
           hashChangeHandlerRef.current(changedHash);
         });
+      } else {
+        savedNavigation.current = parseNavigationHash(fallbackHash) ?? null;
       }
       setNavigationReady(true);
     }
@@ -303,9 +376,9 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
           return;
         }
 
-        const savedWikiId = savedNavigation.current?.wikiId;
+        const savedWikiId = findNavigationWikiId(savedNavigation.current, availableWikis);
         const targetWikiId =
-          savedWikiId && availableWikis.some((w) => w.id === savedWikiId)
+          savedWikiId
             ? savedWikiId
             : availableWikis[0]?.id;
         setActiveWikiId(targetWikiId);
@@ -343,16 +416,11 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
         if (cancelled) return;
 
         const saved = savedNavigation.current;
-        const savedPath = saved?.wikiId === wikiId ? saved.pagePath : undefined;
+        const savedPath = navigationTargetsWiki(saved, wikiId, wikis) ? saved?.pagePath : undefined;
         savedNavigation.current = null;
-
-        setPageList(rootPages);
-        setLoadedPaths(new Set(["/"]));
 
         // Resolve the initial/deep-linked page, trying hyphen/space variants,
         // then falling back to the wiki home page if the saved path is gone.
-        // The tree auto-expands to the active page via path-string ancestor
-        // detection in WikiPageTree, so no ancestor pre-loading is needed here.
         const targetPath = savedPath ?? chooseInitialPage(rootPages);
         let initialPage: WikiPage | undefined;
 
@@ -374,18 +442,23 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
           }
         }
 
+        const treeState = initialPage
+          ? await loadAncestorPageLists(client, wikiId, initialPage.path, rootPages)
+          : { loadedPaths: new Set<string>(["/"]), pages: rootPages };
+
         if (cancelled) return;
 
+        setPageList(treeState.pages);
+        setLoadedPaths(treeState.loadedPaths);
         setActivePage(initialPage);
         setLoadState("ready");
 
         if (initialPage) {
           lastNavigatedPathRef.current = initialPage.path;
-          if (navigationServiceRef.current) {
-            void navigationServiceRef.current.setHash(
-              buildNavigationHash(wikiId, initialPage.path)
-            );
-          }
+          setNavigationHash(
+            navigationServiceRef.current,
+            buildNavigationHash(activeWiki, initialPage.path, wikis)
+          );
         }
       } catch (loadError: unknown) {
         if (!cancelled) {
@@ -397,7 +470,16 @@ export function WikiBrowser({ projectName }: WikiBrowserProps) {
 
     void loadPages();
     return () => { cancelled = true; };
-  }, [activeWikiId, wikiClient]);
+  }, [activeWiki, activeWikiId, wikiClient, wikis]);
+
+  useEffect(() => {
+    if (loadState === "loading" && !activePage) {
+      onPageTitleChange?.("Loading wiki");
+      return;
+    }
+
+    onPageTitleChange?.(activePage ? pageTitle(activePage.path) : undefined);
+  }, [activePage, loadState, onPageTitleChange]);
 
   // Loads the direct children of the active page so a [[_TOSP_]] placeholder can
   // be filled in. Scoped to pages that actually use the placeholder to avoid an
@@ -550,4 +632,43 @@ function chooseInitialPage(pages: readonly WikiPageSummary[]): string | undefine
     pages.find((page) => page.order === 0)?.path ??
     pages[0]?.path
   );
+}
+
+interface WikiPageListLoader {
+  getChildPages(wikiId: string, path: string): Promise<WikiPageSummary[]>;
+}
+
+async function loadAncestorPageLists(
+  client: WikiPageListLoader,
+  wikiId: string,
+  targetPath: string,
+  rootPages: readonly WikiPageSummary[]
+): Promise<{ loadedPaths: Set<string>; pages: WikiPageSummary[] }> {
+  const loadedPaths = new Set<string>(["/"]);
+  const pagesByPath = new Map(rootPages.map((page) => [page.path, page]));
+
+  for (const ancestorPath of ancestorPaths(targetPath)) {
+    try {
+      const children = await client.getChildPages(wikiId, ancestorPath);
+      loadedPaths.add(ancestorPath);
+      for (const child of children) {
+        pagesByPath.set(child.path, child);
+      }
+    } catch {
+      loadedPaths.add(ancestorPath);
+    }
+  }
+
+  return { loadedPaths, pages: Array.from(pagesByPath.values()) };
+}
+
+function ancestorPaths(path: string): string[] {
+  const segments = normalizePagePath(path).split("/").filter(Boolean);
+  const ancestors: string[] = [];
+
+  for (let index = 1; index < segments.length; index += 1) {
+    ancestors.push("/" + segments.slice(0, index).join("/"));
+  }
+
+  return ancestors;
 }

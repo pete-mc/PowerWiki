@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { AzureDevOpsHostContext } from "../extension/azureDevOpsHost";
 import { WikiBrowser } from "./wiki/WikiBrowser";
+import packageMetadata from "../../package.json";
 
 interface AppProps {
   readonly error?: unknown;
@@ -10,6 +11,7 @@ interface AppProps {
 }
 
 export function App({ error, hostContext, status }: AppProps) {
+  const [pageTitle, setPageTitle] = useState<string>();
   const statusText = useMemo(() => {
     if (status === "loading") {
       return "Connecting to Azure DevOps";
@@ -23,13 +25,40 @@ export function App({ error, hostContext, status }: AppProps) {
       ? `Project: ${hostContext.projectName}`
       : "Project context unavailable";
   }, [hostContext?.projectName, status]);
+  const headerTitle = useMemo(() => {
+    if (status === "loading") {
+      return "Loading PowerWiki";
+    }
+
+    if (status === "failed") {
+      return "Unable to load PowerWiki";
+    }
+
+    return pageTitle ?? "PowerWiki";
+  }, [pageTitle, status]);
+  const handlePageTitleChange = useCallback((title: string | undefined) => {
+    setPageTitle(title);
+  }, []);
+
+  useEffect(() => {
+    if (status !== "ready") {
+      setPageTitle(undefined);
+    }
+  }, [status]);
 
   return (
     <main className="powerwiki-shell">
       <header className="powerwiki-header">
-        <div>
-          <h1>PowerWiki</h1>
+        <div className="powerwiki-header-title">
+          <h1>{headerTitle}</h1>
           <p>{statusText}</p>
+        </div>
+        <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>
+          <img alt="" src="../media/logo_new.png" />
+          <div>
+            <strong>PowerWiki</strong>
+            <span>Version {packageMetadata.version}</span>
+          </div>
         </div>
       </header>
 
@@ -39,7 +68,10 @@ export function App({ error, hostContext, status }: AppProps) {
           <p>{formatError(error)}</p>
         </section>
       ) : (
-        <WikiBrowser projectName={hostContext?.projectName} />
+        <WikiBrowser
+          onPageTitleChange={handlePageTitleChange}
+          projectName={hostContext?.projectName}
+        />
       )}
     </main>
   );
