@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
@@ -63,6 +63,14 @@ function resolveInternalPath(href: string, currentPath: string): string | null {
 
 export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, onResolveImageSrc }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
+  const renderMermaidInPreview = useCallback(() => {
+    const container = previewRef.current;
+    if (!container) {
+      return;
+    }
+
+    void renderMermaidDiagrams(container);
+  }, []);
   const html = useMemo(() => {
     const sanitizedHtml = sanitizeRenderedHtml(markdownRenderer.render(markdown));
     return currentPath && onResolveImageSrc
@@ -75,12 +83,11 @@ export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, o
     let animationFrame = 0;
 
     const renderDiagrams = () => {
-      const container = previewRef.current;
-      if (!container || cancelled) {
+      if (cancelled) {
         return;
       }
 
-      void renderMermaidDiagrams(container);
+      renderMermaidInPreview();
     };
 
     renderDiagrams();
@@ -90,7 +97,29 @@ export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, o
       cancelled = true;
       window.cancelAnimationFrame(animationFrame);
     };
-  }, [html]);
+  }, [html, renderMermaidInPreview]);
+
+  useEffect(() => {
+    const container = previewRef.current;
+    if (!container) {
+      return;
+    }
+
+    let timeout = 0;
+    const scheduleRender = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(renderMermaidInPreview, 0);
+    };
+
+    scheduleRender();
+    const observer = new MutationObserver(scheduleRender);
+    observer.observe(container, { childList: true, subtree: true });
+
+    return () => {
+      window.clearTimeout(timeout);
+      observer.disconnect();
+    };
+  }, [html, renderMermaidInPreview]);
 
   useEffect(() => {
     const container = previewRef.current;
@@ -160,6 +189,7 @@ export function MarkdownPreview({ markdown, currentPath, subPages, onNavigate, o
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={handleClick}
       ref={previewRef}
+      key={html}
     />
   );
 }
