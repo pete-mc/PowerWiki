@@ -1,6 +1,6 @@
 import { getClient } from "azure-devops-extension-api/Common";
 import { VersionControlRecursionType } from "azure-devops-extension-api/Git";
-import { WikiRestClient, type WikiPage as WikiApiPage, type WikiPageResponse } from "azure-devops-extension-api/Wiki";
+import { WikiRestClient, type WikiPage as WikiApiPage } from "azure-devops-extension-api/Wiki";
 
 import type { WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
@@ -79,13 +79,16 @@ class WikiJsonClient extends WikiRestClient {
         content: page.content,
       },
     });
-    const saved = await response.json() as WikiPageResponse;
+    // The pages PUT endpoint returns the WikiPage object directly as the body;
+    // the new version comes back in the ETag response header (the {page, eTag}
+    // WikiPageResponse wrapper is only synthesised by the SDK's own clients).
+    const saved = await response.json() as WikiApiPage;
 
     return {
-      content: saved.page.content ?? page.content,
-      id: saved.page.id,
-      path: saved.page.path ?? page.path,
-      version: parseETag(response.headers.get("etag")) ?? saved.eTag?.[0] ?? page.version,
+      content: saved.content ?? page.content,
+      id: saved.id,
+      path: saved.path ?? page.path,
+      version: parseETag(response.headers.get("etag")) ?? page.version,
     };
   }
 }
