@@ -12,6 +12,7 @@ import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepos
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import { StatusMessage } from "./StatusMessage";
+import { WikiMovePageDialog } from "./WikiMovePageDialog";
 import { WikiPageEditor } from "./WikiPageEditor";
 import { WikiPageTree, type WikiPageTreeActions } from "./WikiPageTree";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
@@ -254,6 +255,7 @@ export function WikiBrowser({
   const [error, setError] = useState<string>();
   const [isEditing, setIsEditing] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [moveDialogPath, setMoveDialogPath] = useState<string | undefined>(undefined);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadedPaths, setLoadedPaths] = useState<ReadonlySet<string>>(new Set());
   const [navigationReady, setNavigationReady] = useState(false);
@@ -793,54 +795,48 @@ export function WikiBrowser({
     [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, wikiClient]
   );
 
-  const handleMovePagePrompt = useCallback(
-    async (path: string) => {
-      if (!wikiClient || !activeWikiId || !confirmDiscardEdits()) {
+  const handleOpenMoveDialog = useCallback(
+    (path: string) => {
+      if (!confirmDiscardEdits()) {
         return;
       }
-
-      const newPath = window.prompt("Move page to path", path)?.trim();
-      if (!newPath || newPath === path) {
-        return;
-      }
-
-      await performMove(path, newPath, 0);
+      setMoveDialogPath(path);
     },
-    [activeWikiId, confirmDiscardEdits, performMove, wikiClient]
+    [confirmDiscardEdits]
   );
 
-  const handleCopyPath = useCallback((path: string) => {
-    void navigator.clipboard?.writeText(path);
-  }, []);
+  const handleConfirmMove = useCallback(
+    async (destinationParent: string) => {
+      const sourcePath = moveDialogPath;
+      setMoveDialogPath(undefined);
+      if (!sourcePath) {
+        return;
+      }
 
-  const handleOpenInNewTab = useCallback(
-    (path: string) => {
-      const nativeUrl = buildNativeWikiPageUrl(
-        organizationName,
-        projectName,
-        organizationIsHosted,
-        activeWiki?.name,
-        path
-      );
-      const target = nativeUrl ?? currentHashUrl(buildNavigationHash(activeWiki, path, wikis));
-      window.open(target, "_blank", "noopener,noreferrer");
+      const name = sourcePath.split("/").filter(Boolean).at(-1) ?? sourcePath;
+      const newPath = destinationParent === "/" ? `/${name}` : `${destinationParent}/${name}`;
+      if (newPath === sourcePath) {
+        return;
+      }
+
+      // Append the page to the end of the destination's known children.
+      const newOrder = pageList.filter((page) => parentOfPath(page.path) === destinationParent).length;
+      await performMove(sourcePath, newPath, newOrder);
     },
-    [activeWiki, organizationIsHosted, organizationName, projectName, wikis]
+    [moveDialogPath, pageList, performMove]
   );
 
   const treeActions = useMemo<WikiPageTreeActions>(
     () => ({
       onAddSubPage: (path) => void handleCreatePage(path),
-      onCopyPath: handleCopyPath,
       onDeletePage: (path) => void handleDeletePage(path),
       onEditPage: (path) => void handleEditPage(path),
       onMoveNode: (sourcePath, newPath, newOrder) => void performMove(sourcePath, newPath, newOrder),
-      onMovePagePrompt: (path) => void handleMovePagePrompt(path),
+      onMovePage: handleOpenMoveDialog,
       onNodeExpand: (path) => void handleNodeExpand(path),
-      onOpenInNewTab: handleOpenInNewTab,
       onPageSelected: (path) => void handlePageSelected(path),
     }),
-    [handleCopyPath, handleCreatePage, handleDeletePage, handleEditPage, handleMovePagePrompt, handleNodeExpand, handleOpenInNewTab, handlePageSelected, performMove]
+    [handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, performMove]
   );
 
   async function handleSavePage() {
@@ -1055,6 +1051,17 @@ export function WikiBrowser({
           />
         )}
       </article>
+
+      {moveDialogPath ? (
+        <WikiMovePageDialog
+          homePath={pageTree[0]?.path}
+          movingPath={moveDialogPath}
+          nodes={pageTree}
+          onCancel={() => setMoveDialogPath(undefined)}
+          onConfirm={(destinationParent) => void handleConfirmMove(destinationParent)}
+          onExpand={(path) => void handleNodeExpand(path)}
+        />
+      ) : null}
     </>
   );
 }
@@ -1091,30 +1098,6 @@ function parentOfPath(path: string): string {
     return "/";
   }
   return "/" + segments.slice(0, -1).join("/");
-}
-
-function buildNativeWikiPageUrl(
-  organizationName: string | undefined,
-  projectName: string | undefined,
-  isHosted: boolean | undefined,
-  wikiName: string | undefined,
-  pagePath: string
-): string | undefined {
-  if (!organizationName || !projectName || !isHosted || !wikiName) {
-    return undefined;
-  }
-
-  const url = new URL(
-    `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}/_wiki/wikis/${encodeURIComponent(wikiName)}`
-  );
-  url.searchParams.set("pagePath", normalizePagePath(pagePath));
-  return url.toString();
-}
-
-function currentHashUrl(hash: string): string {
-  const url = new URL(window.location.href);
-  url.hash = hash;
-  return url.toString();
 }
 
 function formatError(error: unknown): string {

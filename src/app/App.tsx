@@ -16,19 +16,6 @@ export function App({ error, hostContext, status }: AppProps) {
   const [headerMenuActions, setHeaderMenuActions] = useState<readonly HeaderMenuAction[]>([]);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [pageTitle, setPageTitle] = useState<string>();
-  const statusText = useMemo(() => {
-    if (status === "loading") {
-      return "Connecting to Azure DevOps";
-    }
-
-    if (status === "failed") {
-      return "Azure DevOps host initialization failed";
-    }
-
-    return hostContext?.projectName
-      ? `Project: ${hostContext.projectName}`
-      : "Project context unavailable";
-  }, [hostContext?.projectName, status]);
   const headerTitle = useMemo(() => {
     if (status === "loading") {
       return "Loading PowerWiki";
@@ -73,7 +60,6 @@ export function App({ error, hostContext, status }: AppProps) {
       <header className="powerwiki-header">
         <div className="powerwiki-header-title">
           <h1>{headerTitle}</h1>
-          <p>{statusText}</p>
         </div>
         <div className="powerwiki-header-right">
           <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>

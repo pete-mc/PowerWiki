@@ -664,6 +664,148 @@ body {
   display: inline-flex;
 }
 
+.wiki-dialog-overlay {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 100;
+}
+
+.wiki-dialog {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-height: min(80vh, 640px);
+  max-width: 480px;
+  padding: 20px;
+  width: 100%;
+}
+
+.wiki-dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.wiki-dialog-subtitle {
+  color: #605e5c;
+  margin: 0 0 12px;
+}
+
+.wiki-dialog-tree {
+  border: 1px solid #e1dfdd;
+  border-radius: 6px;
+  flex: 1;
+  min-height: 140px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.wiki-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.wiki-dialog-primary,
+.wiki-dialog-secondary {
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  min-height: 32px;
+  padding: 4px 16px;
+}
+
+.wiki-dialog-primary {
+  background: #0078d4;
+  border: 1px solid #0078d4;
+  color: #ffffff;
+}
+
+.wiki-dialog-primary:disabled {
+  background: #f3f2f1;
+  border-color: #c8c6c4;
+  color: #a19f9d;
+  cursor: default;
+}
+
+.wiki-dialog-secondary {
+  background: #ffffff;
+  border: 1px solid #8a8886;
+  color: #1f1f1f;
+}
+
+.wiki-move-list,
+.wiki-move-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wiki-move-list ul {
+  margin-left: 14px;
+}
+
+.wiki-move-option {
+  align-items: center;
+  border-radius: 4px;
+  display: flex;
+  gap: 2px;
+  width: 100%;
+}
+
+.wiki-move-option.selected {
+  background: #deecf9;
+}
+
+button.wiki-move-option {
+  background: transparent;
+  border: 0;
+  color: #1f1f1f;
+  cursor: pointer;
+  font: inherit;
+  gap: 8px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+button.wiki-move-option:hover {
+  background: #eff6fc;
+}
+
+.wiki-move-option-label {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #1f1f1f;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 4px;
+  text-align: left;
+}
+
+.wiki-move-option-label:hover:not(:disabled) {
+  background: #eff6fc;
+}
+
+.wiki-move-option-label:disabled {
+  color: #a19f9d;
+  cursor: default;
+}
+
 .markdown-preview {
   color: #24292f;
   line-height: 1.55;

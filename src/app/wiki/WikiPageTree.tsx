@@ -16,13 +16,11 @@ type DropPosition = "after" | "before" | "inside";
 
 export interface WikiPageTreeActions {
   readonly onAddSubPage: (path: string) => void;
-  readonly onCopyPath: (path: string) => void;
   readonly onDeletePage: (path: string) => void;
   readonly onEditPage: (path: string) => void;
   readonly onMoveNode: (sourcePath: string, newPath: string, newOrder: number) => void;
-  readonly onMovePagePrompt: (path: string) => void;
+  readonly onMovePage: (path: string) => void;
   readonly onNodeExpand: (path: string) => void;
-  readonly onOpenInNewTab: (path: string) => void;
   readonly onPageSelected: (path: string) => void;
 }
 
@@ -254,10 +252,8 @@ function WikiPageTreeItem({ initialExpanded, node }: WikiPageTreeItemProps) {
 function buildMenuItems(path: string, actions: WikiPageTreeActions): WikiPageMenuItem[] {
   return [
     { id: "add-sub-page", label: "Add sub-page", onSelect: () => actions.onAddSubPage(path) },
-    { id: "copy-path", label: "Copy page path", onSelect: () => actions.onCopyPath(path) },
-    { id: "move", label: "Move page", onSelect: () => actions.onMovePagePrompt(path) },
+    { id: "move", label: "Move page", onSelect: () => actions.onMovePage(path) },
     { id: "edit", label: "Edit", onSelect: () => actions.onEditPage(path) },
-    { id: "open-new-tab", label: "Open in new tab", onSelect: () => actions.onOpenInNewTab(path) },
     { id: "delete", label: "Delete", destructive: true, onSelect: () => actions.onDeletePage(path) },
   ];
 }
