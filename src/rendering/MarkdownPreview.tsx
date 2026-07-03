@@ -111,11 +111,12 @@ export function MarkdownPreview({
   const workItemInFlightRef = useRef(new Set<number>());
   const workItemFailedRef = useRef(new Set<number>());
   const mountedRef = useRef(true);
-  // Bumped whenever an async enrichment result arrives. The enrichment effect
-  // re-runs on every bump so cached results are re-applied to the *current*
-  // DOM nodes, even after React rebuilds innerHTML on a re-render. This is the
-  // fix for query/work-item placeholders that previously got stuck because a
-  // resolved result was written to a node that had already been replaced.
+  // Tracks the base HTML currently written into the container so enrichment
+  // re-runs (an async result arriving, a subpage list changing, a theme change)
+  // don't needlessly wipe and rebuild the already-enriched DOM.
+  const renderedHtmlRef = useRef<string | undefined>(undefined);
+  // Bumped whenever an async enrichment result arrives so the enrichment effect
+  // re-runs and re-applies the now-cached result to the current DOM nodes.
   const [enrichmentVersion, setEnrichmentVersion] = useState(0);
   const themeMode = useThemeMode();
 
@@ -131,14 +132,6 @@ export function MarkdownPreview({
       setEnrichmentVersion((version) => version + 1);
     }
   }, []);
-  const renderMermaidInPreview = useCallback(() => {
-    const container = previewRef.current;
-    if (!container) {
-      return;
-    }
-
-    void renderMermaidDiagrams(container, themeMode);
-  }, [themeMode]);
   const html = useMemo(() => {
     const sanitizedHtml = sanitizeRenderedHtml(markdownRenderer.render(markdown));
     return currentPath && onResolveImageSrc
@@ -146,180 +139,60 @@ export function MarkdownPreview({
       : sanitizedHtml;
   }, [currentPath, markdown, onResolveImageSrc]);
 
+  // PowerWiki owns the preview container's DOM directly rather than handing it
+  // to React through dangerouslySetInnerHTML. React only ever sees an empty
+  // <div>, so it can never rewrite the subtree during an unrelated re-render and
+  // wipe the query/work-item enrichment layered on top of the base HTML — the
+  // race that previously left placeholders stuck as "Loading query."/plain "#N"
+  // after navigating between pages or resizing the split editor.
+  //
+  // Everything runs in one layout effect, before the browser paints, so the
+  // base HTML is written and cache-hit enrichment applied atomically with no
+  // window where a raw placeholder is visible or unprocessed. The effect also
+  // re-runs on an enrichmentVersion bump to fold in async results, re-querying
+  // the live container each time so it self-heals after any rebuild.
   useLayoutEffect(() => {
-    let cancelled = false;
-    let animationFrame = 0;
-
-    const renderDiagrams = () => {
-      if (cancelled) {
-        return;
-      }
-
-      renderMermaidInPreview();
-    };
-
-    renderDiagrams();
-    animationFrame = window.requestAnimationFrame(renderDiagrams);
-
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(animationFrame);
-    };
-  }, [html, renderMermaidInPreview]);
-
-  useEffect(() => {
     const container = previewRef.current;
     if (!container) {
       return;
     }
 
-    let timeout = 0;
-    const scheduleRender = () => {
-      window.clearTimeout(timeout);
-      timeout = window.setTimeout(renderMermaidInPreview, 0);
-    };
+    // Rebuild the base HTML only when it actually changed. On an enrichment
+    // re-run (same html, new async data) we keep the existing nodes and simply
+    // re-apply enrichment, which is idempotent.
+    if (renderedHtmlRef.current !== html) {
+      container.innerHTML = html;
+      renderedHtmlRef.current = html;
+    }
 
-    scheduleRender();
-    const observer = new MutationObserver(scheduleRender);
-    observer.observe(container, { childList: true, subtree: true });
+    fillSubPagePlaceholders(container, subPages);
+    enrichQueryTables(container, {
+      cache: queryCacheRef.current,
+      errorCache: queryErrorCacheRef.current,
+      inFlight: queryInFlightRef.current,
+      onLoadQueryTable,
+      onSettled: bumpEnrichment,
+    });
+    enrichWorkItemBadges(container, {
+      cache: workItemCacheRef.current,
+      failed: workItemFailedRef.current,
+      inFlight: workItemInFlightRef.current,
+      onLoadWorkItemBadge,
+      onSettled: bumpEnrichment,
+    });
+  }, [bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
 
-    return () => {
-      window.clearTimeout(timeout);
-      observer.disconnect();
-    };
-  }, [html, renderMermaidInPreview]);
-
-  useEffect(() => {
+  // Mermaid runs in its own layout effect (after the one above, by declaration
+  // order) so a host theme change re-renders diagrams without disturbing the
+  // query/work-item enrichment.
+  useLayoutEffect(() => {
     const container = previewRef.current;
     if (!container) {
       return;
     }
 
-    const placeholders = Array.from(container.querySelectorAll(TOSP_PLACEHOLDER_SELECTOR));
-    for (const placeholder of placeholders) {
-      placeholder.replaceChildren();
-
-      if (!subPages || subPages.length === 0) {
-        const empty = document.createElement("p");
-        empty.className = "powerwiki-subpages-empty";
-        empty.textContent = "No subpages.";
-        placeholder.appendChild(empty);
-        continue;
-      }
-
-      const list = document.createElement("ul");
-      for (const subPage of subPages) {
-        const item = document.createElement("li");
-        const anchor = document.createElement("a");
-        // Absolute wiki path; handleClick resolves it to an in-app navigation.
-        anchor.setAttribute("href", encodeURI(subPage.path));
-        anchor.textContent = subPage.title;
-        item.appendChild(anchor);
-        list.appendChild(item);
-      }
-      placeholder.appendChild(list);
-    }
-  }, [html, subPages]);
-
-  // Enriches query-table and work-item placeholders. This effect re-runs
-  // whenever the rendered HTML changes (new DOM nodes) or an async result
-  // arrives (enrichmentVersion bump). Because it always re-queries the live
-  // container and applies cached results synchronously, enrichment survives any
-  // number of re-renders or innerHTML rebuilds instead of being lost when a
-  // resolved promise targets a node React has already replaced.
-  useEffect(() => {
-    const container = previewRef.current;
-    if (!container) {
-      return;
-    }
-
-    const queryTables = Array.from(container.querySelectorAll<HTMLElement>(QUERY_TABLE_SELECTOR));
-    for (const queryTable of queryTables) {
-      const queryId = queryTable.getAttribute(QUERY_TABLE_ATTR);
-      if (!queryId) {
-        continue;
-      }
-
-      const cachedResult = queryCacheRef.current.get(queryId);
-      if (cachedResult) {
-        renderQueryResult(queryTable, cachedResult);
-        continue;
-      }
-
-      const cachedError = queryErrorCacheRef.current.get(queryId);
-      if (cachedError) {
-        renderQueryMessage(queryTable, cachedError);
-        continue;
-      }
-
-      renderQueryLoading(queryTable, queryId);
-
-      if (!onLoadQueryTable) {
-        const unavailable = "Azure Boards query rendering is unavailable.";
-        queryErrorCacheRef.current.set(queryId, unavailable);
-        renderQueryMessage(queryTable, unavailable);
-        continue;
-      }
-
-      // Only one in-flight request per query id; the bump on completion makes
-      // the effect re-run and paint the cached result on the current node.
-      if (queryInFlightRef.current.has(queryId)) {
-        continue;
-      }
-      queryInFlightRef.current.add(queryId);
-      void onLoadQueryTable(queryId)
-        .then((result) => {
-          queryCacheRef.current.set(queryId, result);
-          queryErrorCacheRef.current.delete(queryId);
-        })
-        .catch((error: unknown) => {
-          queryErrorCacheRef.current.set(queryId, formatQueryError(error));
-        })
-        .finally(() => {
-          queryInFlightRef.current.delete(queryId);
-          bumpEnrichment();
-        });
-    }
-
-    if (onLoadWorkItemBadge) {
-      const badges = Array.from(container.querySelectorAll<HTMLElement>(WORK_ITEM_SELECTOR));
-      for (const badge of badges) {
-        const id = Number(badge.getAttribute(WORK_ITEM_ATTR));
-        if (!Number.isInteger(id) || id <= 0) {
-          continue;
-        }
-
-        const cachedBadge = workItemCacheRef.current.get(id);
-        if (cachedBadge) {
-          renderWorkItemBadge(badge, cachedBadge);
-          continue;
-        }
-
-        renderWorkItemBadge(badge, { id });
-
-        // A prior load failed; leave the basic badge and don't retry forever.
-        if (workItemFailedRef.current.has(id)) {
-          continue;
-        }
-        if (workItemInFlightRef.current.has(id)) {
-          continue;
-        }
-        workItemInFlightRef.current.add(id);
-        void onLoadWorkItemBadge(id)
-          .then((details) => {
-            workItemCacheRef.current.set(id, details);
-          })
-          .catch(() => {
-            // The badge still opens the native form; enrichment is best-effort.
-            workItemFailedRef.current.add(id);
-          })
-          .finally(() => {
-            workItemInFlightRef.current.delete(id);
-            bumpEnrichment();
-          });
-      }
-    }
-  }, [bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge]);
+    void renderMermaidDiagrams(container, themeMode);
+  }, [html, themeMode]);
 
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {
     // Ignore modified clicks so users can still open links in a new tab.
@@ -362,11 +235,152 @@ export function MarkdownPreview({
   return (
     <div
       className="markdown-preview"
-      dangerouslySetInnerHTML={{ __html: html }}
       onClick={handleClick}
       ref={previewRef}
     />
   );
+}
+
+interface QueryEnrichmentContext {
+  readonly cache: Map<string, QueryTableResult>;
+  readonly errorCache: Map<string, string>;
+  readonly inFlight: Set<string>;
+  readonly onLoadQueryTable?: (queryId: string) => Promise<QueryTableResult>;
+  readonly onSettled: () => void;
+}
+
+interface WorkItemEnrichmentContext {
+  readonly cache: Map<number, WorkItemBadgeDetails>;
+  readonly failed: Set<number>;
+  readonly inFlight: Set<number>;
+  readonly onLoadWorkItemBadge?: (id: number) => Promise<WorkItemBadgeDetails>;
+  readonly onSettled: () => void;
+}
+
+/** Fills every [[_TOSP_]] table-of-subpages placeholder in the container. */
+function fillSubPagePlaceholders(container: HTMLElement, subPages: readonly WikiSubPage[] | undefined): void {
+  const placeholders = Array.from(container.querySelectorAll(TOSP_PLACEHOLDER_SELECTOR));
+  for (const placeholder of placeholders) {
+    placeholder.replaceChildren();
+
+    if (!subPages || subPages.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "powerwiki-subpages-empty";
+      empty.textContent = "No subpages.";
+      placeholder.appendChild(empty);
+      continue;
+    }
+
+    const list = document.createElement("ul");
+    for (const subPage of subPages) {
+      const item = document.createElement("li");
+      const anchor = document.createElement("a");
+      // Absolute wiki path; handleClick resolves it to an in-app navigation.
+      anchor.setAttribute("href", encodeURI(subPage.path));
+      anchor.textContent = subPage.title;
+      item.appendChild(anchor);
+      list.appendChild(item);
+    }
+    placeholder.appendChild(list);
+  }
+}
+
+/**
+ * Applies cached query results (or kicks off a single load per query id) to
+ * every query-table placeholder currently in the container. Safe to call
+ * repeatedly: it re-queries the live DOM and only starts a load when there is
+ * no cached result, error, or in-flight request for that query.
+ */
+function enrichQueryTables(container: HTMLElement, ctx: QueryEnrichmentContext): void {
+  const queryTables = Array.from(container.querySelectorAll<HTMLElement>(QUERY_TABLE_SELECTOR));
+  for (const queryTable of queryTables) {
+    const queryId = queryTable.getAttribute(QUERY_TABLE_ATTR);
+    if (!queryId) {
+      continue;
+    }
+
+    const cachedResult = ctx.cache.get(queryId);
+    if (cachedResult) {
+      renderQueryResult(queryTable, cachedResult);
+      continue;
+    }
+
+    const cachedError = ctx.errorCache.get(queryId);
+    if (cachedError) {
+      renderQueryMessage(queryTable, cachedError);
+      continue;
+    }
+
+    renderQueryLoading(queryTable, queryId);
+
+    const load = ctx.onLoadQueryTable;
+    if (!load) {
+      const unavailable = "Azure Boards query rendering is unavailable.";
+      ctx.errorCache.set(queryId, unavailable);
+      renderQueryMessage(queryTable, unavailable);
+      continue;
+    }
+
+    // Only one in-flight request per query id; the settled callback re-runs
+    // enrichment and paints the cached result on the current node.
+    if (ctx.inFlight.has(queryId)) {
+      continue;
+    }
+    ctx.inFlight.add(queryId);
+    void load(queryId)
+      .then((result) => {
+        ctx.cache.set(queryId, result);
+        ctx.errorCache.delete(queryId);
+      })
+      .catch((error: unknown) => {
+        ctx.errorCache.set(queryId, formatQueryError(error));
+      })
+      .finally(() => {
+        ctx.inFlight.delete(queryId);
+        ctx.onSettled();
+      });
+  }
+}
+
+/**
+ * Enriches every inline work-item badge in the container with the work item's
+ * type/title/state, loading details once per id. Badges keep opening the native
+ * work item form even when enrichment fails, so a failed load leaves the basic
+ * badge in place and is not retried.
+ */
+function enrichWorkItemBadges(container: HTMLElement, ctx: WorkItemEnrichmentContext): void {
+  const badges = Array.from(container.querySelectorAll<HTMLElement>(WORK_ITEM_SELECTOR));
+  for (const badge of badges) {
+    const id = Number(badge.getAttribute(WORK_ITEM_ATTR));
+    if (!Number.isInteger(id) || id <= 0) {
+      continue;
+    }
+
+    const cachedBadge = ctx.cache.get(id);
+    if (cachedBadge) {
+      renderWorkItemBadge(badge, cachedBadge);
+      continue;
+    }
+
+    renderWorkItemBadge(badge, { id });
+
+    const load = ctx.onLoadWorkItemBadge;
+    if (!load || ctx.failed.has(id) || ctx.inFlight.has(id)) {
+      continue;
+    }
+    ctx.inFlight.add(id);
+    void load(id)
+      .then((details) => {
+        ctx.cache.set(id, details);
+      })
+      .catch(() => {
+        ctx.failed.add(id);
+      })
+      .finally(() => {
+        ctx.inFlight.delete(id);
+        ctx.onSettled();
+      });
+  }
 }
 
 function renderQueryLoading(container: HTMLElement, queryId: string): void {

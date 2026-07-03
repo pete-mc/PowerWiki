@@ -40,6 +40,14 @@ The current implementation follows the Microsoft Azure DevOps web extension stru
 
 The manifest contributes Power Wiki as a project-level hub group and also under the Azure DevOps project Overview menu. It intentionally does not replace or hide the default Azure DevOps Wiki, so teams can choose either experience.
 
+### Permissions
+
+The extension requests these scopes in `vss-extension.json`:
+
+- `vso.wiki_write` — read and write wiki pages, page moves, and comments.
+- `vso.work` — read work items and saved queries for inline badges and embedded query tables.
+- `vso.code` — read the wiki's backing Git repository. This is used only to read each page's last commit so the byline can show who last edited the page and when; adding it requires a one-time re-authorization by an organization administrator.
+
 ## Getting Started
 
 Prerequisites:
