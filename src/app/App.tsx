@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AzureDevOpsHostContext } from "../extension/azureDevOpsHost";
 import type { HeaderMenuAction } from "./HeaderMenuAction";
+import { WikiPageByline, type WikiPageBylineProps } from "./wiki/WikiPageByline";
 import { WikiBrowser } from "./wiki/WikiBrowser";
 import packageMetadata from "../../package.json";
 
@@ -15,6 +16,7 @@ export function App({ error, hostContext, status }: AppProps) {
   const headerMenuRef = useRef<HTMLDivElement>(null);
   const [headerMenuActions, setHeaderMenuActions] = useState<readonly HeaderMenuAction[]>([]);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [pageByline, setPageByline] = useState<WikiPageBylineProps>();
   const [pageTitle, setPageTitle] = useState<string>();
   const headerTitle = useMemo(() => {
     if (status === "loading") {
@@ -34,6 +36,7 @@ export function App({ error, hostContext, status }: AppProps) {
   useEffect(() => {
     if (status !== "ready") {
       setPageTitle(undefined);
+      setPageByline(undefined);
       setHeaderMenuActions([]);
     }
   }, [status]);
@@ -60,6 +63,7 @@ export function App({ error, hostContext, status }: AppProps) {
       <header className="powerwiki-header">
         <div className="powerwiki-header-title">
           <h1>{headerTitle}</h1>
+          {pageByline ? <WikiPageByline {...pageByline} /> : null}
         </div>
         <div className="powerwiki-header-right">
           <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>
@@ -112,6 +116,7 @@ export function App({ error, hostContext, status }: AppProps) {
       ) : (
         <WikiBrowser
           onHeaderMenuActionsChange={setHeaderMenuActions}
+          onPageBylineChange={setPageByline}
           onPageTitleChange={handlePageTitleChange}
           organizationIsHosted={hostContext?.organizationIsHosted}
           organizationName={hostContext?.organizationName}

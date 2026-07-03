@@ -7,9 +7,10 @@ No migration. No proprietary formats. Just better reading and editing for the Ma
 ## Why PowerWiki?
 
 - Use the latest Markdown and Mermaid rendering instead of the frozen versions bundled in Azure DevOps.
-- Edit with a full-featured Monaco editor (the same editor that powers VS Code).
+- Edit with a full-featured Monaco editor, the same editor that powers VS Code.
 - Get rich Azure Boards integration that still renders as readable plain text in the standard wiki.
-- Keep the familiar Azure DevOps Wiki experience available for your whole team — PowerWiki is purely additive.
+- Keep the familiar Azure DevOps Wiki experience available for your whole team. PowerWiki is purely additive.
+- Follow Azure DevOps light, dark, and custom themes automatically.
 
 ## Key Features
 
@@ -21,25 +22,39 @@ No migration. No proprietary formats. Just better reading and editing for the Ma
 - **Powerful editing**
   - Monaco-based Markdown editor with word wrap, syntax awareness, and comfortable editing.
   - Save changes directly back to your Azure DevOps wiki repository.
+  - Formatting helpers for headings, emphasis, code, lists, links, and starter Mermaid diagrams.
+  - Create new pages, move or reorder pages, and delete pages through Azure DevOps Wiki APIs.
 
 - **Azure Boards enhancements** (portable by design)
   - `#1234` references render as clickable work item badges that open the native work item form.
-  - Embed live query results with `::: query-table <query-id> :::` — renders a table of matching work items with a link back to the original query.
+  - Embed live query results with `::: query-table <query-id> :::`. PowerWiki renders a table of matching work items with a link back to the original query.
 
 - **Navigation & structure**
   - Switch between multiple project wikis.
-  - Hierarchical page tree with lazy-loaded children.
+  - Hierarchical page tree with lazy-loaded children, collapse/expand behavior, and drag-and-drop reorder.
   - Deep linking and in-page navigation that feels native.
-  - Relative images and attachments from your wiki are resolved and displayed correctly.
+  - Relative images and Azure DevOps-hosted wiki images are resolved and displayed correctly.
+  - Last-edit byline and top-level wiki comments where Azure DevOps APIs provide them.
+
+- **Theme aware**
+  - Uses Azure DevOps host CSS variables for the PowerWiki UI.
+  - Detects light or dark mode from host color luminance rather than hard-coded theme names.
+  - Keeps Monaco and Mermaid diagrams aligned with the current Azure DevOps theme.
+
+## Screenshots
+
+![PowerWiki rendering Markdown tables, code blocks, table of contents, and a Mermaid diagram inside Azure DevOps](media/screenshots/powerwiki-rendering.png)
+
+![PowerWiki editing a Markdown wiki page in Monaco with formatting and Mermaid toolbar actions](media/screenshots/powerwiki-editing.png)
 
 ## How It Works
 
-PowerWiki reads and writes the exact same wiki pages stored in your project's Azure DevOps Git wiki repositories. Everything you edit is stored as normal Markdown — fully compatible with the built-in Azure DevOps Wiki, clone, and any other tools that consume the repository.
+PowerWiki reads and writes the exact same wiki pages stored in your project's Azure DevOps Git wiki repositories. Everything you edit is stored as normal Markdown, fully compatible with the built-in Azure DevOps Wiki, clone, and any other tools that consume the repository.
 
 ## Requirements & Scope
 
 - Requires an Azure DevOps project with at least one wiki.
-- Works for both Azure DevOps Services and Server (where extension APIs are available).
-- Current focus: excellent page viewing and content editing. Page creation, renaming, deletion, attachment management, full page history, and search are on the roadmap.
+- Works for both Azure DevOps Services and Server where extension APIs are available.
+- Current focus: excellent page viewing, content editing, page tree management, comments, and modern rendering. Full attachment management, full page history/compare, and search are on the roadmap.
 
 Choose the experience that works best for you on any given day. Your wiki content stays exactly where it belongs.

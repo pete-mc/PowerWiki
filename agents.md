@@ -37,6 +37,14 @@ The extension should support the standard wiki workflows before adding new behav
 - Make unsupported parity gaps explicit in documentation and tests.
 - Do not introduce a backend service unless the requirement cannot reasonably be met inside an Azure DevOps extension.
 
+## Theming
+
+PowerWiki should follow the active Azure DevOps theme rather than defining an independent visual theme. Keep app colors behind the `--pw-*` design tokens in `src/app/styles.css`, and map those tokens to Azure DevOps CSS variables injected by the host wherever possible. Prefer transparent surfaces and neutral translucent borders/hovers so light, dark, and custom Azure DevOps themes remain legible.
+
+Theme mode detection lives in `src/app/themeMode.ts`. It infers light or dark mode from the luminance of host CSS variables such as `--background-color` and `--text-primary-color`, not from theme names, and updates on `themeApplied` and `themeChanged` events. Use that shared hook for components that need a binary light/dark decision. Monaco should switch between `vs` and `vs-dark`, and Mermaid should be re-rendered with the matching Mermaid theme when the host theme changes.
+
+When changing theming, verify regular UI chrome, Markdown preview content, editor chrome, and Mermaid diagrams in both light and dark Azure DevOps themes. If a feature needs a hard-coded color, keep it scoped to semantic states such as destructive actions or warnings.
+
 ## File and Folder Structure
 
 Keep the repository organized around clear responsibilities as the extension grows. Avoid placing unrelated concerns in the same directory just because they are used by the same screen.

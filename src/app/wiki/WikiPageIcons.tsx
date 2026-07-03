@@ -90,3 +90,21 @@ export function ExpandPanelIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+/** A speech-bubble glyph used for the comments affordance. */
+export function CommentIcon({ className }: IconProps) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M2.5 3.75h11a.75.75 0 0 1 .75.75v6a.75.75 0 0 1-.75.75H6l-3 2.25V11.25H2.5a.75.75 0 0 1-.75-.75v-6a.75.75 0 0 1 .75-.75Z" />
+    </svg>
+  );
+}
+
+/** A close (X) glyph. */
+export function CloseIcon({ className }: IconProps) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
+}

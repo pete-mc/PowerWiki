@@ -8,9 +8,10 @@ The goal is feature parity with the built-in Azure DevOps Wiki, plus modern Mark
 
 - Provide an alternate Power Wiki screen inside Azure DevOps without removing the default Wiki.
 - Read from and write to the existing Azure DevOps Wiki Git repositories.
-- Preserve expected Azure DevOps Wiki workflows, including browsing pages, page hierarchy, editing, previewing, saving, history-oriented workflows, links, attachments, and search where extension APIs allow it.
+- Preserve expected Azure DevOps Wiki workflows, including browsing pages, page hierarchy, editing, previewing, saving, comments, history-oriented workflows, links, attachments, and search where extension APIs allow it.
 - Render Markdown with a current CommonMark/GFM-compatible pipeline.
 - Render Mermaid diagrams with a current Mermaid runtime.
+- Follow Azure DevOps light, dark, and custom themes without requiring a separate PowerWiki theme setting.
 - Keep repository content portable by storing normal Markdown files and wiki assets rather than introducing a proprietary page format.
 
 ## Non-Goals
@@ -21,23 +22,23 @@ The goal is feature parity with the built-in Azure DevOps Wiki, plus modern Mark
 - Requiring teams to migrate away from their existing Azure DevOps Wiki repositories.
 - Adding syntax that cannot degrade gracefully when viewed in the standard Azure DevOps Wiki.
 
-## Expected Architecture
+## Architecture
 
-PowerWiki should be built as an Azure DevOps web extension that contributes an additional Power Wiki menu item and screen. The extension should authenticate through Azure DevOps extension mechanisms and interact with the existing project wiki repositories through Azure DevOps REST APIs and Git APIs.
+PowerWiki is built as an Azure DevOps web extension that contributes an additional Power Wiki menu item and screen. The extension authenticates through Azure DevOps extension mechanisms and interacts with the existing project wiki repositories through Azure DevOps REST APIs, Wiki APIs, Git APIs, Comments APIs, and Work Item Tracking APIs.
 
-The renderer should be isolated behind a clear boundary so Markdown and Mermaid dependencies can be upgraded without rewriting wiki navigation, editing, or persistence code.
+The renderer is isolated behind a clear boundary so Markdown and Mermaid dependencies can be upgraded without rewriting wiki navigation, editing, or persistence code.
 
-The current scaffold follows the Microsoft Azure DevOps web extension structure with:
+The current implementation follows the Microsoft Azure DevOps web extension structure with:
 
 - `vss-extension.json` as the root extension manifest.
 - `azure-devops-extension-sdk` for host initialization.
 - `azure-devops-extension-api` for Azure DevOps service clients.
 - Webpack and TypeScript for a production-style bundled hub page.
-- React for the initial wiki screen shell.
+- React for the wiki screen shell.
 - Monaco Editor for Markdown editing.
 - Markdown and Mermaid rendering isolated under `src/rendering`.
 
-The initial manifest contributes Power Wiki under the Azure DevOps project Overview menu. It intentionally does not replace or hide the default Azure DevOps Wiki, so teams can choose either experience.
+The manifest contributes Power Wiki as a project-level hub group and also under the Azure DevOps project Overview menu. It intentionally does not replace or hide the default Azure DevOps Wiki, so teams can choose either experience.
 
 ## Getting Started
 
@@ -54,7 +55,7 @@ Install dependencies:
 npm install
 ```
 
-The manifest currently uses the `dataversepowertools` publisher and the shared Dataverse PowerTools PNG logo asset from `media/logo_new.png`.
+The manifest uses the `dataversepowertools` publisher and the shared Dataverse PowerTools PNG logo asset from `media/logo_new.png`.
 
 ## Build and Test
 
@@ -84,30 +85,34 @@ npm run package:vsix
 
 The package command uses `tfx-cli` and `vss-extension.json`, matching the Microsoft Azure DevOps extension packaging flow.
 
-Publish and share the extension for testing:
+## Current Functionality
 
-```bash
-npm run publish:marketplace -- --token <marketplace-pat> --share-with <azure-devops-organization>
-```
-
-The token must have Visual Studio Marketplace extension publishing rights for the `dataversepowertools` publisher. The organization value is the Azure DevOps organization name, not the full project URL.
-
-## Initial Functionality
-
-The current implementation provides a first read-only Power Wiki experience:
+The current implementation provides a working Power Wiki experience:
 
 - Initializes inside Azure DevOps using the extension SDK.
 - Loads the current project context.
 - Lists available project wikis through the Azure DevOps Wiki client.
-- Lists wiki pages and builds a navigable page tree.
+- Lists wiki pages and builds a navigable, collapsible page tree with lazy-loaded children.
+- Supports URL hash deep links and browser back/forward navigation for wiki pages.
 - Loads selected page Markdown from the standard Azure DevOps Wiki backing store.
 - Renders Markdown through the PowerWiki Markdown pipeline.
-- Renders Mermaid diagrams through the bundled Mermaid runtime.
+- Renders Mermaid diagrams through the bundled Mermaid runtime, including standard fenced blocks and Azure DevOps `::: mermaid` blocks.
 - Renders inline work item references such as `#1234` as Azure Boards badges that open the native work item form.
 - Renders embedded saved query tables written as `::: query-table <query-id> :::`, with a native Azure DevOps query link when hosted by Azure DevOps Services.
-- Opens a Monaco-powered Markdown editor from the page actions menu and saves page content back through the Azure DevOps Wiki API.
+- Opens a Monaco-powered Markdown editor from the page actions menu and saves page content back through the Azure DevOps Wiki API with ETag-based concurrency.
+- Provides editor formatting helpers for headings, emphasis, code, lists, links, and starter Mermaid diagrams.
+- Creates new pages, opens them directly in edit mode, deletes pages, moves pages, and supports drag-and-drop tree reordering through Azure DevOps Wiki page APIs.
+- Resolves relative wiki images and Azure DevOps-hosted image URLs back to the wiki Git repository item API.
+- Shows the last known page edit author/date from Git history when available.
+- Lists and adds top-level page comments through the Azure DevOps comments APIs.
 
-Attachments, history, and search are planned follow-up slices.
+Full attachment management, full page history/compare views, and search are planned follow-up slices.
+
+## Theming
+
+PowerWiki follows the active Azure DevOps theme. The extension styles the UI through `--pw-*` tokens in `src/app/styles.css`, which map to host variables such as `--background-color`, `--text-primary-color`, and `--communication-foreground`.
+
+For components that need a binary theme decision, `src/app/themeMode.ts` infers light or dark mode from the luminance of the host CSS variables instead of matching specific theme names. That keeps built-in and custom Azure DevOps themes working. Monaco switches between `vs` and `vs-dark`, and Markdown preview re-renders Mermaid diagrams with the matching Mermaid light or dark theme when Azure DevOps raises theme change events.
 
 ## Azure Boards Markdown Enhancements
 
@@ -127,20 +132,22 @@ In the built-in Azure DevOps Wiki, these remain readable as plain Markdown text 
 
 - `public/` contains static hub HTML copied into `dist/`.
 - `src/extension/` contains Azure DevOps extension host initialization and entry points.
-- `src/app/` contains the initial PowerWiki screen shell.
+- `src/app/` contains the PowerWiki screen shell, page tree, editor, comments panel, and theme mode helper.
 - `src/rendering/` contains Markdown, Mermaid, and sanitization boundaries.
-- `src/wiki/` contains the early wiki repository/page abstractions.
+- `src/wiki/` contains wiki repository/page/comment abstractions and Azure DevOps API access.
+- `src/workItems/` contains Azure Boards work item and query access used by Markdown enhancements.
 - `vss-extension.json` defines the Azure DevOps extension metadata and contributions.
 - `overview.md` provides Marketplace package details.
 
-## Details Needed
+## Publishing
 
-Before the extension can be published or shared with an organization, provide:
+The repository is configured for the `dataversepowertools` publisher and a public Marketplace listing. Before publishing a change, increment only the patch version in both `package.json` and `vss-extension.json`, then run:
 
-- Confirmed access to the `dataversepowertools` publisher.
-- Final extension visibility choice: private or public.
-- Marketplace icon and branding assets.
-- Target Azure DevOps organization for test sharing.
+```powershell
+npm run build
+$pat = (Get-Content C:\Users\peter\sources\repos\PowerWiki\ado.pat -Raw).Trim()
+npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat
+```
 
 ## Contributing
 

@@ -1,11 +1,21 @@
+import {
+  CommentSortOrder,
+  type Comment as ApiComment,
+  type CommentCreateParameters
+} from "azure-devops-extension-api/Comments";
 import { getClient } from "azure-devops-extension-api/Common";
-import { VersionControlRecursionType } from "azure-devops-extension-api/Git";
+import {
+  GitRestClient,
+  VersionControlRecursionType,
+  type GitCommitRef
+} from "azure-devops-extension-api/Git";
 import {
   WikiRestClient,
   type WikiPage as WikiApiPage,
   type WikiPageMove
 } from "azure-devops-extension-api/Wiki";
 
+import type { WikiComment, WikiPageChange, WikiPageMeta } from "./WikiComment";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
 
@@ -162,9 +172,30 @@ class WikiJsonClient extends WikiRestClient {
   }
 }
 
+class GitJsonClient extends GitRestClient {
+  public async getLatestCommit(
+    project: string,
+    repositoryId: string,
+    itemPath: string
+  ): Promise<GitCommitRef | undefined> {
+    const result = await this.beginRequest<{ value?: GitCommitRef[] }>({
+      apiVersion: "7.1",
+      routeTemplate: "{project}/_apis/git/repositories/{repositoryId}/commits",
+      routeValues: { project, repositoryId },
+      queryParams: {
+        "searchCriteria.itemPath": itemPath,
+        "$top": 1,
+      },
+    });
+
+    return result.value?.[0];
+  }
+}
+
 export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   private readonly wikiClient = getClient(WikiRestClient);
   private readonly wikiJsonClient = getClient(WikiJsonClient);
+  private readonly gitJsonClient = getClient(GitJsonClient);
 
   public constructor(private readonly projectName: string) {}
 
@@ -221,6 +252,66 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   ): Promise<WikiPage> {
     return this.wikiJsonClient.movePage(this.projectName, wikiId, path, newPath, newOrder);
   }
+
+  public async getPageMeta(wikiId: string, path: string): Promise<WikiPageMeta> {
+    const page = await this.wikiJsonClient.getPageJson(this.projectName, wikiId, path);
+    return { id: page.id, gitItemPath: page.gitItemPath };
+  }
+
+  public async getPageLastChange(
+    repositoryId: string,
+    gitItemPath: string
+  ): Promise<WikiPageChange | undefined> {
+    try {
+      const latest = await this.gitJsonClient.getLatestCommit(this.projectName, repositoryId, gitItemPath);
+      if (!latest) {
+        return undefined;
+      }
+
+      const change = latest.author ?? latest.committer;
+      return {
+        authorName: change?.name,
+        date: change?.date ? new Date(change.date).toISOString() : undefined,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  public async listComments(wikiId: string, pageId: number): Promise<WikiComment[]> {
+    const result = await this.wikiClient.listComments(
+      this.projectName,
+      wikiId,
+      pageId,
+      undefined,
+      undefined,
+      true,
+      undefined,
+      CommentSortOrder.Asc
+    );
+    return (result.comments ?? [])
+      .filter((comment) => !comment.isDeleted)
+      .map((comment) => toWikiComment(comment));
+  }
+
+  public async addComment(wikiId: string, pageId: number, text: string): Promise<WikiComment> {
+    // The generated SDK type requires parentId, but Azure DevOps rejects
+    // parentId:0 for new top-level page comments.
+    const request = { text } as CommentCreateParameters;
+    const created = await this.wikiClient.addComment(request, this.projectName, wikiId, pageId);
+    return toWikiComment(created);
+  }
+}
+
+function toWikiComment(comment: ApiComment): WikiComment {
+  return {
+    authorImageUrl: comment.createdBy?.imageUrl,
+    authorName: comment.createdBy?.displayName,
+    createdDate: comment.createdDate ? new Date(comment.createdDate).toISOString() : undefined,
+    id: comment.id,
+    parentId: comment.parentId,
+    text: comment.text,
+  };
 }
 
 function normalizeMappedPath(mappedPath: string | undefined): string {

@@ -427,8 +427,58 @@ function enrichWorkItemBadge(badge: HTMLElement, details: WorkItemBadgeDetails):
   ].filter(Boolean);
 
   badge.title = titleParts.join(" ");
+  badge.replaceChildren();
+  badge.classList.add("powerwiki-work-item-badge-rich");
+  badge.style.setProperty("--pw-work-item-type-color", workItemTypeColor(details.type));
+
+  const marker = document.createElement("span");
+  marker.className = "powerwiki-work-item-type-marker";
+  marker.setAttribute("aria-hidden", "true");
+  badge.appendChild(marker);
+
+  const id = document.createElement("span");
+  id.className = "powerwiki-work-item-id";
+  id.textContent = String(details.id);
+  badge.appendChild(id);
+
+  if (details.title) {
+    const title = document.createElement("span");
+    title.className = "powerwiki-work-item-title";
+    title.textContent = details.title;
+    badge.appendChild(title);
+  }
+
   if (details.state) {
     badge.setAttribute("data-powerwiki-work-item-state", details.state);
+
+    const state = document.createElement("span");
+    state.className = "powerwiki-work-item-state";
+
+    const stateDot = document.createElement("span");
+    stateDot.className = "powerwiki-work-item-state-dot";
+    stateDot.setAttribute("aria-hidden", "true");
+    state.appendChild(stateDot);
+    state.appendChild(document.createTextNode(details.state));
+    badge.appendChild(state);
+  }
+}
+
+function workItemTypeColor(type: string | undefined): string {
+  switch (type?.trim().toLowerCase()) {
+    case "issue":
+      return "#107c10";
+    case "bug":
+      return "#cc293d";
+    case "task":
+      return "#0078d4";
+    case "user story":
+      return "#773b93";
+    case "feature":
+      return "#773b93";
+    case "epic":
+      return "#ff7b00";
+    default:
+      return "#0078d4";
   }
 }
 

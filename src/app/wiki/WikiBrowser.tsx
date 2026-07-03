@@ -11,8 +11,11 @@ import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemCl
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
+import type { WikiComment, WikiPageChange, WikiPageMeta } from "../../wiki/WikiComment";
 import { StatusMessage } from "./StatusMessage";
+import { WikiCommentsPanel } from "./WikiCommentsPanel";
 import { WikiMovePageDialog } from "./WikiMovePageDialog";
+import type { WikiPageBylineProps } from "./WikiPageByline";
 import { WikiPageEditor } from "./WikiPageEditor";
 import { WikiPageTree, type WikiPageTreeActions } from "./WikiPageTree";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
@@ -20,6 +23,7 @@ import { WikiSelector } from "./WikiSelector";
 
 interface WikiBrowserProps {
   readonly onHeaderMenuActionsChange?: (actions: readonly HeaderMenuAction[]) => void;
+  readonly onPageBylineChange?: (byline: WikiPageBylineProps | undefined) => void;
   readonly onPageTitleChange?: (title: string | undefined) => void;
   readonly organizationIsHosted?: boolean;
   readonly organizationName?: string;
@@ -244,6 +248,7 @@ function pagePathCandidates(rawPath: string): string[] {
 
 export function WikiBrowser({
   onHeaderMenuActionsChange,
+  onPageBylineChange,
   onPageTitleChange,
   organizationIsHosted,
   organizationName,
@@ -264,6 +269,14 @@ export function WikiBrowser({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [subPages, setSubPages] = useState<readonly WikiSubPage[]>([]);
   const [wikis, setWikis] = useState<WikiSummary[]>([]);
+  const [pageMeta, setPageMeta] = useState<WikiPageMeta>();
+  const [pageChange, setPageChange] = useState<WikiPageChange>();
+  const [pageChangeLoading, setPageChangeLoading] = useState(false);
+  const [comments, setComments] = useState<readonly WikiComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState<string>();
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
 
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
@@ -584,6 +597,25 @@ export function WikiBrowser({
     onPageTitleChange?.(activePage ? pageTitle(activePage.path) : undefined);
   }, [activePage, loadState, onPageTitleChange]);
 
+  useEffect(() => {
+    if (!activePage || isEditing) {
+      onPageBylineChange?.(undefined);
+      return;
+    }
+
+    onPageBylineChange?.({
+      change: pageChange,
+      changeLoading: pageChangeLoading,
+      commentCount: commentsLoading ? undefined : comments.length,
+      commentsOpen,
+      onToggleComments: () => setCommentsOpen((open) => !open),
+    });
+
+    return () => {
+      onPageBylineChange?.(undefined);
+    };
+  }, [activePage, comments.length, commentsLoading, commentsOpen, isEditing, onPageBylineChange, pageChange, pageChangeLoading]);
+
   // Loads the direct children of the active page so a [[_TOSP_]] placeholder can
   // be filled in. Scoped to pages that actually use the placeholder to avoid an
   // extra API call on every page view.
@@ -619,6 +651,82 @@ export function WikiBrowser({
     void loadSubPages();
     return () => { cancelled = true; };
   }, [activePage, activeWikiId, wikiClient]);
+
+  // Loads the page's Git identity (id + path), its last-change byline, and its
+  // comments whenever the active page changes.
+  useEffect(() => {
+    setPageMeta(undefined);
+    setPageChange(undefined);
+    setPageChangeLoading(Boolean(wikiClient && activeWikiId && activePage));
+    setComments([]);
+    setCommentsError(undefined);
+
+    if (!wikiClient || !activeWikiId || !activePage) {
+      setCommentsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const client = wikiClient;
+    const wikiId = activeWikiId;
+    const path = activePage.path;
+    const repositoryId = activeWiki?.repositoryId;
+    setCommentsLoading(true);
+
+    async function loadPageDetails() {
+      let meta: WikiPageMeta | undefined;
+      try {
+        meta = await client.getPageMeta(wikiId, path);
+      } catch {
+        meta = undefined;
+      }
+      if (cancelled) {
+        return;
+      }
+      setPageMeta(meta);
+
+      if (meta?.gitItemPath && repositoryId) {
+        void client
+          .getPageLastChange(repositoryId, meta.gitItemPath)
+          .then((change) => {
+            if (!cancelled) {
+              setPageChange(change);
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            if (!cancelled) {
+              setPageChangeLoading(false);
+            }
+          });
+      } else {
+        setPageChangeLoading(false);
+      }
+
+      if (!meta?.id) {
+        setCommentsLoading(false);
+        return;
+      }
+
+      try {
+        const list = await client.listComments(wikiId, meta.id);
+        if (!cancelled) {
+          setComments(list);
+        }
+      } catch (commentsFailure: unknown) {
+        if (!cancelled) {
+          setCommentsError(formatError(commentsFailure));
+        }
+      } finally {
+        if (!cancelled) {
+          setCommentsLoading(false);
+        }
+      }
+    }
+
+    void loadPageDetails();
+    return () => { cancelled = true; };
+  }, [activePage, activeWikiId, activeWiki?.repositoryId, wikiClient]);
 
   const handleNodeExpand = useCallback(
     async (path: string): Promise<void> => {
@@ -862,6 +970,26 @@ export function WikiBrowser({
     }
   }
 
+  const handleAddComment = useCallback(
+    async (text: string) => {
+      if (!wikiClient || !activeWikiId || !pageMeta?.id) {
+        return;
+      }
+
+      setCommentSubmitting(true);
+      try {
+        const created = await wikiClient.addComment(activeWikiId, pageMeta.id, text);
+        setComments((prev) => [...prev, created]);
+        setCommentsError(undefined);
+      } catch (commentFailure: unknown) {
+        setCommentsError(formatError(commentFailure));
+      } finally {
+        setCommentSubmitting(false);
+      }
+    },
+    [activeWikiId, pageMeta?.id, wikiClient]
+  );
+
   const resolveImageSrc = useCallback(
     (src: string, currentPath: string): string | undefined => {
       if (!activeWiki || !projectName) {
@@ -1051,6 +1179,17 @@ export function WikiBrowser({
           />
         )}
       </article>
+
+      {activePage && !isEditing && commentsOpen ? (
+        <WikiCommentsPanel
+          comments={comments}
+          error={commentsError}
+          loading={commentsLoading}
+          onClose={() => setCommentsOpen(false)}
+          onSubmit={handleAddComment}
+          submitting={commentSubmitting}
+        />
+      ) : null}
 
       {moveDialogPath ? (
         <WikiMovePageDialog
