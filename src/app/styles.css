@@ -648,6 +648,35 @@ body {
   min-width: 0;
 }
 
+.wiki-richtext-toolbar {
+  align-items: center;
+  background: var(--pw-subtle);
+  border-bottom: 1px solid var(--pw-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+}
+
+.wiki-richtext-toolbar button {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border-strong);
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--pw-font-size-s);
+  min-height: 28px;
+  padding: 2px 8px;
+}
+
+.wiki-richtext-toolbar button:disabled {
+  background: var(--pw-subtle);
+  border-color: var(--pw-border);
+  color: var(--pw-disabled-text);
+  cursor: default;
+}
+
 .wiki-richtext-editor {
   color: var(--pw-text);
   font-family: "Segoe UI", "Segoe UI Variable", sans-serif;
@@ -662,6 +691,23 @@ body {
 .wiki-richtext-editor:empty::before {
   color: var(--pw-text-secondary);
   content: "Start writing...";
+}
+
+.wiki-richtext-editor table {
+  border-collapse: collapse;
+  margin: 12px 0;
+  width: 100%;
+}
+
+.wiki-richtext-editor th,
+.wiki-richtext-editor td {
+  border: 1px solid var(--pw-border);
+  padding: 6px 8px;
+}
+
+.wiki-richtext-editor th {
+  background: var(--pw-subtle);
+  text-align: left;
 }
 
 .wiki-format-toolbar {

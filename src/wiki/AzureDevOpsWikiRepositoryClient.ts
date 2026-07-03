@@ -69,6 +69,23 @@ class WikiJsonClient extends WikiRestClient {
     };
   }
 
+  public getPageMetaJson(
+    project: string,
+    wikiIdentifier: string,
+    path: string
+  ): Promise<WikiApiPage> {
+    return this.beginRequest<WikiApiPage>({
+      apiVersion: "5.2-preview.1",
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages",
+      routeValues: { project, wikiIdentifier },
+      queryParams: {
+        path,
+        recursionLevel: VersionControlRecursionType.None,
+        includeContent: false,
+      },
+    });
+  }
+
   public async savePage(
     project: string,
     wikiIdentifier: string,
@@ -186,7 +203,7 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       id: wiki.id,
       mappedPath: normalizeMappedPath(wiki.mappedPath),
       name: wiki.name,
-      repositoryId: wiki.repositoryId ?? (wiki as WikiWithRepositoryFallback).repository?.id ?? wiki.id,
+      repositoryId: wiki.repositoryId ?? (wiki as WikiWithRepositoryFallback).repository?.id ?? wiki.name,
       remoteUrl: wiki.remoteUrl,
     }));
   }
@@ -234,7 +251,7 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   }
 
   public async getPageMeta(wikiId: string, path: string): Promise<WikiPageMeta> {
-    const page = await this.wikiJsonClient.getPageJson(this.projectName, wikiId, path);
+    const page = await this.wikiJsonClient.getPageMetaJson(this.projectName, wikiId, path);
     return { id: page.id, gitItemPath: page.gitItemPath };
   }
 
@@ -242,22 +259,26 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     repositoryId: string,
     gitItemPath: string
   ): Promise<WikiPageChange | undefined> {
-    try {
-      const criteria = { itemPath: gitItemPath } as GitQueryCommitsCriteria;
-      const commits = await this.gitClient.getCommitsBatch(criteria, repositoryId, this.projectName, 0, 1, false);
-      const latest = commits[0];
-      if (!latest) {
-        return undefined;
-      }
+    for (const candidatePath of gitItemPathCandidates(gitItemPath)) {
+      try {
+        const criteria = { itemPath: candidatePath } as GitQueryCommitsCriteria;
+        const commits = await this.gitClient.getCommitsBatch(criteria, repositoryId, this.projectName, 0, 1, false);
+        const latest = commits[0];
+        if (!latest) {
+          continue;
+        }
 
-      const change = latest.author ?? latest.committer;
-      return {
-        authorName: change?.name,
-        date: change?.date ? new Date(change.date).toISOString() : undefined,
-      };
-    } catch {
-      return undefined;
+        const change = latest.author ?? latest.committer;
+        return {
+          authorName: change?.name,
+          date: change?.date ? new Date(change.date).toISOString() : undefined,
+        };
+      } catch {
+        // Try the next candidate path before giving up.
+      }
     }
+
+    return undefined;
   }
 
   public async listComments(wikiId: string, pageId: number): Promise<WikiComment[]> {
@@ -283,6 +304,22 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     const created = await this.wikiClient.addComment(request, this.projectName, wikiId, pageId);
     return toWikiComment(created);
   }
+}
+
+function gitItemPathCandidates(gitItemPath: string): string[] {
+  const normalized = gitItemPath.startsWith("/") ? gitItemPath : `/${gitItemPath}`;
+  const candidates = new Set<string>([normalized]);
+
+  if (!normalized.endsWith(".md")) {
+    candidates.add(`${normalized}.md`);
+    if (normalized.endsWith("/")) {
+      candidates.add(`${normalized}index.md`);
+    } else {
+      candidates.add(`${normalized}/index.md`);
+    }
+  }
+
+  return Array.from(candidates);
 }
 
 function toWikiComment(comment: ApiComment): WikiComment {

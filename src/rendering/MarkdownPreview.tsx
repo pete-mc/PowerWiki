@@ -104,6 +104,9 @@ export function MarkdownPreview({
   onResolveImageSrc
 }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
+  const queryCacheRef = useRef(new Map<string, QueryTableResult>());
+  const queryErrorCacheRef = useRef(new Map<string, string>());
+  const workItemCacheRef = useRef(new Map<number, WorkItemBadgeDetails>());
   const themeMode = useThemeMode();
   const renderMermaidInPreview = useCallback(() => {
     const container = previewRef.current;
@@ -201,7 +204,7 @@ export function MarkdownPreview({
       return;
     }
 
-    let cancelled = false;
+    let disposed = false;
     const queryTables = Array.from(container.querySelectorAll<HTMLElement>(QUERY_TABLE_SELECTOR));
 
     for (const queryTable of queryTables) {
@@ -210,28 +213,46 @@ export function MarkdownPreview({
         continue;
       }
 
+      const cachedResult = queryCacheRef.current.get(queryId);
+      if (cachedResult) {
+        renderQueryResult(queryTable, cachedResult);
+        continue;
+      }
+
+      const cachedError = queryErrorCacheRef.current.get(queryId);
+      if (cachedError) {
+        renderQueryMessage(queryTable, cachedError);
+        continue;
+      }
+
       renderQueryLoading(queryTable, queryId);
 
       if (!onLoadQueryTable) {
-        renderQueryMessage(queryTable, "Azure Boards query rendering is unavailable.");
+        const unavailable = "Azure Boards query rendering is unavailable.";
+        queryErrorCacheRef.current.set(queryId, unavailable);
+        renderQueryMessage(queryTable, unavailable);
         continue;
       }
 
       void onLoadQueryTable(queryId)
         .then((result) => {
-          if (!cancelled) {
+          queryCacheRef.current.set(queryId, result);
+          queryErrorCacheRef.current.delete(queryId);
+          if (!disposed && queryTable.isConnected) {
             renderQueryResult(queryTable, result);
           }
         })
         .catch((error: unknown) => {
-          if (!cancelled) {
-            renderQueryMessage(queryTable, formatQueryError(error));
+          const message = formatQueryError(error);
+          queryErrorCacheRef.current.set(queryId, message);
+          if (!disposed && queryTable.isConnected) {
+            renderQueryMessage(queryTable, message);
           }
         });
     }
 
     return () => {
-      cancelled = true;
+      disposed = true;
     };
   }, [html, onLoadQueryTable]);
 
@@ -241,7 +262,7 @@ export function MarkdownPreview({
       return;
     }
 
-    let cancelled = false;
+    let disposed = false;
     const badges = Array.from(container.querySelectorAll<HTMLElement>(WORK_ITEM_SELECTOR));
 
     for (const badge of badges) {
@@ -250,11 +271,18 @@ export function MarkdownPreview({
         continue;
       }
 
+      const cachedBadge = workItemCacheRef.current.get(id);
+      if (cachedBadge) {
+        renderWorkItemBadge(badge, cachedBadge);
+        continue;
+      }
+
       renderWorkItemBadge(badge, { id });
 
       void onLoadWorkItemBadge(id)
         .then((details) => {
-          if (!cancelled) {
+          workItemCacheRef.current.set(id, details);
+          if (!disposed && badge.isConnected) {
             renderWorkItemBadge(badge, details);
           }
         })
@@ -264,7 +292,7 @@ export function MarkdownPreview({
     }
 
     return () => {
-      cancelled = true;
+      disposed = true;
     };
   }, [html, onLoadWorkItemBadge]);
 
@@ -312,9 +340,6 @@ export function MarkdownPreview({
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={handleClick}
       ref={previewRef}
-      // Remount on theme change so already-rendered Mermaid diagrams are
-      // regenerated with the matching light/dark Mermaid theme.
-      key={`${themeMode}\n${html}`}
     />
   );
 }
