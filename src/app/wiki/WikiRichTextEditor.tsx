@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import MarkdownIt from "markdown-it";
 import TurndownService from "turndown";
+import { gfm } from "turndown-plugin-gfm";
 
 interface WikiRichTextEditorProps {
   readonly disabled?: boolean;
@@ -25,6 +26,10 @@ export function WikiRichTextEditor({ disabled, onChange, value }: WikiRichTextEd
       hr: "---",
       linkStyle: "inlined"
     });
+
+    // GFM support so HTML tables, strikethrough, and task lists round-trip to
+    // Markdown table/`~~`/`- [ ]` syntax instead of being flattened to text.
+    service.use(gfm);
 
     // Keep line-break intentions when users hit Enter+Shift in rich text mode.
     service.addRule("lineBreak", {

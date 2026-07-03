@@ -11,6 +11,8 @@ export interface WikiSummary {
   readonly name: string;
   readonly repositoryId?: string;
   readonly remoteUrl?: string;
+  /** Branch the wiki is served from (e.g. "wikiMaster"), used for history lookups. */
+  readonly version?: string;
 }
 
 export interface WikiPageSummary {

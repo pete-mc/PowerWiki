@@ -710,6 +710,7 @@ export function WikiBrowser({
     const wikiId = activeWikiId;
     const path = activePage.path;
     const repositoryId = activeWiki?.repositoryId;
+    const branch = activeWiki?.version;
     setCommentsLoading(true);
 
     async function loadPageDetails() {
@@ -726,7 +727,7 @@ export function WikiBrowser({
 
       if (meta?.gitItemPath && repositoryId) {
         void client
-          .getPageLastChange(repositoryId, meta.gitItemPath)
+          .getPageLastChange(repositoryId, meta.gitItemPath, branch)
           .then((change) => {
             if (!cancelled) {
               setPageChange(change);
@@ -765,7 +766,7 @@ export function WikiBrowser({
 
     void loadPageDetails();
     return () => { cancelled = true; };
-  }, [activePage, activeWikiId, activeWiki?.repositoryId, wikiClient]);
+  }, [activePage, activeWikiId, activeWiki?.repositoryId, activeWiki?.version, wikiClient]);
 
   const handleNodeExpand = useCallback(
     async (path: string): Promise<void> => {

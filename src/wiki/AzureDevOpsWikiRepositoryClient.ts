@@ -6,6 +6,8 @@ import {
 import { getClient } from "azure-devops-extension-api/Common";
 import {
   GitRestClient,
+  GitVersionOptions,
+  GitVersionType,
   VersionControlRecursionType,
   type GitQueryCommitsCriteria
 } from "azure-devops-extension-api/Git";
@@ -203,8 +205,9 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       id: wiki.id,
       mappedPath: normalizeMappedPath(wiki.mappedPath),
       name: wiki.name,
-      repositoryId: wiki.repositoryId ?? (wiki as WikiWithRepositoryFallback).repository?.id ?? wiki.name,
+      repositoryId: wiki.repositoryId ?? (wiki as WikiWithRepositoryFallback).repository?.id ?? wiki.id,
       remoteUrl: wiki.remoteUrl,
+      version: wiki.versions?.[0]?.version,
     }));
   }
 
@@ -257,11 +260,28 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
 
   public async getPageLastChange(
     repositoryId: string,
-    gitItemPath: string
+    gitItemPath: string,
+    branch?: string
   ): Promise<WikiPageChange | undefined> {
+    // Wiki repositories serve from a dedicated branch (e.g. "wikiMaster"). The
+    // commits query returns nothing for an itemPath unless that branch is named
+    // explicitly via itemVersion, which is the root cause of a missing byline.
+    const itemVersion = branch
+      ? {
+          version: branch,
+          versionOptions: GitVersionOptions.None,
+          versionType: GitVersionType.Branch,
+        }
+      : undefined;
+
     for (const candidatePath of gitItemPathCandidates(gitItemPath)) {
       try {
-        const criteria = { itemPath: candidatePath } as GitQueryCommitsCriteria;
+        const criteria = {
+          $skip: 0,
+          $top: 1,
+          itemPath: candidatePath,
+          itemVersion,
+        } as unknown as GitQueryCommitsCriteria;
         const commits = await this.gitClient.getCommitsBatch(criteria, repositoryId, this.projectName, 0, 1, false);
         const latest = commits[0];
         if (!latest) {

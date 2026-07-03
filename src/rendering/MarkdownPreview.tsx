@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useThemeMode } from "../app/themeMode";
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
@@ -106,8 +106,31 @@ export function MarkdownPreview({
   const previewRef = useRef<HTMLDivElement>(null);
   const queryCacheRef = useRef(new Map<string, QueryTableResult>());
   const queryErrorCacheRef = useRef(new Map<string, string>());
+  const queryInFlightRef = useRef(new Set<string>());
   const workItemCacheRef = useRef(new Map<number, WorkItemBadgeDetails>());
+  const workItemInFlightRef = useRef(new Set<number>());
+  const workItemFailedRef = useRef(new Set<number>());
+  const mountedRef = useRef(true);
+  // Bumped whenever an async enrichment result arrives. The enrichment effect
+  // re-runs on every bump so cached results are re-applied to the *current*
+  // DOM nodes, even after React rebuilds innerHTML on a re-render. This is the
+  // fix for query/work-item placeholders that previously got stuck because a
+  // resolved result was written to a node that had already been replaced.
+  const [enrichmentVersion, setEnrichmentVersion] = useState(0);
   const themeMode = useThemeMode();
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const bumpEnrichment = useCallback(() => {
+    if (mountedRef.current) {
+      setEnrichmentVersion((version) => version + 1);
+    }
+  }, []);
   const renderMermaidInPreview = useCallback(() => {
     const container = previewRef.current;
     if (!container) {
@@ -198,15 +221,19 @@ export function MarkdownPreview({
     }
   }, [html, subPages]);
 
+  // Enriches query-table and work-item placeholders. This effect re-runs
+  // whenever the rendered HTML changes (new DOM nodes) or an async result
+  // arrives (enrichmentVersion bump). Because it always re-queries the live
+  // container and applies cached results synchronously, enrichment survives any
+  // number of re-renders or innerHTML rebuilds instead of being lost when a
+  // resolved promise targets a node React has already replaced.
   useEffect(() => {
     const container = previewRef.current;
     if (!container) {
       return;
     }
 
-    let disposed = false;
     const queryTables = Array.from(container.querySelectorAll<HTMLElement>(QUERY_TABLE_SELECTOR));
-
     for (const queryTable of queryTables) {
       const queryId = queryTable.getAttribute(QUERY_TABLE_ATTR);
       if (!queryId) {
@@ -234,67 +261,65 @@ export function MarkdownPreview({
         continue;
       }
 
+      // Only one in-flight request per query id; the bump on completion makes
+      // the effect re-run and paint the cached result on the current node.
+      if (queryInFlightRef.current.has(queryId)) {
+        continue;
+      }
+      queryInFlightRef.current.add(queryId);
       void onLoadQueryTable(queryId)
         .then((result) => {
           queryCacheRef.current.set(queryId, result);
           queryErrorCacheRef.current.delete(queryId);
-          if (!disposed && queryTable.isConnected) {
-            renderQueryResult(queryTable, result);
-          }
         })
         .catch((error: unknown) => {
-          const message = formatQueryError(error);
-          queryErrorCacheRef.current.set(queryId, message);
-          if (!disposed && queryTable.isConnected) {
-            renderQueryMessage(queryTable, message);
-          }
-        });
-    }
-
-    return () => {
-      disposed = true;
-    };
-  }, [html, onLoadQueryTable]);
-
-  useEffect(() => {
-    const container = previewRef.current;
-    if (!container || !onLoadWorkItemBadge) {
-      return;
-    }
-
-    let disposed = false;
-    const badges = Array.from(container.querySelectorAll<HTMLElement>(WORK_ITEM_SELECTOR));
-
-    for (const badge of badges) {
-      const id = Number(badge.getAttribute(WORK_ITEM_ATTR));
-      if (!Number.isInteger(id) || id <= 0) {
-        continue;
-      }
-
-      const cachedBadge = workItemCacheRef.current.get(id);
-      if (cachedBadge) {
-        renderWorkItemBadge(badge, cachedBadge);
-        continue;
-      }
-
-      renderWorkItemBadge(badge, { id });
-
-      void onLoadWorkItemBadge(id)
-        .then((details) => {
-          workItemCacheRef.current.set(id, details);
-          if (!disposed && badge.isConnected) {
-            renderWorkItemBadge(badge, details);
-          }
+          queryErrorCacheRef.current.set(queryId, formatQueryError(error));
         })
-        .catch(() => {
-          // The badge still opens the native form; enrichment is best-effort.
+        .finally(() => {
+          queryInFlightRef.current.delete(queryId);
+          bumpEnrichment();
         });
     }
 
-    return () => {
-      disposed = true;
-    };
-  }, [html, onLoadWorkItemBadge]);
+    if (onLoadWorkItemBadge) {
+      const badges = Array.from(container.querySelectorAll<HTMLElement>(WORK_ITEM_SELECTOR));
+      for (const badge of badges) {
+        const id = Number(badge.getAttribute(WORK_ITEM_ATTR));
+        if (!Number.isInteger(id) || id <= 0) {
+          continue;
+        }
+
+        const cachedBadge = workItemCacheRef.current.get(id);
+        if (cachedBadge) {
+          renderWorkItemBadge(badge, cachedBadge);
+          continue;
+        }
+
+        renderWorkItemBadge(badge, { id });
+
+        // A prior load failed; leave the basic badge and don't retry forever.
+        if (workItemFailedRef.current.has(id)) {
+          continue;
+        }
+        if (workItemInFlightRef.current.has(id)) {
+          continue;
+        }
+        workItemInFlightRef.current.add(id);
+        void onLoadWorkItemBadge(id)
+          .then((details) => {
+            workItemCacheRef.current.set(id, details);
+          })
+          .catch(() => {
+            // The badge still opens the native form; enrichment is best-effort.
+            workItemFailedRef.current.add(id);
+          })
+          .finally(() => {
+            workItemInFlightRef.current.delete(id);
+            bumpEnrichment();
+          });
+      }
+    }
+  }, [bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge]);
 
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {
     // Ignore modified clicks so users can still open links in a new tab.

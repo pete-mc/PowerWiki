@@ -14,7 +14,7 @@ export interface WikiRepositoryClient {
   /** Returns the id and backing Git path for a page (for comments and history). */
   getPageMeta(wikiId: string, path: string): Promise<WikiPageMeta>;
   /** Returns the author and date of the most recent change to a page's file. */
-  getPageLastChange(repositoryId: string, gitItemPath: string): Promise<WikiPageChange | undefined>;
+  getPageLastChange(repositoryId: string, gitItemPath: string, branch?: string): Promise<WikiPageChange | undefined>;
   getWikis(): Promise<WikiSummary[]>;
   /** Returns the top-level comments on a page, oldest first. */
   listComments(wikiId: string, pageId: number): Promise<WikiComment[]>;
