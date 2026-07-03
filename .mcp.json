@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "azure-devops": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@azure-devops/mcp",
+        "dataversepowertools",
+        "-a",
+        "pat",
+        "-d",
+        "core",
+        "-d",
+        "work",
+        "-d",
+        "work-items"
+      ],
+      "env": {
+        "PERSONAL_ACCESS_TOKEN": "${ADO_MCP_PAT_B64}"
+      }
+    }
+  }
+}
