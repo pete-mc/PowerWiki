@@ -5,9 +5,47 @@ body,
   margin: 0;
 }
 
+/*
+ * Design tokens. Colors map to the Azure DevOps theme variables the host
+ * injects (via SDK applyTheme) so PowerWiki follows light/dark/custom themes.
+ * Subtle surfaces, borders and hovers use translucent grey so they adapt to
+ * any background without depending on the full ADO palette being present.
+ * Fallback values keep the extension usable when rendered outside ADO.
+ */
 body {
-  color: #1f1f1f;
-  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --pw-font: "Segoe UI VSS (Regular)", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --pw-mono: var(--font-family-monospace, Consolas, "Courier New", monospace);
+
+  /* ADO's default body text is 14px; keep the menu a touch smaller. */
+  --pw-font-size: 14px;
+  --pw-font-size-s: 12px;
+  --pw-font-size-menu: 13px;
+
+  --pw-surface: var(--callout-background-color, var(--background-color, #ffffff));
+  --pw-text: var(--text-primary-color, #201f1e);
+  --pw-text-secondary: var(--text-secondary-color, #605e5c);
+  --pw-accent: var(--communication-foreground, #0078d4);
+  --pw-disabled-text: var(--text-disabled-color, #a19f9d);
+
+  --pw-subtle: rgba(128, 128, 128, 0.08);
+  --pw-hover: rgba(128, 128, 128, 0.14);
+  --pw-selected: rgba(0, 120, 212, 0.16);
+  --pw-border: rgba(128, 128, 128, 0.28);
+  --pw-border-strong: rgba(128, 128, 128, 0.45);
+  --pw-code-bg: rgba(128, 128, 128, 0.12);
+
+  --pw-danger: #d13438;
+  --pw-danger-hover: rgba(209, 52, 56, 0.16);
+
+  --pw-menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  --pw-dialog-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+
+  /* Transparent so the host's themed backdrop shows through in every theme;
+     only text color is themed here. */
+  background: transparent;
+  color: var(--pw-text);
+  font-family: var(--pw-font);
+  font-size: var(--pw-font-size);
 }
 
 .powerwiki-shell {
@@ -20,13 +58,13 @@ body {
 
 .powerwiki-header {
   align-items: center;
-  border-bottom: 1px solid #d7d7d7;
+  border-bottom: 1px solid var(--pw-border);
   display: flex;
   gap: 16px;
   grid-column: 2;
   grid-row: 1;
   justify-content: space-between;
-  min-height: 72px;
+  min-height: 64px;
   padding: 12px 24px;
 }
 
@@ -35,15 +73,10 @@ body {
 }
 
 .powerwiki-header h1 {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
-  margin: 0 0 4px;
-  overflow-wrap: anywhere;
-}
-
-.powerwiki-header p {
-  color: #605e5c;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .powerwiki-brand {
@@ -72,13 +105,13 @@ body {
 }
 
 .powerwiki-brand strong {
-  font-size: 14px;
+  font-size: var(--pw-font-size);
   font-weight: 600;
 }
 
 .powerwiki-brand span {
-  color: #605e5c;
-  font-size: 12px;
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
 }
 
 .powerwiki-header-menu {
@@ -90,7 +123,7 @@ body {
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #323130;
+  color: var(--pw-text);
   cursor: pointer;
   display: inline-flex;
   font-size: 24px;
@@ -103,14 +136,15 @@ body {
 
 .powerwiki-header-menu-button:hover,
 .powerwiki-header-menu-button[aria-expanded="true"] {
-  background: #eff6fc;
+  background: var(--pw-hover);
 }
 
 .powerwiki-header-menu-popover {
-  background: #ffffff;
-  border: 1px solid #d0d7de;
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--pw-menu-shadow);
+  font-size: var(--pw-font-size-menu);
   min-width: 160px;
   padding: 4px;
   position: absolute;
@@ -123,7 +157,7 @@ body {
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   display: block;
   font: inherit;
@@ -133,20 +167,21 @@ body {
 }
 
 .powerwiki-header-menu-popover button:hover:not(:disabled) {
-  background: #eff6fc;
+  background: var(--pw-hover);
 }
 
 .powerwiki-header-menu-popover button:disabled {
-  color: #8a8886;
+  color: var(--pw-disabled-text);
   cursor: default;
 }
 
 .powerwiki-nav {
-  background: #faf9f8;
-  border-right: 1px solid #d7d7d7;
+  background: var(--pw-subtle);
+  border-right: 1px solid var(--pw-border);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  font-size: var(--pw-font-size-menu);
   grid-column: 1;
   grid-row: 1 / 3;
   overflow: hidden;
@@ -164,7 +199,7 @@ body {
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   cursor: pointer;
   display: inline-flex;
   height: 32px;
@@ -174,8 +209,8 @@ body {
 }
 
 .powerwiki-nav-expand:hover {
-  background: #eff6fc;
-  color: #0078d4;
+  background: var(--pw-hover);
+  color: var(--pw-accent);
 }
 
 .powerwiki-nav-tree {
@@ -187,7 +222,7 @@ body {
 
 .powerwiki-nav-footer {
   align-items: center;
-  border-top: 1px solid #e1dfdd;
+  border-top: 1px solid var(--pw-border);
   display: flex;
   gap: 8px;
   justify-content: space-between;
@@ -196,10 +231,10 @@ body {
 
 .powerwiki-new-page {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #c8c6c4;
+  background: transparent;
+  border: 1px solid var(--pw-border-strong);
   border-radius: 4px;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   display: inline-flex;
   flex: 1;
@@ -211,12 +246,12 @@ body {
 }
 
 .powerwiki-new-page:hover:not(:disabled) {
-  background: #eff6fc;
-  border-color: #0078d4;
+  background: var(--pw-hover);
+  border-color: var(--pw-accent);
 }
 
 .powerwiki-new-page:disabled {
-  color: #a19f9d;
+  color: var(--pw-disabled-text);
   cursor: default;
 }
 
@@ -225,7 +260,7 @@ body {
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
@@ -236,12 +271,12 @@ body {
 }
 
 .powerwiki-nav-collapse:hover {
-  background: #eff6fc;
-  color: #0078d4;
+  background: var(--pw-hover);
+  color: var(--pw-accent);
 }
 
 .powerwiki-panel {
-  border: 1px solid #d7d7d7;
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
   padding: 16px;
 }
@@ -259,13 +294,13 @@ body {
 }
 
 .powerwiki-panel p {
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   line-height: 1.45;
   margin: 0;
 }
 
 .wiki-tree-empty {
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   line-height: 1.45;
   margin: 0;
   padding: 12px 8px;
@@ -280,7 +315,7 @@ body {
 }
 
 .wiki-editor-shell {
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
   min-width: 0;
   overflow: hidden;
@@ -288,8 +323,8 @@ body {
 
 .wiki-editor-toolbar {
   align-items: center;
-  background: #f6f8fa;
-  border-bottom: 1px solid #d0d7de;
+  background: var(--pw-subtle);
+  border-bottom: 1px solid var(--pw-border);
   display: flex;
   gap: 12px;
   justify-content: space-between;
@@ -302,13 +337,13 @@ body {
 }
 
 .wiki-editor-toolbar strong {
-  font-size: 14px;
+  font-size: var(--pw-font-size);
   font-weight: 600;
 }
 
 .wiki-editor-toolbar span {
-  color: #605e5c;
-  font-size: 12px;
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
 }
 
 .wiki-editor-toolbar-actions {
@@ -317,10 +352,10 @@ body {
 }
 
 .wiki-editor-toolbar-actions button {
-  background: #ffffff;
-  border: 1px solid #8a8886;
+  background: transparent;
+  border: 1px solid var(--pw-border-strong);
   border-radius: 4px;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   font: inherit;
   min-height: 32px;
@@ -328,15 +363,15 @@ body {
 }
 
 .wiki-editor-toolbar-actions button:first-child {
-  background: #0078d4;
-  border-color: #0078d4;
+  background: var(--pw-accent);
+  border-color: var(--pw-accent);
   color: #ffffff;
 }
 
 .wiki-editor-toolbar-actions button:disabled {
-  background: #f3f2f1;
-  border-color: #c8c6c4;
-  color: #8a8886;
+  background: var(--pw-subtle);
+  border-color: var(--pw-border);
+  color: var(--pw-disabled-text);
   cursor: default;
 }
 
@@ -350,8 +385,8 @@ body {
 
 .wiki-format-toolbar {
   align-items: center;
-  background: #f6f8fa;
-  border-bottom: 1px solid #d0d7de;
+  background: var(--pw-subtle);
+  border-bottom: 1px solid var(--pw-border);
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -365,19 +400,19 @@ body {
 
 .wiki-format-sep {
   align-self: stretch;
-  border-left: 1px solid #d0d7de;
+  border-left: 1px solid var(--pw-border);
   margin: 2px 4px;
   width: 0;
 }
 
 .wiki-format-button {
-  background: #ffffff;
-  border: 1px solid #d0d7de;
+  background: transparent;
+  border: 1px solid var(--pw-border);
   border-radius: 4px;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--pw-font-size-menu);
   line-height: 1;
   min-height: 28px;
   min-width: 30px;
@@ -385,14 +420,14 @@ body {
 }
 
 .wiki-format-button:hover:not(:disabled) {
-  background: #eff6fc;
-  border-color: #0078d4;
+  background: var(--pw-hover);
+  border-color: var(--pw-accent);
 }
 
 .wiki-format-button:disabled {
-  background: #f3f2f1;
-  border-color: #e1dfdd;
-  color: #a19f9d;
+  background: var(--pw-subtle);
+  border-color: var(--pw-border);
+  color: var(--pw-disabled-text);
   cursor: default;
 }
 
@@ -405,7 +440,7 @@ body {
 }
 
 .wiki-format-button.code {
-  font-family: Consolas, "Courier New", monospace;
+  font-family: var(--pw-mono);
 }
 
 .wiki-format-mermaid {
@@ -414,10 +449,10 @@ body {
 }
 
 .wiki-format-mermaid-popover {
-  background: #ffffff;
-  border: 1px solid #d0d7de;
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--pw-menu-shadow);
   max-height: 320px;
   overflow: auto;
   padding: 4px;
@@ -432,7 +467,7 @@ body {
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   display: block;
   font: inherit;
@@ -442,7 +477,7 @@ body {
 }
 
 .wiki-format-mermaid-popover button:hover {
-  background: #eff6fc;
+  background: var(--pw-hover);
 }
 
 .wiki-page-editor {
@@ -458,17 +493,17 @@ body {
 }
 
 .wiki-selector span {
-  color: #605e5c;
-  font-size: 12px;
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
   font-weight: 600;
 }
 
 .wiki-selector select {
-  background: #ffffff;
-  border: 1px solid #8a8886;
+  background: transparent;
+  border: 1px solid var(--pw-border-strong);
   border-radius: 4px;
   box-sizing: border-box;
-  color: #1f1f1f;
+  color: var(--pw-text);
   font: inherit;
   min-height: 32px;
   padding: 4px 8px;
@@ -494,9 +529,12 @@ body {
   position: relative;
 }
 
-.wiki-page-tree-row:hover,
+.wiki-page-tree-row:hover {
+  background: var(--pw-hover);
+}
+
 .wiki-page-tree-row.active {
-  background: #eff6fc;
+  background: var(--pw-selected);
 }
 
 .wiki-page-tree-row.dragging {
@@ -504,12 +542,12 @@ body {
 }
 
 .wiki-page-tree-row.drop-inside {
-  box-shadow: inset 0 0 0 2px #0078d4;
+  box-shadow: inset 0 0 0 2px var(--pw-accent);
 }
 
 .wiki-page-tree-row.drop-before::before,
 .wiki-page-tree-row.drop-after::after {
-  background: #0078d4;
+  background: var(--pw-accent);
   content: "";
   height: 2px;
   left: 0;
@@ -529,7 +567,7 @@ body {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   cursor: pointer;
   display: inline-flex;
   height: 30px;
@@ -555,7 +593,7 @@ body {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -569,13 +607,13 @@ body {
 
 .wiki-page-tree-icon {
   align-items: center;
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   display: inline-flex;
   flex: 0 0 auto;
 }
 
 .wiki-page-tree-row.active .wiki-page-tree-icon {
-  color: #0078d4;
+  color: var(--pw-accent);
 }
 
 .wiki-page-tree-label {
@@ -585,7 +623,7 @@ body {
 }
 
 .wiki-tree-loading {
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   margin: 0;
   padding: 4px 8px 4px 34px;
 }
@@ -599,7 +637,7 @@ body {
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   cursor: pointer;
   display: inline-flex;
   height: 26px;
@@ -617,15 +655,16 @@ body {
 }
 
 .wiki-page-menu-trigger:hover {
-  background: #dbe8f7;
-  color: #0078d4;
+  background: var(--pw-hover);
+  color: var(--pw-accent);
 }
 
 .wiki-page-menu-popover {
-  background: #ffffff;
-  border: 1px solid #d0d7de;
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--pw-menu-shadow);
+  font-size: var(--pw-font-size-menu);
   min-width: 170px;
   padding: 4px;
   z-index: 30;
@@ -636,7 +675,7 @@ body {
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -647,20 +686,20 @@ body {
 }
 
 .wiki-page-menu-popover button:hover {
-  background: #eff6fc;
+  background: var(--pw-hover);
 }
 
 .wiki-page-menu-popover button.destructive {
-  color: #a80000;
+  color: var(--pw-danger);
 }
 
 .wiki-page-menu-popover button.destructive:hover {
-  background: #fde7e9;
+  background: var(--pw-danger-hover);
 }
 
 .wiki-page-menu-icon {
   align-items: center;
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   display: inline-flex;
 }
 
@@ -677,10 +716,12 @@ body {
 }
 
 .wiki-dialog {
-  background: #ffffff;
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
   border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--pw-dialog-shadow);
   box-sizing: border-box;
+  color: var(--pw-text);
   display: flex;
   flex-direction: column;
   max-height: min(80vh, 640px);
@@ -690,18 +731,18 @@ body {
 }
 
 .wiki-dialog-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   margin: 0 0 4px;
 }
 
 .wiki-dialog-subtitle {
-  color: #605e5c;
+  color: var(--pw-text-secondary);
   margin: 0 0 12px;
 }
 
 .wiki-dialog-tree {
-  border: 1px solid #e1dfdd;
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
   flex: 1;
   min-height: 140px;
@@ -726,22 +767,22 @@ body {
 }
 
 .wiki-dialog-primary {
-  background: #0078d4;
-  border: 1px solid #0078d4;
+  background: var(--pw-accent);
+  border: 1px solid var(--pw-accent);
   color: #ffffff;
 }
 
 .wiki-dialog-primary:disabled {
-  background: #f3f2f1;
-  border-color: #c8c6c4;
-  color: #a19f9d;
+  background: var(--pw-subtle);
+  border-color: var(--pw-border);
+  color: var(--pw-disabled-text);
   cursor: default;
 }
 
 .wiki-dialog-secondary {
-  background: #ffffff;
-  border: 1px solid #8a8886;
-  color: #1f1f1f;
+  background: transparent;
+  border: 1px solid var(--pw-border-strong);
+  color: var(--pw-text);
 }
 
 .wiki-move-list,
@@ -764,13 +805,13 @@ body {
 }
 
 .wiki-move-option.selected {
-  background: #deecf9;
+  background: var(--pw-selected);
 }
 
 button.wiki-move-option {
   background: transparent;
   border: 0;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   font: inherit;
   gap: 8px;
@@ -779,14 +820,14 @@ button.wiki-move-option {
 }
 
 button.wiki-move-option:hover {
-  background: #eff6fc;
+  background: var(--pw-hover);
 }
 
 .wiki-move-option-label {
   align-items: center;
   background: transparent;
   border: 0;
-  color: #1f1f1f;
+  color: var(--pw-text);
   cursor: pointer;
   display: flex;
   flex: 1;
@@ -798,16 +839,17 @@ button.wiki-move-option:hover {
 }
 
 .wiki-move-option-label:hover:not(:disabled) {
-  background: #eff6fc;
+  background: var(--pw-hover);
 }
 
 .wiki-move-option-label:disabled {
-  color: #a19f9d;
+  color: var(--pw-disabled-text);
   cursor: default;
 }
 
 .markdown-preview {
-  color: #24292f;
+  color: var(--pw-text);
+  font-size: var(--pw-font-size);
   line-height: 1.55;
 }
 
@@ -817,36 +859,37 @@ button.wiki-move-option:hover {
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
-  color: #1f2328;
+  color: var(--pw-text);
   font-weight: 600;
   line-height: 1.25;
   margin: 24px 0 12px;
 }
 
+/* Sizes use em to preserve the heading-to-body ratio at ADO's 14px base. */
 .markdown-preview h1 {
-  border-bottom: 1px solid #d8dee4;
-  font-size: 32px;
+  border-bottom: 1px solid var(--pw-border);
+  font-size: 2em;
   padding-bottom: 8px;
 }
 
 .markdown-preview h2 {
-  border-bottom: 1px solid #d8dee4;
-  font-size: 24px;
+  border-bottom: 1px solid var(--pw-border);
+  font-size: 1.5em;
   padding-bottom: 6px;
 }
 
 .markdown-preview h3 {
-  font-size: 20px;
+  font-size: 1.25em;
 }
 
 .markdown-preview h4 {
-  font-size: 16px;
+  font-size: 1em;
 }
 
 .markdown-preview h5,
 .markdown-preview h6 {
-  color: #57606a;
-  font-size: 14px;
+  color: var(--pw-text-secondary);
+  font-size: 0.875em;
 }
 
 .markdown-preview h1:first-child,
@@ -867,9 +910,13 @@ button.wiki-move-option:hover {
   margin-top: 0;
 }
 
+.markdown-preview a {
+  color: var(--pw-accent);
+}
+
 .markdown-preview blockquote {
-  border-left: 4px solid #d0d7de;
-  color: #57606a;
+  border-left: 4px solid var(--pw-border-strong);
+  color: var(--pw-text-secondary);
   padding-left: 12px;
 }
 
@@ -884,36 +931,36 @@ button.wiki-move-option:hover {
 
 .markdown-preview table th,
 .markdown-preview table td {
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--pw-border);
   padding: 6px 13px;
 }
 
 .markdown-preview table th {
-  background: #f6f8fa;
+  background: var(--pw-subtle);
   font-weight: 600;
 }
 
 .markdown-preview table tr {
-  background: #ffffff;
-  border-top: 1px solid #d8dee4;
+  background: transparent;
+  border-top: 1px solid var(--pw-border);
 }
 
 .markdown-preview table tr:nth-child(2n) {
-  background: #f6f8fa;
+  background: var(--pw-subtle);
 }
 
 .markdown-preview pre {
-  background: #f6f8fa;
-  border: 1px solid #d7d7d7;
+  background: var(--pw-code-bg);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
   overflow: auto;
   padding: 12px;
 }
 
 .markdown-preview code {
-  background: #f6f8fa;
+  background: var(--pw-code-bg);
   border-radius: 4px;
-  font-family: Consolas, "Courier New", monospace;
+  font-family: var(--pw-mono);
   font-size: 0.92em;
   padding: 0.15em 0.35em;
 }
@@ -926,8 +973,8 @@ button.wiki-move-option:hover {
 }
 
 .markdown-preview .powerwiki-toc {
-  background: #f6f8fa;
-  border: 1px solid #d0d7de;
+  background: var(--pw-subtle);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
   display: inline-block;
   margin-bottom: 16px;
@@ -950,15 +997,15 @@ button.wiki-move-option:hover {
 }
 
 .markdown-preview .powerwiki-subpages-empty {
-  color: #57606a;
+  color: var(--pw-text-secondary);
   font-style: italic;
 }
 
 .markdown-preview .powerwiki-work-item-badge {
-  background: #eff6fc;
-  border: 1px solid #c7e0f4;
+  background: var(--pw-selected);
+  border: 1px solid var(--pw-border);
   border-radius: 999px;
-  color: #005a9e;
+  color: var(--pw-accent);
   display: inline-block;
   font-size: 0.88em;
   font-weight: 600;
@@ -969,12 +1016,12 @@ button.wiki-move-option:hover {
 }
 
 .markdown-preview .powerwiki-work-item-badge:hover {
-  background: #deecf9;
+  background: var(--pw-hover);
   text-decoration: none;
 }
 
 .markdown-preview .powerwiki-query-table {
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
   margin: 0 0 16px;
   overflow: hidden;
@@ -982,8 +1029,8 @@ button.wiki-move-option:hover {
 
 .markdown-preview .powerwiki-query-table-header {
   align-items: center;
-  background: #f6f8fa;
-  border-bottom: 1px solid #d0d7de;
+  background: var(--pw-subtle);
+  border-bottom: 1px solid var(--pw-border);
   display: flex;
   flex-wrap: wrap;
   gap: 8px 14px;
@@ -992,13 +1039,13 @@ button.wiki-move-option:hover {
 }
 
 .markdown-preview .powerwiki-query-table-header span {
-  color: #57606a;
-  font-size: 13px;
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-menu);
   margin-right: auto;
 }
 
 .markdown-preview .powerwiki-query-table-header a {
-  font-size: 13px;
+  font-size: var(--pw-font-size-menu);
 }
 
 .markdown-preview .powerwiki-query-table-scroll {
@@ -1031,7 +1078,7 @@ button.wiki-move-option:hover {
 }
 
 .markdown-preview .powerwiki-query-table-status {
-  color: #57606a;
+  color: var(--pw-text-secondary);
   margin: 0;
   padding: 12px;
 }
@@ -1039,11 +1086,14 @@ button.wiki-move-option:hover {
 .markdown-preview .powerwiki-query-table-error {
   background: #fff4ce;
   border-color: #f2c811;
+  color: #3b3a39;
 }
 
+/* Mermaid diagrams render with a light theme, so keep a light canvas for them
+   regardless of the surrounding page theme to stay legible. */
 .markdown-preview .mermaid-rendered {
   background: #ffffff;
-  border: 1px solid #d7d7d7;
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
   overflow-x: auto;
   padding: 16px;
