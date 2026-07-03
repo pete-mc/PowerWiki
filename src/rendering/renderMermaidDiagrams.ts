@@ -1,7 +1,17 @@
-import mermaid from "mermaid";
+// Mermaid is large (the biggest slice of the main bundle), so it's loaded as a
+// separate async chunk the first time a diagram actually needs rendering, rather
+// than up front on every hub load. The chunk is fetched from the extension's own
+// CDN dist/ path via webpack's "auto" publicPath.
+type MermaidApi = (typeof import("mermaid"))["default"];
 
+let mermaidPromise: Promise<MermaidApi> | undefined;
 let currentTheme: string | null = null;
 let diagramId = 0;
+
+function loadMermaid(): Promise<MermaidApi> {
+  mermaidPromise ??= import("mermaid").then((module) => module.default);
+  return mermaidPromise;
+}
 
 /**
  * Renders every unprocessed <pre class="mermaid"> block inside the container.
@@ -33,11 +43,12 @@ export async function renderMermaidDiagrams(
   }
 
   try {
+    const mermaid = await loadMermaid();
     const theme = resolveTheme(mode);
-    ensureMermaidInitialized(theme);
+    ensureMermaidInitialized(mermaid, theme);
 
     for (const node of nodes) {
-      await renderMermaidNode(node);
+      await renderMermaidNode(mermaid, node);
     }
   } catch (error: unknown) {
     for (const node of nodes) {
@@ -58,7 +69,7 @@ function resolveTheme(mode?: "dark" | "light"): string {
     : "default";
 }
 
-function ensureMermaidInitialized(theme: string): void {
+function ensureMermaidInitialized(mermaid: MermaidApi, theme: string): void {
   if (currentTheme === theme) {
     return;
   }
@@ -88,7 +99,7 @@ function normalizeMermaidCodeBlocks(container: HTMLElement): void {
   }
 }
 
-async function renderMermaidNode(node: HTMLElement): Promise<void> {
+async function renderMermaidNode(mermaid: MermaidApi, node: HTMLElement): Promise<void> {
   const source = node.textContent?.trim() ?? "";
   if (!source) {
     return;

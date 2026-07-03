@@ -79,11 +79,20 @@ Build the extension assets into `dist/`:
 npm run build
 ```
 
-Run the current test command:
+Run the test suite (TypeScript validation + Vitest unit tests):
 
 ```bash
 npm test
 ```
+
+`npm test` runs `tsc --noEmit` followed by the Vitest unit tests. The unit tests
+(`npm run test:unit`) cover the Markdown rendering pipeline and Azure Boards
+plugins with fixtures under `src/rendering/*.test.ts`, plus the shell error
+boundary, so CommonMark/GFM and Mermaid upgrades stay deliberate.
+
+For end-to-end verification against the published extension inside Azure DevOps,
+use the Playwright harness (`npm run pw:verify`) — see `tools/pw/README.md` and
+the "Verifying in the browser" section of `agents.md`.
 
 Create a VSIX package:
 

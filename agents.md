@@ -79,7 +79,9 @@ When the scaffold is added, keep these boundaries clear:
 - Navigation and page tree UI.
 - Tests and fixtures.
 
-Renderer dependencies should be easy to upgrade independently from the Azure DevOps integration. Any renderer-specific behavior should be covered by fixtures so future Markdown or Mermaid upgrades are deliberate.
+Renderer dependencies should be easy to upgrade independently from the Azure DevOps integration. Any renderer-specific behavior should be covered by fixtures so future Markdown or Mermaid upgrades are deliberate. Those fixtures live in `src/rendering/*.test.ts` (Vitest); run `npm test` (TypeScript check + unit tests) before publishing, and `npm run pw:verify` for end-to-end checks.
+
+Mermaid is loaded as a lazily-imported async chunk (`import("mermaid")` in `renderMermaidDiagrams`) to keep the initial hub bundle small, and webpack uses `output.publicPath: "auto"` so those chunks load from the extension's own CDN `dist/` path. Do not reintroduce a single-chunk limit (`LimitChunkCountPlugin`); if you change the webpack config, confirm Mermaid still renders in the iframe with `npm run pw:verify`.
 
 ## Documentation Expectations
 

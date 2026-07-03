@@ -28,6 +28,16 @@ function check(condition, message) {
 
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 const { context, page } = await launch({ headless: false });
+// Answer confirms (discard edits, delete) by accepting, and prompts (new page
+// title) with the current promptResponse.
+let promptResponse = "";
+page.on("dialog", async (d) => {
+  try {
+    await d.accept(d.type() === "prompt" ? promptResponse : undefined);
+  } catch {
+    // dialog already handled/closed
+  }
+});
 const consoleErrors = [];
 page.on("console", (m) => {
   if (m.type() === "error") {
@@ -150,6 +160,28 @@ try {
   } catch (error) {
     check(false, `rich text upload failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "03-richtext-error.png") });
+  }
+
+  // Create -> verify -> delete a page: a self-cleaning round-trip over the
+  // create and delete write paths (leaving the editor prompts a discard confirm,
+  // then a title prompt, both answered by the dialog handler above).
+  try {
+    const pageName = `PW-Smoke-${Date.now()}`;
+    promptResponse = pageName;
+    await frame.click(".powerwiki-new-page");
+    await frame.waitForSelector(`[aria-label="Actions for ${pageName}"]`, { timeout: 60000 });
+    check(true, "created a new page (tree shows it)");
+
+    await frame.click(`[aria-label="Actions for ${pageName}"]`);
+    await frame.getByRole("menuitem", { name: "Delete" }).click();
+    await frame.waitForSelector(`[aria-label="Actions for ${pageName}"]`, {
+      state: "detached",
+      timeout: 60000,
+    });
+    check(true, "deleted the page (tree no longer shows it)");
+  } catch (error) {
+    check(false, `create/delete round-trip failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "04-create-delete-error.png") });
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);

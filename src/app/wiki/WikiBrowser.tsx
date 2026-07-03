@@ -6,6 +6,7 @@ import {
   type IWorkItemFormNavigationService
 } from "azure-devops-extension-api/WorkItemTracking";
 import type { HeaderMenuAction } from "../HeaderMenuAction";
+import { ErrorBoundary } from "../ErrorBoundary";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
 import { buildAttachmentName, fileToBase64, isImageFile } from "../../wiki/attachmentUpload";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
@@ -1177,6 +1178,7 @@ export function WikiBrowser({
       </aside>
 
       <article className="powerwiki-content">
+        <ErrorBoundary key={activePage?.path ?? "no-page"} label="page">
         {activePage && isEditing ? (
           <section className="wiki-editor-shell" aria-label={`Editing ${pageTitle(activePage.path)}`}>
             <div className="wiki-editor-toolbar">
@@ -1289,6 +1291,7 @@ export function WikiBrowser({
             title={loadState === "loading" ? "Loading" : "No page selected"}
           />
         )}
+        </ErrorBoundary>
       </article>
 
       {activePage && !isEditing && commentsOpen ? (

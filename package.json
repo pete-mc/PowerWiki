@@ -1,6 +1,6 @@
 {
   "name": "powerwiki",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "PowerWiki is an Azure DevOps extension that adds a Power Wiki menu experience while continuing to use the standard Azure DevOps Wiki repositories as the source of truth.",
   "private": true,
   "main": "dist/powerwiki.js",
@@ -12,7 +12,8 @@
     "publish:marketplace": "npm run build && npx tfx-cli extension publish --manifest-globs vss-extension.json",
     "pw:auth": "node tools/pw/auth.mjs",
     "pw:verify": "node tools/pw/verify.mjs",
-    "test": "npm run typecheck"
+    "test:unit": "vitest run",
+    "test": "npm run typecheck && vitest run"
   },
   "keywords": [
     "azure-devops",
@@ -45,11 +46,13 @@
     "@types/turndown": "^5.0.6",
     "copy-webpack-plugin": "^14.0.0",
     "css-loader": "^7.1.4",
+    "jsdom": "^29.1.1",
     "playwright-core": "^1.61.1",
     "style-loader": "^4.0.0",
     "tfx-cli": "^0.23.2",
     "ts-loader": "^9.6.2",
     "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
     "webpack": "^5.108.3",
     "webpack-cli": "^7.1.0"
   }

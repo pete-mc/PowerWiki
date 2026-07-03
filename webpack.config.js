@@ -1,6 +1,5 @@
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const path = require("path");
-const webpack = require("webpack");
 
 module.exports = {
   entry: {
@@ -9,6 +8,12 @@ module.exports = {
   output: {
     clean: true,
     filename: "[name].js",
+    chunkFilename: "[name].[contenthash].js",
+    // "auto" makes webpack resolve async chunk URLs from the running script's
+    // own location (document.currentScript). The extension is served from the
+    // marketplace CDN under dist/, and the whole dist/ folder is published, so
+    // Mermaid's lazily-loaded chunk is fetched from that same-origin CDN path.
+    publicPath: "auto",
     path: path.resolve(__dirname, "dist")
   },
   resolve: {
@@ -35,12 +40,6 @@ module.exports = {
     ]
   },
   plugins: [
-    // Azure DevOps extension iframes are served from the marketplace CDN. Keep
-    // Mermaid's dynamically imported diagram modules in the main bundle so the
-    // preview does not depend on runtime chunk loading from that sandbox.
-    new webpack.optimize.LimitChunkCountPlugin({
-      maxChunks: 1
-    }),
     new CopyWebpackPlugin({
       patterns: [
         {

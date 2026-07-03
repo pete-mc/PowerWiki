@@ -29,9 +29,8 @@ export async function launch({ headless = false } = {}) {
     args: ["--hide-crash-restore-bubble"],
   });
   const page = context.pages()[0] ?? (await context.newPage());
-  // Auto-accept the "Discard unsaved page edits?" confirm so navigation/close
-  // during a test never blocks.
-  page.on("dialog", (d) => d.accept().catch(() => {}));
+  // Callers attach their own dialog handler (verify needs to answer prompts with
+  // specific values), so none is registered here.
   return { context, page };
 }
 

@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 
 import { App } from "../app/App";
+import { ErrorBoundary } from "../app/ErrorBoundary";
 import { initializeAzureDevOpsHost } from "./azureDevOpsHost";
 
 import "../app/styles.css";
@@ -13,12 +14,19 @@ if (!rootElement) {
 
 const root = createRoot(rootElement);
 
-root.render(<App status="loading" />);
+const renderApp = (props: Parameters<typeof App>[0]) =>
+  root.render(
+    <ErrorBoundary label="PowerWiki">
+      <App {...props} />
+    </ErrorBoundary>
+  );
+
+renderApp({ status: "loading" });
 
 initializeAzureDevOpsHost()
   .then((hostContext) => {
-    root.render(<App hostContext={hostContext} status="ready" />);
+    renderApp({ hostContext, status: "ready" });
   })
   .catch((error: unknown) => {
-    root.render(<App error={error} status="failed" />);
+    renderApp({ error, status: "failed" });
   });
