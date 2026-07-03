@@ -13,7 +13,8 @@ import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import { StatusMessage } from "./StatusMessage";
 import { WikiPageEditor } from "./WikiPageEditor";
-import { WikiPageTree } from "./WikiPageTree";
+import { WikiPageTree, type WikiPageTreeActions } from "./WikiPageTree";
+import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
 
 interface WikiBrowserProps {
@@ -252,6 +253,7 @@ export function WikiBrowser({
   const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string>();
   const [isEditing, setIsEditing] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadedPaths, setLoadedPaths] = useState<ReadonlySet<string>>(new Set());
   const [navigationReady, setNavigationReady] = useState(false);
@@ -264,6 +266,10 @@ export function WikiBrowser({
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
   const navigationServiceRef = useRef<IHostNavigationService | undefined>(undefined);
+  // When set, the page with this path should switch into edit mode as soon as it
+  // finishes loading. Used by the tree's "Edit" action and new-page creation so
+  // the editor opens without a second click.
+  const pendingEditPathRef = useRef<string | undefined>(undefined);
   // The last page path we navigated to. Used to ignore onHashChanged events that
   // are echoes of our own setHash() calls, preventing navigation loops.
   const lastNavigatedPathRef = useRef<string | undefined>(undefined);
@@ -317,6 +323,18 @@ export function WikiBrowser({
     setSaveError(undefined);
     setSaveState("idle");
   }, [activePage?.path]);
+
+  // Runs after the reset effect above (declaration order matters): if this page
+  // was opened via an "Edit" request, drop straight into the editor.
+  useEffect(() => {
+    if (activePage && pendingEditPathRef.current === activePage.path) {
+      pendingEditPathRef.current = undefined;
+      setDraftContent(activePage.content);
+      setSaveError(undefined);
+      setSaveState("idle");
+      setIsEditing(true);
+    }
+  }, [activePage]);
 
   useEffect(() => {
     if (!activePage) {
@@ -600,32 +618,230 @@ export function WikiBrowser({
     return () => { cancelled = true; };
   }, [activePage, activeWikiId, wikiClient]);
 
-  async function handleNodeExpand(path: string): Promise<void> {
-    if (!wikiClient || !activeWikiId || loadedPaths.has(path)) {
-      return;
-    }
+  const handleNodeExpand = useCallback(
+    async (path: string): Promise<void> => {
+      if (!wikiClient || !activeWikiId || loadedPaths.has(path)) {
+        return;
+      }
 
-    try {
-      const children = await wikiClient.getChildPages(activeWikiId, path);
+      try {
+        const children = await wikiClient.getChildPages(activeWikiId, path);
+        setPageList((prev) => {
+          const known = new Set(prev.map((p) => p.path));
+          return [...prev, ...children.filter((p) => !known.has(p.path))];
+        });
+      } catch {
+        // Leave the child list unchanged, but still mark the path as loaded below
+        // so the tree clears its "Loading…" indicator instead of spinning forever.
+      } finally {
+        setLoadedPaths((prev) => new Set([...prev, path]));
+      }
+    },
+    [activeWikiId, loadedPaths, wikiClient]
+  );
+
+  const handlePageSelected = useCallback(
+    async (path: string) => {
+      if (!confirmDiscardEdits()) {
+        return;
+      }
+
+      await loadPageByPath(path, true);
+    },
+    [confirmDiscardEdits, loadPageByPath]
+  );
+
+  // Re-fetches the direct children of the given parent paths and merges them
+  // into the flat page list, replacing any stale direct children. Used to keep
+  // the tree in sync after a page is created, deleted, or moved.
+  const reloadChildrenInto = useCallback(
+    async (parents: readonly string[]) => {
+      if (!wikiClient || !activeWikiId) {
+        return;
+      }
+
+      const uniqueParents = Array.from(new Set(parents));
+      const results = await Promise.all(
+        uniqueParents.map(async (parent) => {
+          try {
+            return [parent, await wikiClient.getChildPages(activeWikiId, parent)] as const;
+          } catch {
+            return [parent, [] as WikiPageSummary[]] as const;
+          }
+        })
+      );
+
+      const removedParents = new Set(uniqueParents);
       setPageList((prev) => {
-        const known = new Set(prev.map((p) => p.path));
-        return [...prev, ...children.filter((p) => !known.has(p.path))];
+        const kept = prev.filter((page) => !removedParents.has(parentOfPath(page.path)));
+        const known = new Set(kept.map((page) => page.path));
+        const additions: WikiPageSummary[] = [];
+        for (const [, children] of results) {
+          for (const child of children) {
+            if (!known.has(child.path)) {
+              additions.push(child);
+              known.add(child.path);
+            }
+          }
+        }
+        return [...kept, ...additions];
       });
-    } catch {
-      // Leave the child list unchanged, but still mark the path as loaded below
-      // so the tree clears its "Loading…" indicator instead of spinning forever.
-    } finally {
-      setLoadedPaths((prev) => new Set([...prev, path]));
-    }
-  }
+      setLoadedPaths((prev) => new Set([...prev, ...uniqueParents]));
+    },
+    [activeWikiId, wikiClient]
+  );
 
-  async function handlePageSelected(path: string) {
-    if (!confirmDiscardEdits()) {
-      return;
-    }
+  const handleCreatePage = useCallback(
+    async (parentPath: string) => {
+      if (!wikiClient || !activeWikiId || !confirmDiscardEdits()) {
+        return;
+      }
 
-    await loadPageByPath(path, true);
-  }
+      const title = window.prompt("New page title")?.trim();
+      if (!title) {
+        return;
+      }
+
+      const newPath = parentPath === "/" ? `/${title}` : `${parentPath}/${title}`;
+      try {
+        await wikiClient.createPage(activeWikiId, newPath, "");
+        await reloadChildrenInto(parentPath === "/" ? ["/"] : [parentPath, "/"]);
+        pendingEditPathRef.current = newPath;
+        await loadPageByPath(newPath, true);
+      } catch (createError: unknown) {
+        window.alert(`Could not create page: ${formatError(createError)}`);
+      }
+    },
+    [activeWikiId, confirmDiscardEdits, loadPageByPath, reloadChildrenInto, wikiClient]
+  );
+
+  const handleEditPage = useCallback(
+    async (path: string) => {
+      if (activePage?.path === path) {
+        startEditing();
+        return;
+      }
+
+      if (!confirmDiscardEdits()) {
+        return;
+      }
+
+      pendingEditPathRef.current = path;
+      await loadPageByPath(path, true);
+    },
+    [activePage?.path, confirmDiscardEdits, loadPageByPath, startEditing]
+  );
+
+  const handleDeletePage = useCallback(
+    async (path: string) => {
+      if (!wikiClient || !activeWikiId) {
+        return;
+      }
+
+      if (!window.confirm(`Delete "${pageTitle(path)}" and any of its sub-pages?`)) {
+        return;
+      }
+
+      try {
+        await wikiClient.deletePage(activeWikiId, path);
+        const parent = parentOfPath(path);
+        await reloadChildrenInto([parent]);
+
+        // If the deleted page (or one of its descendants) was open, fall back to
+        // its parent, or the wiki home page when the parent is the root.
+        if (activePage && (activePage.path === path || activePage.path.startsWith(`${path}/`))) {
+          if (parent !== "/") {
+            await loadPageByPath(parent, true);
+          } else {
+            setActivePage(undefined);
+          }
+        }
+      } catch (deleteError: unknown) {
+        window.alert(`Could not delete page: ${formatError(deleteError)}`);
+      }
+    },
+    [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, wikiClient]
+  );
+
+  const performMove = useCallback(
+    async (sourcePath: string, newPath: string, newOrder: number) => {
+      if (!wikiClient || !activeWikiId) {
+        return;
+      }
+
+      try {
+        await wikiClient.movePage(activeWikiId, sourcePath, newPath, newOrder);
+
+        // Drop the moved subtree's stale entries; the reloads below re-add the
+        // page under its new parent and lazily re-fetch its children.
+        const isMoved = (candidate: string) =>
+          candidate === sourcePath || candidate.startsWith(`${sourcePath}/`);
+        setPageList((prev) => prev.filter((page) => !isMoved(page.path)));
+        setLoadedPaths((prev) => new Set([...prev].filter((entry) => !isMoved(entry))));
+
+        await reloadChildrenInto([parentOfPath(sourcePath), parentOfPath(newPath)]);
+
+        // Follow the active page if it moved along with the dragged subtree.
+        if (activePage && isMoved(activePage.path)) {
+          const followedPath = newPath + activePage.path.slice(sourcePath.length);
+          await loadPageByPath(followedPath, true);
+        }
+      } catch (moveError: unknown) {
+        window.alert(`Could not move page: ${formatError(moveError)}`);
+      }
+    },
+    [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, wikiClient]
+  );
+
+  const handleMovePagePrompt = useCallback(
+    async (path: string) => {
+      if (!wikiClient || !activeWikiId || !confirmDiscardEdits()) {
+        return;
+      }
+
+      const newPath = window.prompt("Move page to path", path)?.trim();
+      if (!newPath || newPath === path) {
+        return;
+      }
+
+      await performMove(path, newPath, 0);
+    },
+    [activeWikiId, confirmDiscardEdits, performMove, wikiClient]
+  );
+
+  const handleCopyPath = useCallback((path: string) => {
+    void navigator.clipboard?.writeText(path);
+  }, []);
+
+  const handleOpenInNewTab = useCallback(
+    (path: string) => {
+      const nativeUrl = buildNativeWikiPageUrl(
+        organizationName,
+        projectName,
+        organizationIsHosted,
+        activeWiki?.name,
+        path
+      );
+      const target = nativeUrl ?? currentHashUrl(buildNavigationHash(activeWiki, path, wikis));
+      window.open(target, "_blank", "noopener,noreferrer");
+    },
+    [activeWiki, organizationIsHosted, organizationName, projectName, wikis]
+  );
+
+  const treeActions = useMemo<WikiPageTreeActions>(
+    () => ({
+      onAddSubPage: (path) => void handleCreatePage(path),
+      onCopyPath: handleCopyPath,
+      onDeletePage: (path) => void handleDeletePage(path),
+      onEditPage: (path) => void handleEditPage(path),
+      onMoveNode: (sourcePath, newPath, newOrder) => void performMove(sourcePath, newPath, newOrder),
+      onMovePagePrompt: (path) => void handleMovePagePrompt(path),
+      onNodeExpand: (path) => void handleNodeExpand(path),
+      onOpenInNewTab: handleOpenInNewTab,
+      onPageSelected: (path) => void handlePageSelected(path),
+    }),
+    [handleCopyPath, handleCreatePage, handleDeletePage, handleEditPage, handleMovePagePrompt, handleNodeExpand, handleOpenInNewTab, handlePageSelected, performMove]
+  );
 
   async function handleSavePage() {
     if (!wikiClient || !activeWikiId || !activePage) {
@@ -723,28 +939,64 @@ export function WikiBrowser({
   }
 
   return (
-    <section className="powerwiki-layout">
-      <aside className="powerwiki-nav" aria-label="Wiki pages">
-        <WikiSelector
-          activeWikiId={activeWikiId}
-          disabled={loadState === "loading"}
-          onWikiSelected={(wikiId) => {
-            if (!confirmDiscardEdits()) {
-              return;
-            }
+    <>
+      <aside
+        aria-label="Wiki pages"
+        className={navCollapsed ? "powerwiki-nav collapsed" : "powerwiki-nav"}
+      >
+        {navCollapsed ? (
+          <button
+            aria-label="Expand navigation panel"
+            className="powerwiki-nav-expand"
+            onClick={() => setNavCollapsed(false)}
+            type="button"
+          >
+            <ExpandPanelIcon />
+          </button>
+        ) : (
+          <>
+            <WikiSelector
+              activeWikiId={activeWikiId}
+              disabled={loadState === "loading"}
+              onWikiSelected={(wikiId) => {
+                if (!confirmDiscardEdits()) {
+                  return;
+                }
 
-            savedNavigation.current = null;
-            setActiveWikiId(wikiId);
-          }}
-          wikis={wikis}
-        />
-        <WikiPageTree
-          activePath={activePage?.path}
-          isLoading={loadState === "loading" && pageTree.length === 0}
-          nodes={pageTree}
-          onNodeExpand={handleNodeExpand}
-          onPageSelected={handlePageSelected}
-        />
+                savedNavigation.current = null;
+                setActiveWikiId(wikiId);
+              }}
+              wikis={wikis}
+            />
+            <div className="powerwiki-nav-tree">
+              <WikiPageTree
+                actions={treeActions}
+                activePath={activePage?.path}
+                isLoading={loadState === "loading" && pageTree.length === 0}
+                nodes={pageTree}
+              />
+            </div>
+            <div className="powerwiki-nav-footer">
+              <button
+                className="powerwiki-new-page"
+                disabled={loadState === "loading" || !activeWikiId}
+                onClick={() => void handleCreatePage("/")}
+                type="button"
+              >
+                <PlusIcon />
+                <span>New page</span>
+              </button>
+              <button
+                aria-label="Collapse navigation panel"
+                className="powerwiki-nav-collapse"
+                onClick={() => setNavCollapsed(true)}
+                type="button"
+              >
+                <CollapsePanelIcon />
+              </button>
+            </div>
+          </>
+        )}
       </aside>
 
       <article className="powerwiki-content">
@@ -803,7 +1055,7 @@ export function WikiBrowser({
           />
         )}
       </article>
-    </section>
+    </>
   );
 }
 
@@ -831,6 +1083,38 @@ function buildAzureDevOpsWorkItemUrl(
   }
 
   return `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}/_workitems/edit/${id}/`;
+}
+
+function parentOfPath(path: string): string {
+  const segments = normalizePagePath(path).split("/").filter(Boolean);
+  if (segments.length <= 1) {
+    return "/";
+  }
+  return "/" + segments.slice(0, -1).join("/");
+}
+
+function buildNativeWikiPageUrl(
+  organizationName: string | undefined,
+  projectName: string | undefined,
+  isHosted: boolean | undefined,
+  wikiName: string | undefined,
+  pagePath: string
+): string | undefined {
+  if (!organizationName || !projectName || !isHosted || !wikiName) {
+    return undefined;
+  }
+
+  const url = new URL(
+    `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}/_wiki/wikis/${encodeURIComponent(wikiName)}`
+  );
+  url.searchParams.set("pagePath", normalizePagePath(pagePath));
+  return url.toString();
+}
+
+function currentHashUrl(hash: string): string {
+  const url = new URL(window.location.href);
+  url.hash = hash;
+  return url.toString();
 }
 
 function formatError(error: unknown): string {

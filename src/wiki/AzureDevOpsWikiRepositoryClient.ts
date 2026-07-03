@@ -1,6 +1,10 @@
 import { getClient } from "azure-devops-extension-api/Common";
 import { VersionControlRecursionType } from "azure-devops-extension-api/Git";
-import { WikiRestClient, type WikiPage as WikiApiPage } from "azure-devops-extension-api/Wiki";
+import {
+  WikiRestClient,
+  type WikiPage as WikiApiPage,
+  type WikiPageMove
+} from "azure-devops-extension-api/Wiki";
 
 import type { WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
@@ -91,6 +95,71 @@ class WikiJsonClient extends WikiRestClient {
       version: parseETag(response.headers.get("etag")) ?? page.version,
     };
   }
+
+  public async createPage(
+    project: string,
+    wikiIdentifier: string,
+    path: string,
+    content: string
+  ): Promise<WikiPage> {
+    const response = await this.beginRequest<Response>({
+      apiVersion: "5.2-preview.1",
+      method: "PUT",
+      returnRawResponse: true,
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages/{*path}",
+      routeValues: { project, wikiIdentifier },
+      queryParams: { path },
+      body: { content },
+    });
+    const saved = await response.json() as WikiApiPage;
+
+    return {
+      content: saved.content ?? content,
+      id: saved.id,
+      path: saved.path ?? path,
+      version: parseETag(response.headers.get("etag")),
+    };
+  }
+
+  public async deletePage(
+    project: string,
+    wikiIdentifier: string,
+    path: string
+  ): Promise<void> {
+    await this.beginRequest<Response>({
+      apiVersion: "5.2-preview.1",
+      method: "DELETE",
+      returnRawResponse: true,
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages/{*path}",
+      routeValues: { project, wikiIdentifier },
+      queryParams: { path },
+    });
+  }
+
+  public async movePage(
+    project: string,
+    wikiIdentifier: string,
+    path: string,
+    newPath: string,
+    newOrder: number
+  ): Promise<WikiPage> {
+    const response = await this.beginRequest<Response>({
+      apiVersion: "5.2-preview.1",
+      method: "POST",
+      returnRawResponse: true,
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pageMoves",
+      routeValues: { project, wikiIdentifier },
+      body: { path, newPath, newOrder },
+    });
+    const moved = await response.json() as WikiPageMove;
+
+    return {
+      content: moved.page?.content ?? "",
+      id: moved.page?.id,
+      path: moved.page?.path ?? newPath,
+      version: parseETag(response.headers.get("etag")),
+    };
+  }
 }
 
 export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
@@ -134,6 +203,23 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
 
   public async savePage(wikiId: string, page: WikiPage): Promise<WikiPage> {
     return this.wikiJsonClient.savePage(this.projectName, wikiId, page);
+  }
+
+  public async createPage(wikiId: string, path: string, content = ""): Promise<WikiPage> {
+    return this.wikiJsonClient.createPage(this.projectName, wikiId, path, content);
+  }
+
+  public async deletePage(wikiId: string, path: string): Promise<void> {
+    return this.wikiJsonClient.deletePage(this.projectName, wikiId, path);
+  }
+
+  public async movePage(
+    wikiId: string,
+    path: string,
+    newPath: string,
+    newOrder: number
+  ): Promise<WikiPage> {
+    return this.wikiJsonClient.movePage(this.projectName, wikiId, path, newPath, newOrder);
   }
 }
 
