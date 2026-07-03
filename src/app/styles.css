@@ -1089,10 +1089,10 @@ button.wiki-move-option:hover {
   color: #3b3a39;
 }
 
-/* Mermaid diagrams render with a light theme, so keep a light canvas for them
-   regardless of the surrounding page theme to stay legible. */
+/* Mermaid is initialised with a matching light/dark theme, so the canvas uses
+   the themed surface to stay legible in either mode. */
 .markdown-preview .mermaid-rendered {
-  background: #ffffff;
+  background: var(--pw-surface);
   border: 1px solid var(--pw-border);
   border-radius: 6px;
   overflow-x: auto;

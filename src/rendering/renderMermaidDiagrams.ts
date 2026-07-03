@@ -18,7 +18,10 @@ let diagramId = 0;
  *      correctly preserve SVG-to-HTML namespace transitions during
  *      string serialization).
  */
-export async function renderMermaidDiagrams(container: HTMLElement): Promise<void> {
+export async function renderMermaidDiagrams(
+  container: HTMLElement,
+  mode?: "dark" | "light"
+): Promise<void> {
   normalizeMermaidCodeBlocks(container);
 
   const nodes = Array.from(container.querySelectorAll<HTMLElement>(
@@ -30,7 +33,7 @@ export async function renderMermaidDiagrams(container: HTMLElement): Promise<voi
   }
 
   try {
-    const theme = resolveTheme();
+    const theme = resolveTheme(mode);
     ensureMermaidInitialized(theme);
 
     for (const node of nodes) {
@@ -43,7 +46,13 @@ export async function renderMermaidDiagrams(container: HTMLElement): Promise<voi
   }
 }
 
-function resolveTheme(): string {
+function resolveTheme(mode?: "dark" | "light"): string {
+  // Prefer the explicit Azure DevOps theme mode passed by the caller; fall back
+  // to the OS preference only when it isn't supplied.
+  if (mode) {
+    return mode === "dark" ? "dark" : "default";
+  }
+
   return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "default";

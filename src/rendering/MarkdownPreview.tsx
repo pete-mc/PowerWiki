@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
+import { useThemeMode } from "../app/themeMode";
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
@@ -103,14 +104,15 @@ export function MarkdownPreview({
   onResolveImageSrc
 }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
+  const themeMode = useThemeMode();
   const renderMermaidInPreview = useCallback(() => {
     const container = previewRef.current;
     if (!container) {
       return;
     }
 
-    void renderMermaidDiagrams(container);
-  }, []);
+    void renderMermaidDiagrams(container, themeMode);
+  }, [themeMode]);
   const html = useMemo(() => {
     const sanitizedHtml = sanitizeRenderedHtml(markdownRenderer.render(markdown));
     return currentPath && onResolveImageSrc
@@ -308,7 +310,9 @@ export function MarkdownPreview({
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={handleClick}
       ref={previewRef}
-      key={html}
+      // Remount on theme change so already-rendered Mermaid diagrams are
+      // regenerated with the matching light/dark Mermaid theme.
+      key={`${themeMode}\n${html}`}
     />
   );
 }

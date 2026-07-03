@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type * as Monaco from "monaco-editor";
 
+import { resolveThemeMode, useThemeMode } from "../themeMode";
+
 interface WikiPageEditorProps {
   readonly disabled?: boolean;
   readonly onChange: (value: string) => void;
@@ -175,6 +177,7 @@ export function WikiPageEditor({ disabled, onChange, value }: WikiPageEditorProp
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [mermaidOpen, setMermaidOpen] = useState(false);
+  const themeMode = useThemeMode();
 
   const formattingDisabled = Boolean(disabled) || isLoading || Boolean(loadError);
 
@@ -209,7 +212,7 @@ export function WikiPageEditor({ disabled, onChange, value }: WikiPageEditorProp
           renderWhitespace: "selection",
           scrollBeyondLastLine: false,
           tabSize: 2,
-          theme: "vs",
+          theme: resolveThemeMode() === "dark" ? "vs-dark" : "vs",
           value,
           wordWrap: "on",
         });
@@ -262,6 +265,12 @@ export function WikiPageEditor({ disabled, onChange, value }: WikiPageEditorProp
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly: disabled });
   }, [disabled]);
+
+  // Follow the Azure DevOps theme. setTheme is global to the Monaco instance, so
+  // it applies once the editor has loaded and on every later theme switch.
+  useEffect(() => {
+    monacoRef.current?.editor.setTheme(themeMode === "dark" ? "vs-dark" : "vs");
+  }, [themeMode]);
 
   // Close the Mermaid menu on an outside click or Escape.
   useEffect(() => {
