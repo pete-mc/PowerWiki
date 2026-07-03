@@ -14,6 +14,7 @@ import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta } from "../../wiki/WikiComment";
 import { StatusMessage } from "./StatusMessage";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
+import { WikiRichTextEditor } from "./WikiRichTextEditor";
 import { WikiMovePageDialog } from "./WikiMovePageDialog";
 import type { WikiPageBylineProps } from "./WikiPageByline";
 import { WikiPageEditor } from "./WikiPageEditor";
@@ -32,6 +33,7 @@ interface WikiBrowserProps {
 
 type LoadState = "failed" | "loading" | "ready";
 type SaveState = "failed" | "idle" | "saving";
+type EditMode = "code" | "richText" | "splitCode";
 
 interface IHostNavigationService {
   getHash(): Promise<string>;
@@ -258,6 +260,7 @@ export function WikiBrowser({
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string>();
+  const [editMode, setEditMode] = useState<EditMode>("code");
   const [isEditing, setIsEditing] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [moveDialogPath, setMoveDialogPath] = useState<string | undefined>(undefined);
@@ -277,10 +280,12 @@ export function WikiBrowser({
   const [commentsError, setCommentsError] = useState<string>();
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [splitRatio, setSplitRatio] = useState(56);
 
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
   const navigationServiceRef = useRef<IHostNavigationService | undefined>(undefined);
+  const splitShellRef = useRef<HTMLDivElement>(null);
   // When set, the page with this path should switch into edit mode as soon as it
   // finishes loading. Used by the tree's "Edit" action and new-page creation so
   // the editor opens without a second click.
@@ -313,6 +318,7 @@ export function WikiBrowser({
     }
 
     setDraftContent(activePage.content);
+    setEditMode("code");
     setSaveError(undefined);
     setSaveState("idle");
     setIsEditing(true);
@@ -345,11 +351,44 @@ export function WikiBrowser({
     if (activePage && pendingEditPathRef.current === activePage.path) {
       pendingEditPathRef.current = undefined;
       setDraftContent(activePage.content);
+      setEditMode("code");
       setSaveError(undefined);
       setSaveState("idle");
       setIsEditing(true);
     }
   }, [activePage]);
+
+  const applySplitRatioFromPointer = useCallback((clientX: number) => {
+    const shell = splitShellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    const rect = shell.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+
+    const relative = ((clientX - rect.left) / rect.width) * 100;
+    const clamped = Math.max(20, Math.min(80, relative));
+    setSplitRatio(clamped);
+  }, []);
+
+  const startSplitResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      applySplitRatioFromPointer(moveEvent.clientX);
+    };
+
+    const stopPointerTracking = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopPointerTracking);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopPointerTracking);
+  }, [applySplitRatioFromPointer]);
 
   useEffect(() => {
     if (!activePage) {
@@ -1132,6 +1171,17 @@ export function WikiBrowser({
                 <span>{hasUnsavedChanges ? "Unsaved changes" : "No changes"}</span>
               </div>
               <div className="wiki-editor-toolbar-actions">
+                <select
+                  aria-label="Edit mode"
+                  className="wiki-editor-mode-select"
+                  disabled={saveState === "saving"}
+                  onChange={(event) => setEditMode(event.target.value as EditMode)}
+                  value={editMode}
+                >
+                  <option value="code">Code</option>
+                  <option value="splitCode">Split Code</option>
+                  <option value="richText">Rich Text</option>
+                </select>
                 <button
                   disabled={saveState === "saving" || !hasUnsavedChanges}
                   onClick={() => void handleSavePage()}
@@ -1151,11 +1201,53 @@ export function WikiBrowser({
             {saveState === "failed" && saveError ? (
               <p className="wiki-editor-error" role="alert">{saveError}</p>
             ) : null}
-            <WikiPageEditor
-              disabled={saveState === "saving"}
-              onChange={setDraftContent}
-              value={draftContent}
-            />
+            {editMode === "richText" ? (
+              <WikiRichTextEditor
+                disabled={saveState === "saving"}
+                onChange={setDraftContent}
+                value={draftContent}
+              />
+            ) : null}
+            {editMode === "code" ? (
+              <WikiPageEditor
+                disabled={saveState === "saving"}
+                onChange={setDraftContent}
+                value={draftContent}
+              />
+            ) : null}
+            {editMode === "splitCode" ? (
+              <div className="wiki-editor-split-shell" ref={splitShellRef}>
+                <div className="wiki-editor-split-pane wiki-editor-split-pane-code" style={{ width: `${splitRatio}%` }}>
+                  <WikiPageEditor
+                    disabled={saveState === "saving"}
+                    onChange={setDraftContent}
+                    value={draftContent}
+                  />
+                </div>
+                <div
+                  aria-label="Resize code and preview panes"
+                  className="wiki-editor-split-resizer"
+                  onPointerDown={startSplitResize}
+                  role="separator"
+                />
+                <div className="wiki-editor-split-pane wiki-editor-split-pane-preview" style={{ width: `${100 - splitRatio}%` }}>
+                  <MarkdownPreview
+                    markdown={draftContent}
+                    currentPath={activePage.path}
+                    subPages={subPages}
+                    onLoadQueryTable={loadQueryTable}
+                    onLoadWorkItemBadge={loadWorkItemBadge}
+                    onNavigate={(path) => {
+                      if (confirmDiscardEdits()) {
+                        void loadPageByPath(path, true);
+                      }
+                    }}
+                    onOpenWorkItem={(id) => void openWorkItem(id)}
+                    onResolveImageSrc={resolveImageSrc}
+                  />
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : activePage ? (
           <MarkdownPreview

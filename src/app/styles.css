@@ -549,6 +549,22 @@ body {
   gap: 8px;
 }
 
+.wiki-editor-mode-select {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border-strong);
+  border-radius: 4px;
+  color: var(--pw-text);
+  font: inherit;
+  min-height: 32px;
+  padding: 4px 10px;
+}
+
+.wiki-editor-mode-select:disabled {
+  background: var(--pw-subtle);
+  border-color: var(--pw-border);
+  color: var(--pw-disabled-text);
+}
+
 .wiki-editor-toolbar-actions button {
   background: transparent;
   border: 1px solid var(--pw-border-strong);
@@ -579,6 +595,73 @@ body {
   color: #a80000;
   margin: 0;
   padding: 8px 12px;
+}
+
+.wiki-editor-split-shell {
+  display: flex;
+  height: 72vh;
+  max-height: 86vh;
+  min-height: 420px;
+  min-width: 0;
+}
+
+.wiki-editor-split-pane {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wiki-editor-split-pane .wiki-page-editor {
+  border: 0;
+  border-radius: 0;
+  height: 100%;
+}
+
+.wiki-editor-split-pane-preview {
+  background: var(--pw-surface);
+  overflow: auto;
+  padding: 16px;
+}
+
+.wiki-editor-split-resizer {
+  background: var(--pw-subtle);
+  border-left: 1px solid var(--pw-border);
+  border-right: 1px solid var(--pw-border);
+  cursor: col-resize;
+  flex: 0 0 8px;
+  position: relative;
+}
+
+.wiki-editor-split-resizer::before {
+  background: var(--pw-border-strong);
+  border-radius: 99px;
+  content: "";
+  height: 36px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+}
+
+.wiki-richtext-shell {
+  background: var(--pw-surface);
+  min-width: 0;
+}
+
+.wiki-richtext-editor {
+  color: var(--pw-text);
+  font-family: "Segoe UI", "Segoe UI Variable", sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 72vh;
+  outline: none;
+  overflow: auto;
+  padding: 16px;
+}
+
+.wiki-richtext-editor:empty::before {
+  color: var(--pw-text-secondary);
+  content: "Start writing...";
 }
 
 .wiki-format-toolbar {
@@ -1408,6 +1491,36 @@ button.wiki-move-option:hover {
 
   .wiki-editor-toolbar-actions {
     justify-content: flex-end;
+  }
+
+  .wiki-editor-split-shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+
+  .wiki-editor-split-pane,
+  .wiki-editor-split-pane-code,
+  .wiki-editor-split-pane-preview {
+    width: 100% !important;
+  }
+
+  .wiki-editor-split-pane-preview {
+    max-height: 40vh;
+  }
+
+  .wiki-editor-split-resizer {
+    border-bottom: 1px solid var(--pw-border);
+    border-left: 0;
+    border-right: 0;
+    border-top: 1px solid var(--pw-border);
+    cursor: row-resize;
+    flex-basis: 8px;
+  }
+
+  .wiki-editor-split-resizer::before {
+    height: 2px;
+    width: 36px;
   }
 
   .wiki-page-editor {
