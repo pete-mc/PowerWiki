@@ -18,13 +18,20 @@ import {
 } from "azure-devops-extension-api/Wiki";
 
 import type { WikiComment, WikiPageChange, WikiPageMeta } from "./WikiComment";
-import type { WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
+import type { WikiAttachment, WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
 
 interface WikiWithRepositoryFallback {
   readonly repository?: {
     readonly id?: string;
   };
+}
+
+/** The wiki attachments endpoint returns the file directly, or wrapped. */
+interface WikiAttachmentBody {
+  readonly name?: string;
+  readonly path?: string;
+  readonly attachment?: { readonly name?: string; readonly path?: string };
 }
 
 // Subclasses WikiRestClient to expose the same pages endpoint but requesting
@@ -165,6 +172,36 @@ class WikiJsonClient extends WikiRestClient {
     });
   }
 
+  public async createAttachment(
+    project: string,
+    wikiIdentifier: string,
+    name: string,
+    base64Content: string
+  ): Promise<WikiAttachment> {
+    // The generated SDK client only exposes comment attachments, so call the
+    // wiki attachments endpoint directly. The API expects the file bytes
+    // base64-encoded in the raw request body (isRawData bypasses JSON
+    // serialization) and returns the stored name and "/.attachments/…" path.
+    const response = await this.beginRequest<WikiAttachmentBody>({
+      apiVersion: "7.1",
+      method: "PUT",
+      isRawData: true,
+      customHeaders: { "Content-Type": "application/octet-stream" },
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/attachments",
+      routeValues: { project, wikiIdentifier },
+      queryParams: { name },
+      body: base64Content,
+    });
+
+    // The raw endpoint returns the WikiAttachment ({ name, path }) directly;
+    // some API versions wrap it as { attachment: {...} }, so handle both.
+    const attachment = response.attachment ?? response;
+    if (!attachment?.name || !attachment?.path) {
+      throw new Error("The wiki attachments API returned an unexpected response.");
+    }
+    return { name: attachment.name, path: attachment.path };
+  }
+
   public async movePage(
     project: string,
     wikiIdentifier: string,
@@ -251,6 +288,10 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     newOrder: number
   ): Promise<WikiPage> {
     return this.wikiJsonClient.movePage(this.projectName, wikiId, path, newPath, newOrder);
+  }
+
+  public async createAttachment(wikiId: string, name: string, base64Content: string): Promise<WikiAttachment> {
+    return this.wikiJsonClient.createAttachment(this.projectName, wikiId, name, base64Content);
   }
 
   public async getPageMeta(wikiId: string, path: string): Promise<WikiPageMeta> {

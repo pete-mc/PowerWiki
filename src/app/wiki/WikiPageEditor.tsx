@@ -3,10 +3,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type * as Monaco from "monaco-editor";
 
 import { resolveThemeMode, useThemeMode } from "../themeMode";
+import {
+  attachmentMarkdown,
+  dragHasFiles,
+  filesFromDataTransfer,
+  isImageFile,
+  type UploadAttachment,
+} from "../../wiki/attachmentUpload";
 
 interface WikiPageEditorProps {
   readonly disabled?: boolean;
   readonly onChange: (value: string) => void;
+  /** Uploads a pasted/dropped/picked file and returns its wiki reference. */
+  readonly onUploadAttachment?: UploadAttachment;
   readonly value: string;
 }
 
@@ -168,18 +177,22 @@ const MERMAID_SNIPPETS: readonly MermaidSnippet[] = [
 
 let monacoLoadPromise: Promise<MonacoApi> | undefined;
 
-export function WikiPageEditor({ disabled, onChange, value }: WikiPageEditorProps) {
+export function WikiPageEditor({ disabled, onChange, onUploadAttachment, value }: WikiPageEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<MonacoApi | undefined>(undefined);
   const onChangeRef = useRef(onChange);
   const mermaidRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [mermaidOpen, setMermaidOpen] = useState(false);
+  const [uploadCount, setUploadCount] = useState(0);
+  const [uploadError, setUploadError] = useState<string>();
   const themeMode = useThemeMode();
 
   const formattingDisabled = Boolean(disabled) || isLoading || Boolean(loadError);
+  const uploadDisabled = formattingDisabled || !onUploadAttachment;
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -451,6 +464,94 @@ export function WikiPageEditor({ disabled, onChange, value }: WikiPageEditorProp
     editor.focus();
   }, []);
 
+  // Inserts text at the current cursor, replacing any selection.
+  const insertAtCursor = useCallback((text: string) => {
+    const editor = editorRef.current;
+    const selection = editor?.getSelection();
+    if (!editor || !selection) {
+      return;
+    }
+
+    editor.executeEdits("wiki-attach", [{ range: selection, text, forceMoveMarkers: true }]);
+    editor.focus();
+  }, []);
+
+  // Uploads each file and inserts its Markdown reference at the cursor. Files
+  // upload sequentially so their references keep a predictable order.
+  const uploadFiles = useCallback(
+    async (files: readonly File[]) => {
+      if (!onUploadAttachment || files.length === 0) {
+        return;
+      }
+
+      setUploadError(undefined);
+      setUploadCount((count) => count + files.length);
+      for (const file of files) {
+        try {
+          const result = await onUploadAttachment(file);
+          insertAtCursor(attachmentMarkdown(result));
+        } catch (error: unknown) {
+          setUploadError(error instanceof Error ? error.message : "Upload failed.");
+        } finally {
+          setUploadCount((count) => count - 1);
+        }
+      }
+    },
+    [insertAtCursor, onUploadAttachment]
+  );
+
+  // Handles paste (images only, so plain text paste is untouched) and drop of
+  // files onto the editor. Registered in the capture phase so it runs before
+  // Monaco's own clipboard handling.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !onUploadAttachment) {
+      return;
+    }
+
+    const onPaste = (event: ClipboardEvent) => {
+      const images = filesFromDataTransfer(event.clipboardData).filter(isImageFile);
+      if (images.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void uploadFiles(images);
+    };
+    const onDragOver = (event: DragEvent) => {
+      if (dragHasFiles(event.dataTransfer)) {
+        event.preventDefault();
+      }
+    };
+    const onDrop = (event: DragEvent) => {
+      const files = filesFromDataTransfer(event.dataTransfer);
+      if (files.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void uploadFiles(files);
+    };
+
+    container.addEventListener("paste", onPaste, true);
+    container.addEventListener("dragover", onDragOver, true);
+    container.addEventListener("drop", onDrop, true);
+    return () => {
+      container.removeEventListener("paste", onPaste, true);
+      container.removeEventListener("dragover", onDragOver, true);
+      container.removeEventListener("drop", onDrop, true);
+    };
+  }, [onUploadAttachment, uploadFiles]);
+
+  const onFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files ? Array.from(event.target.files) : [];
+      event.target.value = "";
+      void uploadFiles(files);
+    },
+    [uploadFiles]
+  );
+
   const heading = useCallback(
     (level: number) => transformLines((content) => toggleHeading(content, level)),
     [transformLines]
@@ -489,7 +590,27 @@ export function WikiPageEditor({ disabled, onChange, value }: WikiPageEditorProp
         <span className="wiki-format-sep" aria-hidden="true" />
         <div className="wiki-format-group">
           <button className="wiki-format-button" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={applyLink} title="Link" type="button">Link</button>
+          <button
+            className="wiki-format-button"
+            disabled={uploadDisabled || uploadCount > 0}
+            onMouseDown={keepEditorFocus}
+            onClick={() => fileInputRef.current?.click()}
+            title="Insert an image or file (or paste/drop into the editor)"
+            type="button"
+          >
+            Image
+          </button>
+          <input
+            accept="image/*"
+            hidden
+            multiple
+            onChange={onFileInputChange}
+            ref={fileInputRef}
+            type="file"
+          />
         </div>
+        {uploadCount > 0 ? <span className="wiki-format-status" role="status">Uploading…</span> : null}
+        {uploadError ? <span className="wiki-format-status wiki-format-status-error" role="alert">{uploadError}</span> : null}
         <div className="wiki-format-mermaid" ref={mermaidRef}>
           <button
             aria-expanded={mermaidOpen}

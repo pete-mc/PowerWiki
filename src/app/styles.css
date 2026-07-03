@@ -770,6 +770,20 @@ body {
   font-family: var(--pw-mono);
 }
 
+.wiki-format-status,
+.wiki-richtext-status {
+  align-self: center;
+  color: var(--pw-text-subtle, var(--pw-text));
+  font-size: var(--pw-font-size-menu);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.wiki-format-status-error,
+.wiki-richtext-status-error {
+  color: var(--pw-danger, #cc293d);
+}
+
 .wiki-format-mermaid {
   margin-left: auto;
   position: relative;

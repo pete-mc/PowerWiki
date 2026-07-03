@@ -96,3 +96,36 @@ After every set of changes, always publish to the marketplace:
 3. Run: `$pat = (Get-Content C:\Users\peter\sources\repos\PowerWiki\ado.pat -Raw).Trim(); npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat`
 4. Commit the completed change set with a clear, concise commit message.
 5. Create an annotated Git tag for the published patch version (for example, `v1.0.15`).
+
+## Verifying in the browser (Playwright)
+
+PowerWiki runs inside a cross-origin iframe (`gallerycdn.vsassets.io`) hosted in
+`dev.azure.com`. Browser-extension automation can only see the top frame, so it
+cannot read the extension iframe's DOM, console, or network, and its screenshots
+don't reach the repo filesystem. Use the Playwright harness in `tools/pw/`
+instead — Playwright treats the cross-origin iframe as a first-class frame, so it
+can assert on the real rendered DOM, capture iframe console/network, and save
+screenshots locally. Prefer it for verifying rendering and editing behavior.
+
+Because the extension only runs from the published Marketplace build, verify a
+change by publishing it first (see Publishing). The org auto-updates to the new
+version within a few minutes; a change that alters `scopes` instead pauses at
+"Pending review" until an org admin approves it in Organization settings →
+Extensions.
+
+Setup and use (details in `tools/pw/README.md`):
+
+1. `npm install` (adds `playwright-core`, which drives your installed Chrome).
+2. `npm run pw:auth` once — opens Chrome against a dedicated persistent profile
+   at `~/.powerwiki-pw`; sign in to Azure DevOps in that window. The session
+   persists there for later runs. A dedicated profile is required because Chrome
+   blocks remote debugging on the real default profile and App-Bound Encryption
+   blocks copying its cookies, so signing in to a separate profile once is the
+   reliable path. This profile holds session cookies — never commit it.
+3. `npm run pw:verify` — asserts, inside the iframe, that work-item/query
+   enrichment and the byline load, that enrichment survives page navigation, and
+   that an uploaded image renders. Artifacts land in `tools/pw/artifacts/`
+   (gitignored). Re-run `pw:auth` if verify reports it is waiting for sign-in.
+
+Extend `tools/pw/verify.mjs` with a new assertion whenever you add a feature
+worth guarding, so the harness doubles as a regression smoke test.

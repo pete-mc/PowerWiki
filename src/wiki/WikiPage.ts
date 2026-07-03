@@ -21,3 +21,11 @@ export interface WikiPageSummary {
   readonly order: number;
   readonly path: string;
 }
+
+/** An uploaded wiki attachment stored under the wiki's `.attachments` folder. */
+export interface WikiAttachment {
+  /** File name as stored, e.g. "diagram-lk9f2.png". */
+  readonly name: string;
+  /** Wiki-relative path used to reference it, e.g. "/.attachments/diagram-lk9f2.png". */
+  readonly path: string;
+}

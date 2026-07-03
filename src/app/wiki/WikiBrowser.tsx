@@ -7,6 +7,7 @@ import {
 } from "azure-devops-extension-api/WorkItemTracking";
 import type { HeaderMenuAction } from "../HeaderMenuAction";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
+import { buildAttachmentName, fileToBase64, isImageFile } from "../../wiki/attachmentUpload";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
@@ -1030,6 +1031,18 @@ export function WikiBrowser({
     [activeWikiId, pageMeta?.id, wikiClient]
   );
 
+  const uploadAttachment = useCallback(
+    async (file: File) => {
+      if (!wikiClient || !activeWikiId) {
+        throw new Error("PowerWiki needs an Azure DevOps project context to upload files.");
+      }
+
+      const base64 = await fileToBase64(file);
+      const attachment = await wikiClient.createAttachment(activeWikiId, buildAttachmentName(file), base64);
+      return { name: attachment.name, path: attachment.path, isImage: isImageFile(file) };
+    },
+    [activeWikiId, wikiClient]
+  );
   const resolveImageSrc = useCallback(
     (src: string, currentPath: string): string | undefined => {
       if (!activeWiki || !projectName) {
@@ -1204,8 +1217,11 @@ export function WikiBrowser({
             ) : null}
             {editMode === "richText" ? (
               <WikiRichTextEditor
+                currentPath={activePage.path}
                 disabled={saveState === "saving"}
                 onChange={setDraftContent}
+                onResolveImageSrc={resolveImageSrc}
+                onUploadAttachment={uploadAttachment}
                 value={draftContent}
               />
             ) : null}
@@ -1213,6 +1229,7 @@ export function WikiBrowser({
               <WikiPageEditor
                 disabled={saveState === "saving"}
                 onChange={setDraftContent}
+                onUploadAttachment={uploadAttachment}
                 value={draftContent}
               />
             ) : null}
@@ -1222,6 +1239,7 @@ export function WikiBrowser({
                   <WikiPageEditor
                     disabled={saveState === "saving"}
                     onChange={setDraftContent}
+                    onUploadAttachment={uploadAttachment}
                     value={draftContent}
                   />
                 </div>

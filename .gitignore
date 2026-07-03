@@ -4,3 +4,5 @@ dist/
 npm-debug.log*
 ado.pat
 mcps
+tools/pw/artifacts/
+screenshots/
