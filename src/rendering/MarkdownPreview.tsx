@@ -250,10 +250,12 @@ export function MarkdownPreview({
         continue;
       }
 
+      renderWorkItemBadge(badge, { id });
+
       void onLoadWorkItemBadge(id)
         .then((details) => {
           if (!cancelled) {
-            enrichWorkItemBadge(badge, details);
+            renderWorkItemBadge(badge, details);
           }
         })
         .catch(() => {
@@ -418,7 +420,7 @@ function renderQueryResult(container: HTMLElement, result: QueryTableResult): vo
   container.appendChild(scroller);
 }
 
-function enrichWorkItemBadge(badge: HTMLElement, details: WorkItemBadgeDetails): void {
+function renderWorkItemBadge(badge: HTMLElement, details: WorkItemBadgeDetails): void {
   const titleParts = [
     details.type,
     `#${details.id}`,

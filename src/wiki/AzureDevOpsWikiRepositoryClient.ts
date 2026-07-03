@@ -7,7 +7,7 @@ import { getClient } from "azure-devops-extension-api/Common";
 import {
   GitRestClient,
   VersionControlRecursionType,
-  type GitCommitRef
+  type GitQueryCommitsCriteria
 } from "azure-devops-extension-api/Git";
 import {
   WikiRestClient,
@@ -172,30 +172,10 @@ class WikiJsonClient extends WikiRestClient {
   }
 }
 
-class GitJsonClient extends GitRestClient {
-  public async getLatestCommit(
-    project: string,
-    repositoryId: string,
-    itemPath: string
-  ): Promise<GitCommitRef | undefined> {
-    const result = await this.beginRequest<{ value?: GitCommitRef[] }>({
-      apiVersion: "7.1",
-      routeTemplate: "{project}/_apis/git/repositories/{repositoryId}/commits",
-      routeValues: { project, repositoryId },
-      queryParams: {
-        "searchCriteria.itemPath": itemPath,
-        "$top": 1,
-      },
-    });
-
-    return result.value?.[0];
-  }
-}
-
 export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   private readonly wikiClient = getClient(WikiRestClient);
   private readonly wikiJsonClient = getClient(WikiJsonClient);
-  private readonly gitJsonClient = getClient(GitJsonClient);
+  private readonly gitClient = getClient(GitRestClient);
 
   public constructor(private readonly projectName: string) {}
 
@@ -263,7 +243,9 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     gitItemPath: string
   ): Promise<WikiPageChange | undefined> {
     try {
-      const latest = await this.gitJsonClient.getLatestCommit(this.projectName, repositoryId, gitItemPath);
+      const criteria = { itemPath: gitItemPath } as GitQueryCommitsCriteria;
+      const commits = await this.gitClient.getCommitsBatch(criteria, repositoryId, this.projectName, 0, 1, false);
+      const latest = commits[0];
       if (!latest) {
         return undefined;
       }
