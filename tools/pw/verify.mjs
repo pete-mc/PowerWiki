@@ -448,6 +448,81 @@ try {
     check(false, `autosave/draft recovery failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "10-autosave-error.png") });
   }
+
+  // Authoring R2 #24: the slash-command palette inserts a Markdown element.
+  // "/query" matches only the Query table command, so the top suggestion is
+  // unambiguous.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Edit page" }).click();
+    await frame.waitForSelector(".wiki-page-editor .monaco-editor", { timeout: 30000 });
+    await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      if (models[0]) models[0].setValue("");
+    });
+    await frame.click(".wiki-page-editor .monaco-editor");
+    await page.keyboard.type("/query");
+    await frame.waitForSelector(".monaco-editor .suggest-widget.visible", { timeout: 10000 });
+    await sleep(300);
+    await page.keyboard.press("Enter");
+    await sleep(300);
+    const slashValue = await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      return models[0] ? models[0].getValue() : "";
+    });
+    check(
+      slashValue.includes("::: query-table") && !slashValue.includes("/query"),
+      `slash-command palette inserts an element (${JSON.stringify(slashValue.slice(0, 40))})`
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "11-slash.png") });
+    await frame.getByRole("button", { name: "Cancel" }).click();
+    await sleep(500);
+  } catch (error) {
+    check(false, `slash-command palette failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "11-slash-error.png") });
+  }
+
+  // Authoring R3 #27: in-context table editing — the floating toolbar appears
+  // when a cell is focused and adds a row/column.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Edit page" }).click();
+    await frame.waitForSelector(".wiki-editor-mode-select", { timeout: 30000 });
+    await frame.selectOption(".wiki-editor-mode-select", "richText");
+    await frame.waitForSelector(".wiki-richtext-editor", { timeout: 30000 });
+    // Clear the page (Home already contains a table) so the inserted one is the
+    // only table on the surface.
+    await frame.click(".wiki-richtext-editor");
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Delete");
+    await frame.getByRole("button", { name: "Table", exact: true }).click();
+    await frame.waitForSelector(".wiki-richtext-editor table tbody td", { timeout: 10000 });
+    const before = await frame.evaluate(() => {
+      const t = document.querySelector(".wiki-richtext-editor table");
+      return { rows: t.rows.length, cols: t.rows[0].cells.length };
+    });
+    // Focus a body cell to reveal the floating toolbar, then add a row + column.
+    await frame.click(".wiki-richtext-editor table tbody td");
+    await frame.waitForSelector(".wiki-richtext-table-tools", { timeout: 10000 });
+    check(true, "table toolbar appears when a cell is focused");
+    await frame.click('.wiki-richtext-table-tools button[title="Insert row below"]');
+    await frame.click('.wiki-richtext-table-tools button[title="Insert column right"]');
+    await sleep(300);
+    const after = await frame.evaluate(() => {
+      const t = document.querySelector(".wiki-richtext-editor table");
+      return { rows: t.rows.length, cols: t.rows[0].cells.length };
+    });
+    check(after.rows === before.rows + 1, `in-context insert adds a row (${before.rows} -> ${after.rows})`);
+    check(after.cols === before.cols + 1, `in-context insert adds a column (${before.cols} -> ${after.cols})`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "12-table-tools.png") });
+    await frame.getByRole("button", { name: "Cancel" }).click();
+    await sleep(500);
+  } catch (error) {
+    check(false, `in-context table editing failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "12-table-tools-error.png") });
+  }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
 } finally {

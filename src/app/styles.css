@@ -646,6 +646,60 @@ body {
 .wiki-richtext-shell {
   background: var(--pw-surface);
   min-width: 0;
+  position: relative;
+}
+
+/* Floating table toolbar, shown above the active table only while a cell is
+   focused (kept out of the way otherwise). */
+.wiki-richtext-table-tools {
+  align-items: center;
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border-strong);
+  border-radius: 6px;
+  box-shadow: var(--pw-menu-shadow);
+  display: flex;
+  gap: 4px;
+  padding: 3px 5px;
+  position: absolute;
+  transform: translateY(calc(-100% - 6px));
+  white-space: nowrap;
+  z-index: 20;
+}
+
+.wiki-richtext-table-group {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+}
+
+.wiki-richtext-table-label {
+  color: var(--pw-text-secondary);
+  font-size: 11px;
+  margin-right: 2px;
+}
+
+.wiki-richtext-table-sep {
+  align-self: stretch;
+  border-left: 1px solid var(--pw-border);
+  margin: 2px 3px;
+}
+
+.wiki-richtext-table-tools button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  min-width: 26px;
+  padding: 4px 5px;
+}
+
+.wiki-richtext-table-tools button:hover {
+  background: var(--pw-hover);
+  border-color: var(--pw-border);
 }
 
 .wiki-richtext-toolbar {
@@ -1090,8 +1144,26 @@ body {
   width: 1px;
 }
 
-.wiki-format-mermaid {
+.wiki-format-hint {
+  align-items: center;
+  align-self: center;
+  color: var(--pw-text-secondary);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 4px;
   margin-left: auto;
+}
+
+.wiki-format-hint kbd {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 0 5px;
+}
+
+.wiki-format-mermaid {
   position: relative;
 }
 

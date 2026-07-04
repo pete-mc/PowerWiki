@@ -30,10 +30,17 @@ export function WikiRichTextEditor({
   value,
 }: WikiRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastAppliedValueRef = useRef<string>("");
+  // The table cell the caret is currently in, so the floating table toolbar can
+  // act on it even after a toolbar click moves focus off the caret.
+  const activeCellRef = useRef<HTMLTableCellElement | null>(null);
   const [uploadCount, setUploadCount] = useState(0);
   const [uploadError, setUploadError] = useState<string>();
+  // Position of the floating table toolbar (relative to the shell), or null when
+  // the caret is not inside a table.
+  const [tableUi, setTableUi] = useState<{ top: number; left: number } | null>(null);
   // Kept in refs so the memoized renderer's image rule always resolves against
   // the current page/resolver without rebuilding the renderer.
   const resolveImageRef = useRef(onResolveImageSrc);
@@ -156,77 +163,139 @@ export function WikiRichTextEditor({
     syncMarkdownFromDom();
   }
 
-  function withSelectedCell(action: (table: HTMLTableElement, rowIndex: number, cellIndex: number) => void) {
+  // Repositions the floating table toolbar over the active cell's table, or
+  // hides it when the caret is no longer in a table inside the editor.
+  const updateTableToolbar = useCallback(() => {
+    const cell = activeCellRef.current;
+    const editor = editorRef.current;
+    const shell = shellRef.current;
+    if (!cell || !editor || !shell || !editor.contains(cell)) {
+      setTableUi(null);
+      return;
+    }
+
+    const table = cell.closest("table");
+    if (!table) {
+      setTableUi(null);
+      return;
+    }
+
+    const shellRect = shell.getBoundingClientRect();
+    const tableRect = table.getBoundingClientRect();
+    setTableUi({ top: tableRect.top - shellRect.top, left: tableRect.left - shellRect.left });
+  }, []);
+
+  // Tracks the active table cell as the caret moves, and keeps the toolbar
+  // pinned to the table on scroll/resize. The toolbar buttons preventDefault on
+  // mousedown so clicking them doesn't move the caret out of the cell.
+  useEffect(() => {
+    function onSelectionChange() {
+      const editor = editorRef.current;
+      const node = document.getSelection()?.anchorNode;
+      if (!editor || !node || !editor.contains(node)) {
+        return;
+      }
+
+      const element = node instanceof Element ? node : node.parentElement;
+      const cell = element?.closest<HTMLTableCellElement>("td, th");
+      if (cell && editor.contains(cell)) {
+        activeCellRef.current = cell;
+        updateTableToolbar();
+      } else {
+        activeCellRef.current = null;
+        setTableUi(null);
+      }
+    }
+
+    const editor = editorRef.current;
+    document.addEventListener("selectionchange", onSelectionChange);
+    editor?.addEventListener("scroll", updateTableToolbar);
+    window.addEventListener("resize", updateTableToolbar);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      editor?.removeEventListener("scroll", updateTableToolbar);
+      window.removeEventListener("resize", updateTableToolbar);
+    };
+  }, [updateTableToolbar]);
+
+  function withActiveCell(
+    action: (context: {
+      table: HTMLTableElement;
+      row: HTMLTableRowElement;
+      cell: HTMLTableCellElement;
+      rowIndex: number;
+      cellIndex: number;
+    }) => void
+  ) {
     if (disabled) {
       return;
     }
 
-    const selection = window.getSelection();
-    const anchor = selection?.anchorNode;
-    if (!anchor) {
-      return;
-    }
-
-    const cell = anchor instanceof Element
-      ? anchor.closest<HTMLTableCellElement>("td, th")
-      : anchor.parentElement?.closest<HTMLTableCellElement>("td, th");
-    if (!cell) {
+    const cell = activeCellRef.current;
+    const editor = editorRef.current;
+    if (!cell || !editor || !editor.contains(cell)) {
       return;
     }
 
     const row = cell.parentElement;
-    const table = row?.closest("table");
+    const table = cell.closest("table");
     if (!(row instanceof HTMLTableRowElement) || !(table instanceof HTMLTableElement)) {
       return;
     }
 
-    action(table, row.rowIndex, cell.cellIndex);
+    action({ table, row, cell, rowIndex: row.rowIndex, cellIndex: cell.cellIndex });
     syncMarkdownFromDom();
+    requestAnimationFrame(updateTableToolbar);
   }
 
   function addTableRow(after: boolean) {
-    withSelectedCell((table, rowIndex) => {
-      const sourceRow = table.rows.item(rowIndex);
-      if (!sourceRow) {
+    withActiveCell(({ row }) => {
+      const section = row.parentElement;
+      if (!(section instanceof HTMLTableSectionElement)) {
         return;
       }
 
-      const insertIndex = after ? rowIndex + 1 : rowIndex;
-      const body = sourceRow.parentElement;
-      if (!(body instanceof HTMLTableSectionElement)) {
-        return;
-      }
-
-      const newRow = body.insertRow(insertIndex - (table.tHead ? table.tHead.rows.length : 0));
-      for (const sourceCell of Array.from(sourceRow.cells)) {
-        const tagName = sourceCell.tagName.toLowerCase() === "th" ? "th" : "td";
-        const newCell = document.createElement(tagName);
+      const newRow = document.createElement("tr");
+      for (const sourceCell of Array.from(row.cells)) {
+        // New rows are always body cells even when cloned from a header row.
+        const newCell = document.createElement(sourceCell.tagName.toLowerCase() === "th" && section.tagName === "THEAD" ? "th" : "td");
         newCell.innerHTML = "<br>";
         newRow.appendChild(newCell);
       }
+      section.insertBefore(newRow, after ? row.nextElementSibling : row);
     });
   }
 
   function removeTableRow() {
-    withSelectedCell((table, rowIndex) => {
-      if (table.rows.length <= 1) {
+    withActiveCell(({ table, rowIndex }) => {
+      if (table.rows.length > 1) {
+        table.deleteRow(rowIndex);
+        activeCellRef.current = null;
+      }
+    });
+  }
+
+  function moveTableRow(down: boolean) {
+    withActiveCell(({ row }) => {
+      const sibling = down ? row.nextElementSibling : row.previousElementSibling;
+      if (!(sibling instanceof HTMLTableRowElement) || row.parentElement !== sibling.parentElement) {
         return;
       }
-
-      table.deleteRow(rowIndex);
+      if (down) {
+        row.parentElement?.insertBefore(sibling, row);
+      } else {
+        row.parentElement?.insertBefore(row, sibling);
+      }
     });
   }
 
   function addTableColumn(after: boolean) {
-    withSelectedCell((table, _rowIndex, cellIndex) => {
+    withActiveCell(({ table, cellIndex }) => {
       const insertIndex = after ? cellIndex + 1 : cellIndex;
-
       for (const row of Array.from(table.rows)) {
         const referenceCell = row.cells.item(cellIndex);
-        const tagName = referenceCell?.tagName.toLowerCase() === "th" ? "th" : "td";
-        const cell = document.createElement(tagName);
+        const cell = document.createElement(referenceCell?.tagName.toLowerCase() === "th" ? "th" : "td");
         cell.innerHTML = "<br>";
-
         const beforeNode = row.cells.item(insertIndex);
         if (beforeNode) {
           row.insertBefore(cell, beforeNode);
@@ -238,16 +307,35 @@ export function WikiRichTextEditor({
   }
 
   function removeTableColumn() {
-    withSelectedCell((table, _rowIndex, cellIndex) => {
+    withActiveCell(({ table, cellIndex }) => {
       const firstRow = table.rows.item(0);
       if (!firstRow || firstRow.cells.length <= 1) {
         return;
       }
+      for (const row of Array.from(table.rows)) {
+        row.cells.item(cellIndex)?.remove();
+      }
+      activeCellRef.current = null;
+    });
+  }
 
+  function moveTableColumn(right: boolean) {
+    withActiveCell(({ table, cellIndex }) => {
+      const targetIndex = right ? cellIndex + 1 : cellIndex - 1;
+      const width = table.rows.item(0)?.cells.length ?? 0;
+      if (targetIndex < 0 || targetIndex >= width) {
+        return;
+      }
       for (const row of Array.from(table.rows)) {
         const cell = row.cells.item(cellIndex);
-        if (cell) {
-          row.removeChild(cell);
+        const target = row.cells.item(targetIndex);
+        if (!cell || !target) {
+          continue;
+        }
+        if (right) {
+          row.insertBefore(target, cell);
+        } else {
+          row.insertBefore(cell, target);
         }
       }
     });
@@ -321,7 +409,7 @@ export function WikiRichTextEditor({
   }
 
   return (
-    <div className="wiki-richtext-shell">
+    <div className="wiki-richtext-shell" ref={shellRef}>
       <div className="wiki-richtext-toolbar" role="toolbar" aria-label="Rich text formatting">
         <button disabled={disabled} onClick={() => runCommand("bold")} type="button">Bold</button>
         <button disabled={disabled} onClick={() => runCommand("italic")} type="button">Italic</button>
@@ -336,10 +424,6 @@ export function WikiRichTextEditor({
         <button disabled={disabled} onClick={insertLink} type="button">Link</button>
         <button disabled={disabled || !onUploadAttachment || uploadCount > 0} onClick={insertImage} type="button">Image</button>
         <button disabled={disabled} onClick={insertTable} type="button">Table</button>
-        <button disabled={disabled} onClick={() => addTableRow(true)} type="button">Row+</button>
-        <button disabled={disabled} onClick={removeTableRow} type="button">Row-</button>
-        <button disabled={disabled} onClick={() => addTableColumn(true)} type="button">Col+</button>
-        <button disabled={disabled} onClick={removeTableColumn} type="button">Col-</button>
         {uploadCount > 0 ? <span className="wiki-richtext-status" role="status">Uploading…</span> : null}
         {uploadError ? <span className="wiki-richtext-status wiki-richtext-status-error" role="alert">{uploadError}</span> : null}
         <input
@@ -375,6 +459,7 @@ export function WikiRichTextEditor({
           event.preventDefault();
           void uploadFiles(files);
         }}
+        onBlur={() => setTableUi(null)}
         onInput={(event) => {
           const markdown = turndown.turndown(event.currentTarget.innerHTML);
           lastAppliedValueRef.current = markdown;
@@ -395,6 +480,33 @@ export function WikiRichTextEditor({
         role="textbox"
         suppressContentEditableWarning
       />
+      {tableUi ? (
+        <div
+          className="wiki-richtext-table-tools"
+          onMouseDown={(event) => event.preventDefault()}
+          role="toolbar"
+          aria-label="Table editing"
+          style={{ left: tableUi.left, top: tableUi.top }}
+        >
+          <span className="wiki-richtext-table-group" aria-label="Rows">
+            <span className="wiki-richtext-table-label">Row</span>
+            <button onClick={() => addTableRow(false)} title="Insert row above" type="button">＋↑</button>
+            <button onClick={() => addTableRow(true)} title="Insert row below" type="button">＋↓</button>
+            <button onClick={() => moveTableRow(false)} title="Move row up" type="button">↑</button>
+            <button onClick={() => moveTableRow(true)} title="Move row down" type="button">↓</button>
+            <button onClick={removeTableRow} title="Delete row" type="button">🗑</button>
+          </span>
+          <span className="wiki-richtext-table-sep" aria-hidden="true" />
+          <span className="wiki-richtext-table-group" aria-label="Columns">
+            <span className="wiki-richtext-table-label">Col</span>
+            <button onClick={() => addTableColumn(false)} title="Insert column left" type="button">＋←</button>
+            <button onClick={() => addTableColumn(true)} title="Insert column right" type="button">＋→</button>
+            <button onClick={() => moveTableColumn(false)} title="Move column left" type="button">←</button>
+            <button onClick={() => moveTableColumn(true)} title="Move column right" type="button">→</button>
+            <button onClick={removeTableColumn} title="Delete column" type="button">🗑</button>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
