@@ -1127,6 +1127,123 @@ body {
   background: var(--pw-hover);
 }
 
+/* Page-link picker popover */
+.wiki-format-linkpicker {
+  position: relative;
+}
+
+.wiki-format-linkpicker-popover {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 6px;
+  box-shadow: var(--pw-menu-shadow);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  padding: 6px;
+  position: absolute;
+  top: calc(100% + 4px);
+  width: 280px;
+  z-index: 10;
+}
+
+.wiki-format-linkpicker-search {
+  background: var(--pw-input-bg, var(--pw-surface));
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  font: inherit;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
+.wiki-format-linkpicker-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.wiki-format-linkpicker-item {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 1px;
+  padding: 6px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.wiki-format-linkpicker-item:hover {
+  background: var(--pw-hover);
+}
+
+.wiki-format-linkpicker-title {
+  font-weight: 600;
+}
+
+.wiki-format-linkpicker-path {
+  color: var(--pw-text-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-format-linkpicker-empty {
+  color: var(--pw-text-secondary);
+  padding: 8px;
+}
+
+/* Autosaved-draft recovery banner (shown above a page when a draft exists) */
+.wiki-draft-recovery {
+  align-items: center;
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border-strong, var(--pw-border));
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+}
+
+.wiki-draft-recovery-text {
+  color: var(--pw-text);
+}
+
+.wiki-draft-recovery-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wiki-draft-recovery-actions button {
+  background: transparent;
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font: inherit;
+  padding: 5px 12px;
+}
+
+.wiki-draft-recovery-actions button:hover {
+  background: var(--pw-hover);
+}
+
+.wiki-draft-recovery-actions .wiki-draft-recovery-restore {
+  background: var(--pw-accent);
+  border-color: var(--pw-accent);
+  color: var(--pw-on-accent, #ffffff);
+}
+
 .wiki-page-editor {
   height: min(72vh, 820px);
   min-height: 520px;

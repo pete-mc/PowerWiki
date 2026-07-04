@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type * as Monaco from "monaco-editor";
 
@@ -11,11 +11,19 @@ import {
   type UploadAttachment,
 } from "../../wiki/attachmentUpload";
 
+/** A wiki page offered by the page-link picker. */
+export interface WikiPageLink {
+  readonly path: string;
+  readonly title: string;
+}
+
 interface WikiPageEditorProps {
   readonly disabled?: boolean;
   readonly onChange: (value: string) => void;
   /** Uploads a pasted/dropped/picked file and returns its wiki reference. */
   readonly onUploadAttachment?: UploadAttachment;
+  /** Wiki pages the page-link picker can insert links to. */
+  readonly pages?: readonly WikiPageLink[];
   readonly value: string;
 }
 
@@ -243,16 +251,21 @@ const MERMAID_SNIPPETS: readonly MermaidSnippet[] = [
 
 let monacoLoadPromise: Promise<MonacoApi> | undefined;
 
-export function WikiPageEditor({ disabled, onChange, onUploadAttachment, value }: WikiPageEditorProps) {
+export function WikiPageEditor({ disabled, onChange, onUploadAttachment, pages, value }: WikiPageEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<MonacoApi | undefined>(undefined);
   const onChangeRef = useRef(onChange);
   const mermaidRef = useRef<HTMLDivElement>(null);
+  const linkPickerRef = useRef<HTMLDivElement>(null);
+  const linkSearchRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [mermaidOpen, setMermaidOpen] = useState(false);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const [linkQuery, setLinkQuery] = useState("");
+  const [editorReady, setEditorReady] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
   const [uploadError, setUploadError] = useState<string>();
   const themeMode = useThemeMode();
@@ -305,6 +318,7 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, value }
         });
         resizeObserver.observe(container);
         setIsLoading(false);
+        setEditorReady(true);
 
         return () => {
           resizeObserver.disconnect();
@@ -312,6 +326,7 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, value }
           editor.dispose();
           editorRef.current = undefined;
           monacoRef.current = undefined;
+          setEditorReady(false);
         };
       } catch (error: unknown) {
         if (!disposed) {
@@ -542,6 +557,97 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, value }
     editor.focus();
   }, []);
 
+  // Inserts a Markdown link to another wiki page. Any current selection becomes
+  // the link text; otherwise the page title is used.
+  const insertPageLink = useCallback((page: WikiPageLink) => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    const selection = editor?.getSelection();
+    if (!editor || !model || !selection) {
+      return;
+    }
+
+    const label = model.getValueInRange(selection) || page.title;
+    editor.executeEdits("wiki-format", [
+      { range: selection, text: `[${label}](${encodeURI(page.path)})`, forceMoveMarkers: true },
+    ]);
+    setLinkPickerOpen(false);
+    setLinkQuery("");
+    editor.focus();
+  }, []);
+
+  // Binds the common Markdown formatting shortcuts once the editor exists.
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editorReady || !editor || !monaco) {
+      return;
+    }
+
+    const { CtrlCmd } = monaco.KeyMod;
+    const disposables = [
+      editor.addAction({
+        id: "powerwiki.bold",
+        label: "PowerWiki: Bold",
+        keybindings: [CtrlCmd | monaco.KeyCode.KeyB],
+        run: () => applyWrap("**", "**", "bold text"),
+      }),
+      editor.addAction({
+        id: "powerwiki.italic",
+        label: "PowerWiki: Italic",
+        keybindings: [CtrlCmd | monaco.KeyCode.KeyI],
+        run: () => applyWrap("*", "*", "italic text"),
+      }),
+      editor.addAction({
+        id: "powerwiki.link",
+        label: "PowerWiki: Insert link",
+        keybindings: [CtrlCmd | monaco.KeyCode.KeyK],
+        run: () => applyLink(),
+      }),
+    ];
+    return () => disposables.forEach((disposable) => disposable.dispose());
+  }, [applyLink, applyWrap, editorReady]);
+
+  const filteredPages = useMemo(() => {
+    const all = pages ?? [];
+    const query = linkQuery.trim().toLowerCase();
+    const matches = query
+      ? all.filter(
+          (page) => page.title.toLowerCase().includes(query) || page.path.toLowerCase().includes(query)
+        )
+      : all;
+    return matches.slice(0, 50);
+  }, [linkQuery, pages]);
+
+  // Close the page-link picker on an outside click or Escape, and focus its
+  // search box when it opens.
+  useEffect(() => {
+    if (!linkPickerOpen) {
+      setLinkQuery("");
+      return;
+    }
+
+    linkSearchRef.current?.focus();
+
+    function onPointerDown(event: MouseEvent) {
+      if (linkPickerRef.current && !linkPickerRef.current.contains(event.target as Node)) {
+        setLinkPickerOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setLinkPickerOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [linkPickerOpen]);
+
   // Uploads each file and inserts its Markdown reference at the cursor. Files
   // upload sequentially so their references keep a predictable order.
   const uploadFiles = useCallback(
@@ -639,8 +745,8 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, value }
         </div>
         <span className="wiki-format-sep" aria-hidden="true" />
         <div className="wiki-format-group">
-          <button className="wiki-format-button bold" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={() => applyWrap("**", "**", "bold text")} title="Bold" type="button">B</button>
-          <button className="wiki-format-button italic" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={() => applyWrap("*", "*", "italic text")} title="Italic" type="button">I</button>
+          <button className="wiki-format-button bold" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={() => applyWrap("**", "**", "bold text")} title="Bold (Ctrl+B)" type="button">B</button>
+          <button className="wiki-format-button italic" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={() => applyWrap("*", "*", "italic text")} title="Italic (Ctrl+I)" type="button">I</button>
           <button className="wiki-format-button code" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={() => applyWrap("`", "`", "code")} title="Inline code" type="button">{"</>"}</button>
         </div>
         <span className="wiki-format-sep" aria-hidden="true" />
@@ -655,7 +761,59 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, value }
         </div>
         <span className="wiki-format-sep" aria-hidden="true" />
         <div className="wiki-format-group">
-          <button className="wiki-format-button" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={applyLink} title="Link" type="button">Link</button>
+          <button className="wiki-format-button" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={applyLink} title="Link (Ctrl+K)" type="button">Link</button>
+          <div className="wiki-format-linkpicker" ref={linkPickerRef}>
+            <button
+              aria-expanded={linkPickerOpen}
+              aria-haspopup="menu"
+              className="wiki-format-button"
+              disabled={formattingDisabled || (pages?.length ?? 0) === 0}
+              onMouseDown={keepEditorFocus}
+              onClick={() => setLinkPickerOpen((open) => !open)}
+              title="Insert a link to another wiki page"
+              type="button"
+            >
+              Page link ▾
+            </button>
+            {linkPickerOpen ? (
+              <div className="wiki-format-linkpicker-popover" role="menu">
+                <input
+                  className="wiki-format-linkpicker-search"
+                  onChange={(event) => setLinkQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && filteredPages[0]) {
+                      event.preventDefault();
+                      insertPageLink(filteredPages[0]);
+                    }
+                  }}
+                  placeholder="Search pages…"
+                  ref={linkSearchRef}
+                  type="text"
+                  value={linkQuery}
+                />
+                <div className="wiki-format-linkpicker-list">
+                  {filteredPages.length === 0 ? (
+                    <div className="wiki-format-linkpicker-empty">No pages found.</div>
+                  ) : (
+                    filteredPages.map((page) => (
+                      <button
+                        className="wiki-format-linkpicker-item"
+                        key={page.path}
+                        onClick={() => insertPageLink(page)}
+                        onMouseDown={keepEditorFocus}
+                        role="menuitem"
+                        title={page.path}
+                        type="button"
+                      >
+                        <span className="wiki-format-linkpicker-title">{page.title}</span>
+                        <span className="wiki-format-linkpicker-path">{page.path}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <button
             className="wiki-format-button"
             disabled={uploadDisabled || uploadCount > 0}

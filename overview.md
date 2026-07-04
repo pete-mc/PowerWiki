@@ -26,7 +26,9 @@ No migration. No proprietary formats. Just better reading and editing for the Ma
 - **Powerful editing**
   - Monaco-based Markdown editor with word wrap, syntax awareness, and comfortable editing.
   - Save changes directly back to your Azure DevOps wiki repository.
-  - Formatting helpers for headings, emphasis, code, lists, links, and starter Mermaid diagrams.
+  - Formatting helpers for headings, emphasis, code, lists, links, and starter Mermaid diagrams, plus keyboard shortcuts (Ctrl+B / Ctrl+I / Ctrl+K).
+  - Page-link picker to insert links to other wiki pages from a searchable list.
+  - Never lose work: a browser guard warns before you close or reload with unsaved edits, and local autosave offers to restore an in-progress draft after an accidental reload.
   - Create new pages, move or reorder pages, and delete pages through Azure DevOps Wiki APIs.
 
 - **Azure Boards enhancements** (portable by design)

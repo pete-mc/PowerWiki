@@ -14,13 +14,14 @@ import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepos
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta } from "../../wiki/WikiComment";
+import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
 import { buildHubPageUrl, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 import { StatusMessage } from "./StatusMessage";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
 import { WikiRichTextEditor } from "./WikiRichTextEditor";
 import { WikiMovePageDialog } from "./WikiMovePageDialog";
 import type { WikiPageBylineProps } from "./WikiPageByline";
-import { WikiPageEditor } from "./WikiPageEditor";
+import { WikiPageEditor, type WikiPageLink } from "./WikiPageEditor";
 import { WikiPageTree, type WikiPageTreeActions } from "./WikiPageTree";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
@@ -86,6 +87,33 @@ function normalizePagePath(path: string): string {
   }
 
   return decoded.startsWith("/") ? decoded : `/${decoded}`;
+}
+
+/** Display title for a wiki page: its last path segment (root page -> "Home"). */
+function pageTitleFromPath(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  return segments.length > 0 ? segments[segments.length - 1] : "Home";
+}
+
+/** Human-friendly relative time for an autosaved draft ("3 minutes ago"). */
+function formatDraftTime(savedAt: number): string {
+  const seconds = Math.max(0, Math.round((Date.now() - savedAt) / 1000));
+  if (seconds < 45) {
+    return "just now";
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+  try {
+    return new Date(savedAt).toLocaleString();
+  } catch {
+    return "earlier";
+  }
 }
 
 function parseNavigationHash(hash: string): NavigationTarget | undefined {
@@ -269,6 +297,9 @@ export function WikiBrowser({
   // Heading slug to scroll to once the active page renders (from an &anchor=
   // deep link or a heading permalink click). Cleared on ordinary navigation.
   const [activeAnchor, setActiveAnchor] = useState<string | undefined>(undefined);
+  // An autosaved draft found for the active page that differs from its saved
+  // content, offered for recovery after an accidental reload.
+  const [recoverableDraft, setRecoverableDraft] = useState<StoredDraft | undefined>(undefined);
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string>();
@@ -320,6 +351,13 @@ export function WikiBrowser({
     () => buildWikiPageTree(pageList, loadedPaths),
     [loadedPaths, pageList]
   );
+  const pageLinks = useMemo<readonly WikiPageLink[]>(
+    () =>
+      pageList
+        .map((page) => ({ path: page.path, title: pageTitleFromPath(page.path) }))
+        .sort((a, b) => a.path.localeCompare(b.path)),
+    [pageList]
+  );
   const hasUnsavedChanges = Boolean(activePage && isEditing && draftContent !== activePage.content);
   const confirmDiscardEdits = useCallback(() => {
     return !hasUnsavedChangesRef.current || window.confirm("Discard unsaved page edits?");
@@ -340,15 +378,86 @@ export function WikiBrowser({
       return;
     }
 
+    // Discarding the edit also discards its autosaved draft.
+    if (activeWikiId && activePage) {
+      clearDraft(activeWikiId, activePage.path);
+    }
+    setRecoverableDraft(undefined);
     setDraftContent(activePage?.content ?? "");
     setSaveError(undefined);
     setSaveState("idle");
     setIsEditing(false);
-  }, [activePage?.content, confirmDiscardEdits]);
+  }, [activePage, activeWikiId, confirmDiscardEdits]);
 
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [hasUnsavedChanges]);
+
+  // Native guard for browser refresh/close/navigation (the in-app confirm only
+  // covers navigation inside PowerWiki). The prompt text is browser-controlled.
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  // Autosave the in-progress edit locally (debounced) so it survives a reload.
+  useEffect(() => {
+    if (!isEditing || !activeWikiId || !activePage || draftContent === activePage.content) {
+      return;
+    }
+
+    const wikiId = activeWikiId;
+    const path = activePage.path;
+    const timer = window.setTimeout(() => saveDraft(wikiId, path, draftContent), 800);
+    return () => window.clearTimeout(timer);
+  }, [activePage, activeWikiId, draftContent, isEditing]);
+
+  // On opening a page, surface any autosaved draft that differs from the saved
+  // content; drop a stale draft that already matches.
+  useEffect(() => {
+    if (!activeWikiId || !activePage) {
+      setRecoverableDraft(undefined);
+      return;
+    }
+
+    const draft = loadDraft(activeWikiId, activePage.path);
+    if (draft && draft.content !== activePage.content) {
+      setRecoverableDraft(draft);
+    } else {
+      if (draft) {
+        clearDraft(activeWikiId, activePage.path);
+      }
+      setRecoverableDraft(undefined);
+    }
+  }, [activePage, activeWikiId]);
+
+  const restoreDraft = useCallback(() => {
+    if (!recoverableDraft) {
+      return;
+    }
+
+    setDraftContent(recoverableDraft.content);
+    setEditMode("code");
+    setSaveError(undefined);
+    setSaveState("idle");
+    setIsEditing(true);
+    setRecoverableDraft(undefined);
+  }, [recoverableDraft]);
+
+  const discardDraft = useCallback(() => {
+    if (activeWikiId && activePage) {
+      clearDraft(activeWikiId, activePage.path);
+    }
+    setRecoverableDraft(undefined);
+  }, [activePage, activeWikiId]);
 
   useEffect(() => {
     setDraftContent(activePage?.content ?? "");
@@ -1055,6 +1164,8 @@ export function WikiBrowser({
         ...activePage,
         content: draftContent,
       });
+      clearDraft(activeWikiId, activePage.path);
+      setRecoverableDraft(undefined);
       setActivePage(savedPage);
       setDraftContent(savedPage.content);
       setIsEditing(false);
@@ -1285,6 +1396,7 @@ export function WikiBrowser({
                 disabled={saveState === "saving"}
                 onChange={setDraftContent}
                 onUploadAttachment={uploadAttachment}
+                pages={pageLinks}
                 value={draftContent}
               />
             ) : null}
@@ -1295,6 +1407,7 @@ export function WikiBrowser({
                     disabled={saveState === "saving"}
                     onChange={setDraftContent}
                     onUploadAttachment={uploadAttachment}
+                    pages={pageLinks}
                     value={draftContent}
                   />
                 </div>
@@ -1327,23 +1440,40 @@ export function WikiBrowser({
             ) : null}
           </section>
         ) : activePage ? (
-          <MarkdownPreview
-            markdown={activePage.content}
-            currentPath={activePage.path}
-            subPages={subPages}
-            anchor={activeAnchor}
-            buildHeadingUrl={buildHeadingUrl}
-            onHeadingLinkActivated={handleHeadingLinkActivated}
-            onLoadQueryTable={loadQueryTable}
-            onLoadWorkItemBadge={loadWorkItemBadge}
-            onNavigate={(path) => {
-              if (confirmDiscardEdits()) {
-                void loadPageByPath(path, true);
-              }
-            }}
-            onOpenWorkItem={(id) => void openWorkItem(id)}
-            onResolveImageSrc={resolveImageSrc}
-          />
+          <>
+            {recoverableDraft ? (
+              <div className="wiki-draft-recovery" role="alert">
+                <span className="wiki-draft-recovery-text">
+                  You have an unsaved draft of this page from {formatDraftTime(recoverableDraft.savedAt)}.
+                </span>
+                <span className="wiki-draft-recovery-actions">
+                  <button className="wiki-draft-recovery-restore" onClick={restoreDraft} type="button">
+                    Restore draft
+                  </button>
+                  <button onClick={discardDraft} type="button">
+                    Discard
+                  </button>
+                </span>
+              </div>
+            ) : null}
+            <MarkdownPreview
+              markdown={activePage.content}
+              currentPath={activePage.path}
+              subPages={subPages}
+              anchor={activeAnchor}
+              buildHeadingUrl={buildHeadingUrl}
+              onHeadingLinkActivated={handleHeadingLinkActivated}
+              onLoadQueryTable={loadQueryTable}
+              onLoadWorkItemBadge={loadWorkItemBadge}
+              onNavigate={(path) => {
+                if (confirmDiscardEdits()) {
+                  void loadPageByPath(path, true);
+                }
+              }}
+              onOpenWorkItem={(id) => void openWorkItem(id)}
+              onResolveImageSrc={resolveImageSrc}
+            />
+          </>
         ) : (
           <StatusMessage
             message={loadState === "loading" ? "Loading wiki content." : "Select a page to view it."}

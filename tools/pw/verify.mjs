@@ -9,6 +9,7 @@ import {
   ARTIFACTS_DIR,
   launch,
   openWikiPage,
+  powerWikiFrame,
   readLoadedVersion,
   sleep,
 } from "./lib.mjs";
@@ -368,6 +369,84 @@ try {
   } catch (error) {
     check(false, `query id column check failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-query-ids-error.png") });
+  }
+
+  // Authoring R1 #10: Ctrl+B wraps the selection, and the page-link picker
+  // inserts a Markdown link to another wiki page.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Edit page" }).click();
+    await frame.waitForSelector(".wiki-page-editor .monaco-editor", { timeout: 30000 });
+    await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      if (models[0]) models[0].setValue("word");
+    });
+    await frame.click(".wiki-page-editor .monaco-editor");
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Control+b");
+    await sleep(300);
+    const boldValue = await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      return models[0] ? models[0].getValue() : null;
+    });
+    check(boldValue === "**word**", `Ctrl+B wraps the selection in bold (got ${JSON.stringify(boldValue)})`);
+
+    await frame.click(".wiki-format-linkpicker > button");
+    await frame.waitForSelector(".wiki-format-linkpicker-popover", { timeout: 10000 });
+    const pickerCount = await frame.$$eval(".wiki-format-linkpicker-item", (els) => els.length);
+    check(pickerCount > 0, `page-link picker lists pages (${pickerCount})`);
+    await frame.click(".wiki-format-linkpicker-item");
+    await sleep(300);
+    const linkValue = await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      return models[0] ? models[0].getValue() : "";
+    });
+    check(/\]\(\/.+\)/.test(linkValue), `page-link picker inserts a Markdown link (${JSON.stringify(linkValue)})`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "09-editor-quickwins.png") });
+    // Discard so the Home page content is left untouched.
+    await frame.getByRole("button", { name: "Cancel" }).click();
+    await sleep(500);
+  } catch (error) {
+    check(false, `editor quick wins failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "09-editor-quickwins-error.png") });
+  }
+
+  // Authoring R1 #25: an autosaved edit is offered for recovery after a reload.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Edit page" }).click();
+    await frame.waitForSelector(".wiki-page-editor .monaco-editor", { timeout: 30000 });
+    const marker = `AUTOSAVE_${Date.now()}`;
+    await frame.evaluate((mk) => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      if (models[0]) models[0].setValue(`${models[0].getValue()}\n\n${mk}`);
+    }, marker);
+    await sleep(1300); // exceed the 800ms autosave debounce
+    // Simulate an accidental refresh with a real document reload (a same-URL
+    // openWikiPage would be a same-document hash nav and not remount the app).
+    await page.reload({ waitUntil: "domcontentloaded" });
+    frame = await powerWikiFrame(page);
+    await frame.waitForSelector(".wiki-draft-recovery", { timeout: 30000 });
+    check(true, "autosaved draft offers recovery after reload");
+    await frame.click(".wiki-draft-recovery-restore");
+    await frame.waitForSelector(".wiki-page-editor .monaco-editor", { timeout: 30000 });
+    await sleep(300);
+    const restored = await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      return models[0] ? models[0].getValue() : "";
+    });
+    check(restored.includes(marker), "restored draft contains the autosaved text");
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "10-autosave.png") });
+    // Cleanup: discard the draft so it doesn't linger for the next run.
+    await frame.getByRole("button", { name: "Cancel" }).click();
+    await sleep(500);
+    const draftCleared = await frame.$(".wiki-draft-recovery");
+    check(!draftCleared, "discarding the draft clears the recovery banner");
+  } catch (error) {
+    check(false, `autosave/draft recovery failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "10-autosave-error.png") });
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
