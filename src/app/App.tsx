@@ -115,6 +115,7 @@ export function App({ error, hostContext, status }: AppProps) {
         </section>
       ) : (
         <WikiBrowser
+          contributionId={hostContext?.contributionId}
           onHeaderMenuActionsChange={setHeaderMenuActions}
           onPageBylineChange={setPageByline}
           onPageTitleChange={handlePageTitleChange}

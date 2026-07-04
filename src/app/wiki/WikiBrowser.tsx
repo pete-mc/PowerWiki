@@ -14,6 +14,7 @@ import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepos
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta } from "../../wiki/WikiComment";
+import { buildHubPageUrl, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 import { StatusMessage } from "./StatusMessage";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
 import { WikiRichTextEditor } from "./WikiRichTextEditor";
@@ -25,6 +26,7 @@ import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
 
 interface WikiBrowserProps {
+  readonly contributionId?: string;
   readonly onHeaderMenuActionsChange?: (actions: readonly HeaderMenuAction[]) => void;
   readonly onPageBylineChange?: (byline: WikiPageBylineProps | undefined) => void;
   readonly onPageTitleChange?: (title: string | undefined) => void;
@@ -47,6 +49,8 @@ interface NavigationTarget {
   readonly pagePath: string;
   readonly wikiId?: string;
   readonly wikiName?: string;
+  /** Heading slug to scroll to after the page loads, from an &anchor= marker. */
+  readonly anchor?: string;
 }
 
 const HOST_NAVIGATION_SERVICE_ID = "ms.vss-features.host-navigation-service";
@@ -85,7 +89,8 @@ function normalizePagePath(path: string): string {
 }
 
 function parseNavigationHash(hash: string): NavigationTarget | undefined {
-  const normalized = normalizeHash(hash).trim();
+  const { pageHash, anchor } = splitHashAnchor(normalizeHash(hash));
+  const normalized = pageHash.trim();
   if (!normalized) {
     return undefined;
   }
@@ -99,6 +104,7 @@ function parseNavigationHash(hash: string): NavigationTarget | undefined {
     }
 
     return {
+      anchor,
       pagePath: normalizePagePath(remainder.slice(slashIndex)),
       wikiName: safeDecode(remainder.slice(0, slashIndex))
     };
@@ -108,10 +114,10 @@ function parseNavigationHash(hash: string): NavigationTarget | undefined {
   if (colonIndex > 0 && !normalized.startsWith("/")) {
     const wikiId = normalized.slice(0, colonIndex);
     const rawPath = normalized.slice(colonIndex + 1);
-    return { wikiId, pagePath: normalizePagePath(rawPath) };
+    return { anchor, wikiId, pagePath: normalizePagePath(rawPath) };
   }
 
-  return { pagePath: normalizePagePath(normalized) };
+  return { anchor, pagePath: normalizePagePath(normalized) };
 }
 
 function buildNavigationHash(wiki: WikiSummary | undefined, pagePath: string, wikis: readonly WikiSummary[]): string {
@@ -251,6 +257,7 @@ function pagePathCandidates(rawPath: string): string[] {
 }
 
 export function WikiBrowser({
+  contributionId,
   onHeaderMenuActionsChange,
   onPageBylineChange,
   onPageTitleChange,
@@ -259,6 +266,9 @@ export function WikiBrowser({
   projectName
 }: WikiBrowserProps) {
   const [activePage, setActivePage] = useState<WikiPage>();
+  // Heading slug to scroll to once the active page renders (from an &anchor=
+  // deep link or a heading permalink click). Cleared on ordinary navigation.
+  const [activeAnchor, setActiveAnchor] = useState<string | undefined>(undefined);
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string>();
@@ -415,7 +425,7 @@ export function WikiBrowser({
   // the URL hash. This is the single entry point for all navigation:
   // tree clicks, in-page links, deep links, and browser back/forward.
   const loadPageByPath = useCallback(
-    async (rawPath: string, updateHash: boolean): Promise<boolean> => {
+    async (rawPath: string, updateHash: boolean, anchor?: string): Promise<boolean> => {
       if (!wikiClient || !activeWikiId) {
         return false;
       }
@@ -427,6 +437,9 @@ export function WikiBrowser({
         try {
           const page = await wikiClient.getPage(activeWikiId, candidate);
           setActivePage(page);
+          // Scroll to the anchor if one was requested, otherwise clear any stale
+          // anchor from a previous page.
+          setActiveAnchor(anchor);
           setLoadState("ready");
           lastNavigatedPathRef.current = page.path;
           if (updateHash) {
@@ -446,6 +459,39 @@ export function WikiBrowser({
       return false;
     },
     [activeWiki, activeWikiId, wikiClient, wikis]
+  );
+
+  // Absolute, shareable Azure DevOps deep link to a heading on the current page.
+  const buildHeadingUrl = useCallback(
+    (slug: string): string | undefined => {
+      if (!activePage) {
+        return undefined;
+      }
+
+      return buildHubPageUrl(
+        { organizationName, projectName, organizationIsHosted, contributionId },
+        buildNavigationHash(activeWiki, activePage.path, wikis),
+        slug
+      );
+    },
+    [activePage, activeWiki, contributionId, organizationIsHosted, organizationName, projectName, wikis]
+  );
+
+  // Clicking a heading permalink scrolls to it and reflects the anchor in the
+  // route, so the URL stays shareable and back/forward restores the position.
+  const handleHeadingLinkActivated = useCallback(
+    (slug: string): void => {
+      if (!activePage) {
+        return;
+      }
+
+      setActiveAnchor(slug);
+      setNavigationHash(
+        navigationServiceRef.current,
+        withHashAnchor(buildNavigationHash(activeWiki, activePage.path, wikis), slug)
+      );
+    },
+    [activePage, activeWiki, wikis]
   );
   // Handles URL hash changes that originate outside our own navigation:
   // browser back/forward, or the user editing the URL. Kept in a ref so the
@@ -474,12 +520,16 @@ export function WikiBrowser({
       return;
     }
 
-    // Ignore echoes of our own setHash() call.
+    // Ignore echoes of our own setHash() call — but still honor a new anchor on
+    // the same page (e.g. the user pasted a deep link to another heading).
     if (parsed.pagePath === lastNavigatedPathRef.current) {
+      if (parsed.anchor) {
+        setActiveAnchor(parsed.anchor);
+      }
       return;
     }
 
-    void loadPageByPath(parsed.pagePath, false);
+    void loadPageByPath(parsed.pagePath, false, parsed.anchor);
   };
 
   useEffect(() => {
@@ -573,7 +623,9 @@ export function WikiBrowser({
         if (cancelled) return;
 
         const saved = savedNavigation.current;
-        const savedPath = navigationTargetsWiki(saved, wikiId, wikis) ? saved?.pagePath : undefined;
+        const savedInThisWiki = navigationTargetsWiki(saved, wikiId, wikis);
+        const savedPath = savedInThisWiki ? saved?.pagePath : undefined;
+        const savedAnchor = savedInThisWiki ? saved?.anchor : undefined;
         savedNavigation.current = null;
 
         // Resolve the initial/deep-linked page, trying hyphen/space variants,
@@ -608,6 +660,7 @@ export function WikiBrowser({
         setPageList(treeState.pages);
         setLoadedPaths(treeState.loadedPaths);
         setActivePage(initialPage);
+        setActiveAnchor(initialPage ? savedAnchor : undefined);
         setLoadState("ready");
 
         if (initialPage) {
@@ -1256,6 +1309,9 @@ export function WikiBrowser({
                     markdown={draftContent}
                     currentPath={activePage.path}
                     subPages={subPages}
+                    anchor={activeAnchor}
+                    buildHeadingUrl={buildHeadingUrl}
+                    onHeadingLinkActivated={handleHeadingLinkActivated}
                     onLoadQueryTable={loadQueryTable}
                     onLoadWorkItemBadge={loadWorkItemBadge}
                     onNavigate={(path) => {
@@ -1275,6 +1331,9 @@ export function WikiBrowser({
             markdown={activePage.content}
             currentPath={activePage.path}
             subPages={subPages}
+            anchor={activeAnchor}
+            buildHeadingUrl={buildHeadingUrl}
+            onHeadingLinkActivated={handleHeadingLinkActivated}
             onLoadQueryTable={loadQueryTable}
             onLoadWorkItemBadge={loadWorkItemBadge}
             onNavigate={(path) => {

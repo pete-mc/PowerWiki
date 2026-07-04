@@ -3,11 +3,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useThemeMode } from "../app/themeMode";
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
+import { copyToClipboard } from "./clipboard";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
 import { addCopyButtons, highlightCodeBlocks } from "./enhancePreview";
 import { renderMath } from "./mathRender";
 import { MermaidZoomOverlay } from "./MermaidZoomOverlay";
-import { addMermaidToolbars, downloadMermaidPng, downloadMermaidSvg } from "./mermaidTools";
+import { addMermaidToolbars, downloadMermaidSvg } from "./mermaidTools";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
 
@@ -57,6 +58,16 @@ interface MarkdownPreviewProps {
   readonly onOpenWorkItem?: (id: number) => void;
   /** Loads details used to enrich inline work item badges. */
   readonly onLoadWorkItemBadge?: (id: number) => Promise<WorkItemBadgeDetails>;
+  /** Heading slug to scroll into view once the page has rendered, if any. */
+  readonly anchor?: string;
+  /**
+   * Builds an absolute, shareable Azure DevOps URL for a heading slug. Used to
+   * fix heading permalinks so copying them yields a working link rather than one
+   * relative to the extension's CDN iframe.
+   */
+  readonly buildHeadingUrl?: (slug: string) => string | undefined;
+  /** Called when a heading permalink is clicked (to reflect it in the route). */
+  readonly onHeadingLinkActivated?: (slug: string) => void;
 }
 
 const TOSP_PLACEHOLDER_SELECTOR = `[${TOSP_PLACEHOLDER_ATTR}="${TOSP_PLACEHOLDER_VALUE}"]`;
@@ -105,7 +116,10 @@ export function MarkdownPreview({
   onLoadWorkItemBadge,
   onNavigate,
   onOpenWorkItem,
-  onResolveImageSrc
+  onResolveImageSrc,
+  anchor,
+  buildHeadingUrl,
+  onHeadingLinkActivated
 }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const queryCacheRef = useRef(new Map<string, QueryTableResult>());
@@ -189,9 +203,25 @@ export function MarkdownPreview({
       onSettled: bumpEnrichment,
     });
     addCopyButtons(container);
+    rewriteHeadingLinks(container, buildHeadingUrl);
     void highlightCodeBlocks(container);
     void renderMath(container);
-  }, [bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+
+  // Once the page content (and its heavy enrichment) is in the DOM, scroll the
+  // requested heading into view. Deferred so mermaid/query layout settles first.
+  useEffect(() => {
+    const container = previewRef.current;
+    if (!container || !anchor) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const target = findHeading(container, anchor);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [anchor, html]);
 
   // Close the image lightbox on Escape.
   useEffect(() => {
@@ -238,8 +268,6 @@ export function MarkdownPreview({
           setMermaidZoom(svg.outerHTML);
         } else if (action === "svg") {
           downloadMermaidSvg(svg);
-        } else if (action === "png") {
-          downloadMermaidPng(svg);
         }
       }
       return;
@@ -249,16 +277,13 @@ export function MarkdownPreview({
     if (copyButton) {
       event.preventDefault();
       const code = copyButton.closest("pre")?.querySelector("code");
-      if (code && navigator.clipboard) {
-        void navigator.clipboard
-          .writeText(code.textContent ?? "")
-          .then(() => {
-            copyButton.textContent = "Copied";
-            window.setTimeout(() => {
-              copyButton.textContent = "Copy";
-            }, 1500);
-          })
-          .catch(() => {});
+      if (code) {
+        void copyToClipboard(code.textContent ?? "").then((ok) => {
+          copyButton.textContent = ok ? "Copied" : "Press Ctrl+C";
+          window.setTimeout(() => {
+            copyButton.textContent = "Copy";
+          }, 1500);
+        });
       }
       return;
     }
@@ -268,6 +293,25 @@ export function MarkdownPreview({
     if (image && !image.closest("a")) {
       event.preventDefault();
       setLightboxSrc(image.currentSrc || image.src);
+      return;
+    }
+
+    // Heading permalink: scroll to the heading, copy a shareable link, and
+    // reflect it in the route — never let the browser follow the absolute href
+    // (that would load Azure DevOps inside the extension iframe).
+    const headingLink = (event.target as HTMLElement).closest<HTMLAnchorElement>("a.powerwiki-heading-anchor");
+    if (headingLink) {
+      event.preventDefault();
+      const slug = headingSlug(headingLink);
+      if (slug) {
+        const heading = headingLink.closest<HTMLElement>("h1,h2,h3,h4,h5,h6");
+        (heading ?? findHeading(previewRef.current, slug))?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const shareUrl = buildHeadingUrl?.(slug);
+        if (shareUrl) {
+          void copyToClipboard(shareUrl).then((ok) => flashHeadingCopied(headingLink, ok));
+        }
+        onHeadingLinkActivated?.(slug);
+      }
       return;
     }
 
@@ -435,7 +479,11 @@ function enrichQueryTables(container: HTMLElement, ctx: QueryEnrichmentContext):
  * badge in place and is not retried.
  */
 function enrichWorkItemBadges(container: HTMLElement, ctx: WorkItemEnrichmentContext): void {
-  const badges = Array.from(container.querySelectorAll<HTMLElement>(WORK_ITEM_SELECTOR));
+  // Query-table id links carry the work-item id (so a click opens the item) but
+  // are intentionally rendered as plain links, so they are excluded here.
+  const badges = Array.from(
+    container.querySelectorAll<HTMLElement>(`${WORK_ITEM_SELECTOR}:not(.powerwiki-query-id-link)`)
+  );
   for (const badge of badges) {
     const id = Number(badge.getAttribute(WORK_ITEM_ATTR));
     if (!Number.isInteger(id) || id <= 0) {
@@ -548,9 +596,13 @@ function renderQueryResult(container: HTMLElement, result: QueryTableResult): vo
       const value = row.values.get(column.referenceName) ?? "";
 
       if (column.referenceName === "System.Id") {
+        // A plain hyperlinked id inside a query table (not a full work-item
+        // badge — those are too wide for a dense table). The query-id-link class
+        // both styles it as a plain link and opts it out of badge enrichment;
+        // it keeps the work-item id attribute so a click still opens the item.
         const link = document.createElement("a");
         link.href = "#";
-        link.className = "powerwiki-work-item-badge";
+        link.className = "powerwiki-query-id-link";
         link.setAttribute(WORK_ITEM_ATTR, String(row.id));
         link.title = `Open work item ${row.id}`;
         link.textContent = value || String(row.id);
@@ -663,4 +715,59 @@ function resolveImageSources(
   }
 
   return template.innerHTML;
+}
+
+/** The heading slug for a permalink, from its heading's id (preferred) or href. */
+function headingSlug(link: HTMLElement): string {
+  const heading = link.closest<HTMLElement>("h1,h2,h3,h4,h5,h6");
+  if (heading?.id) {
+    return heading.id;
+  }
+
+  const href = link.getAttribute("href") ?? "";
+  return href.startsWith("#") ? href.slice(1) : link.dataset.anchorSlug ?? "";
+}
+
+function findHeading(container: HTMLElement | null, slug: string): HTMLElement | null {
+  if (!container || !slug) {
+    return null;
+  }
+
+  try {
+    return container.querySelector<HTMLElement>(`#${CSS.escape(slug)}`);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rewrites markdown-it-anchor's default `#slug` heading permalinks to absolute
+ * Azure DevOps deep links, so copying a heading link yields a URL that resolves
+ * on the Azure DevOps site rather than the extension's CDN iframe. A plain click
+ * is still intercepted (scroll in place); a modified click opens the deep link.
+ */
+function rewriteHeadingLinks(container: HTMLElement, buildHeadingUrl?: (slug: string) => string | undefined): void {
+  if (!buildHeadingUrl) {
+    return;
+  }
+
+  for (const link of Array.from(container.querySelectorAll<HTMLAnchorElement>("a.powerwiki-heading-anchor"))) {
+    const slug = headingSlug(link);
+    if (!slug) {
+      continue;
+    }
+
+    link.dataset.anchorSlug = slug;
+    const url = buildHeadingUrl(slug);
+    if (url) {
+      link.setAttribute("href", url);
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+    }
+  }
+}
+
+function flashHeadingCopied(link: HTMLElement, ok: boolean): void {
+  link.setAttribute("data-powerwiki-copied", ok ? "copied" : "failed");
+  window.setTimeout(() => link.removeAttribute("data-powerwiki-copied"), 1400);
 }

@@ -210,6 +210,18 @@ try {
     check(!!(await frame.$(`${preview} pre .powerwiki-copy-code`)), "copy-code button present");
     await frame.waitForSelector(`${preview} pre code.hljs`, { timeout: 15000 });
     check(true, "code block is syntax-highlighted");
+    // #28: clicking copy actually copies — the button flips to "Copied" only when
+    // the write succeeds (via the execCommand fallback in the sandboxed iframe).
+    await frame.click(`${preview} pre .powerwiki-copy-code`);
+    const copyOk = await frame
+      .waitForFunction(
+        (sel) => document.querySelector(`${sel} pre .powerwiki-copy-code`)?.textContent === "Copied",
+        preview,
+        { timeout: 5000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    check(copyOk, "copy-code button copies (button shows Copied)");
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-rendering.png") });
   } catch (error) {
     check(false, `rendering features failed: ${error.message}`);
@@ -232,9 +244,19 @@ try {
     check(!(await frame.$(`${preview} .mermaid-error`)), "latest Mermaid type (xychart) renders without error");
     await frame.waitForSelector(`${preview} .powerwiki-mermaid-tools`, { timeout: 10000 });
     check(true, "mermaid diagram toolbar present");
+    // #31: PNG export was removed (it failed on foreignObject diagrams); SVG stays.
+    check(!!(await frame.$(`${preview} [data-mermaid-action="svg"]`)), "mermaid SVG download button present");
+    check(!(await frame.$(`${preview} [data-mermaid-action="png"]`)), "mermaid PNG button removed");
     await frame.click(`${preview} [data-mermaid-action="zoom"]`);
     await frame.waitForSelector(".powerwiki-mermaid-zoom", { timeout: 10000 });
     check(true, "mermaid pan/zoom overlay opens");
+    // #30: the overlay opens fit-to-stage, not at the tiny in-article scale 1.
+    const zoomScale = await frame.evaluate(() => {
+      const content = document.querySelector(".powerwiki-mermaid-zoom-content");
+      const m = content && /scale\(([\d.]+)\)/.exec(content.getAttribute("style") || "");
+      return m ? Number(m[1]) : 0;
+    });
+    check(zoomScale > 1, `mermaid zoom opens fit-to-stage (scale=${zoomScale})`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-mermaid.png") });
   } catch (error) {
     check(false, `mermaid features failed: ${error.message}`);
@@ -277,7 +299,8 @@ try {
   // every equation's annotation is its source TeX, not a self-stacked copy.
   try {
     frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Math%20with%20KaTeX");
-    await frame.waitForSelector(".markdown-preview .katex annotation", { timeout: 30000 });
+    // The KaTeX <annotation> is present but visually hidden, so wait for attach.
+    await frame.waitForSelector(".markdown-preview .katex annotation", { state: "attached", timeout: 30000 });
     await sleep(2000);
     const mathViewer = await frame.evaluate(() => {
       const annotations = Array.from(document.querySelectorAll(".markdown-preview .katex annotation")).map(
@@ -295,9 +318,56 @@ try {
     await frame.evaluate(() => document.fonts.ready).catch(() => {});
     await sleep(500);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07b-math-viewer.png") });
+
+    // #29: heading permalinks are absolute Azure DevOps deep links (so copying
+    // them works), not the default "#slug" relative to the CDN iframe.
+    const heading = await frame.evaluate(() => {
+      const a = document.querySelector(".markdown-preview a.powerwiki-heading-anchor");
+      return a ? a.getAttribute("href") : null;
+    });
+    check(
+      !!heading && heading.startsWith("https://dev.azure.com/") && heading.includes("&anchor="),
+      `heading permalink is an absolute deep link (${JSON.stringify(heading)})`
+    );
+
+    // #29 (scroll): a deep link with &anchor= scrolls the heading near the top.
+    frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Math%20with%20KaTeX&anchor=display");
+    await frame.waitForSelector(".markdown-preview #display", { timeout: 30000 });
+    await sleep(1500);
+    const headingTop = await frame.evaluate(() => {
+      const h = document.querySelector(".markdown-preview #display");
+      return h ? Math.round(h.getBoundingClientRect().top) : 99999;
+    });
+    check(headingTop < 400, `anchor deep link scrolls the heading into view (top=${headingTop})`);
   } catch (error) {
     check(false, `math viewer rendering failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07b-math-viewer-error.png") });
+  }
+
+  // #32: the query-table id column is a plain hyperlinked id, not a full
+  // work-item badge (badges stay for #N references in the page body).
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.waitForSelector(".powerwiki-query-table table", { timeout: 60000 });
+    await sleep(1000);
+    const queryIds = await frame.evaluate(() => {
+      const plain = document.querySelectorAll(".powerwiki-query-table .powerwiki-query-id-link").length;
+      const richInTable = document.querySelectorAll(
+        ".powerwiki-query-table .powerwiki-work-item-badge-rich"
+      ).length;
+      const richInBody = document.querySelectorAll(
+        ".markdown-preview > .powerwiki-work-item-badge-rich, .markdown-preview p .powerwiki-work-item-badge-rich"
+      ).length;
+      return { plain, richInTable, richInBody };
+    });
+    check(
+      queryIds.plain > 0 && queryIds.richInTable === 0,
+      `query id column uses plain links, not badges (plain=${queryIds.plain}, richInTable=${queryIds.richInTable})`
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-query-ids.png") });
+  } catch (error) {
+    check(false, `query id column check failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-query-ids-error.png") });
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);

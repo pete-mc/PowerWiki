@@ -18,10 +18,10 @@ No migration. No proprietary formats. Just better reading and editing for the Ma
   - Current CommonMark + GFM pipeline with heading anchors.
   - Syntax-highlighted code blocks with a one-click copy button.
   - GitHub-style callouts / admonitions (`> [!NOTE]`, `[!TIP]`, `[!WARNING]`, etc.), rendered as styled blocks and still readable in the built-in wiki.
-  - Hover permalinks on headings and click-to-zoom on images.
+  - Hover permalinks on headings (copy a shareable Azure DevOps deep link) and click-to-zoom on images.
   - LaTeX math rendering with KaTeX (`$inline$` and `$$display$$`).
   - Full support for `[[_TOC_]]` and `[[_TOSP_]]` placeholders.
-  - Up-to-date Mermaid (v11) — including the latest diagram types (architecture, block, kanban, sankey, xy-chart, requirement) — with automatic light/dark theming, a pan/zoom fullscreen view, and SVG/PNG export. Works with both standard ````mermaid` fences and Azure DevOps-style `::: mermaid` blocks.
+  - Up-to-date Mermaid (v11) — including the latest diagram types (architecture, block, kanban, sankey, xy-chart, requirement) — with automatic light/dark theming, a fit-to-screen pan/zoom fullscreen view, and SVG export. Works with both standard ````mermaid` fences and Azure DevOps-style `::: mermaid` blocks.
 
 - **Powerful editing**
   - Monaco-based Markdown editor with word wrap, syntax awareness, and comfortable editing.

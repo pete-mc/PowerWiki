@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 interface MermaidZoomOverlayProps {
   /** Serialized SVG markup of the rendered diagram (trusted — mermaid output). */
@@ -6,11 +6,14 @@ interface MermaidZoomOverlayProps {
   readonly onClose: () => void;
 }
 
+const clampScale = (value: number) => Math.min(8, Math.max(0.25, value));
+
 /** Fullscreen pan/zoom viewer for a rendered Mermaid diagram. */
 export function MermaidZoomOverlay({ svgHtml, onClose }: MermaidZoomOverlayProps) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -22,7 +25,28 @@ export function MermaidZoomOverlay({ svgHtml, onClose }: MermaidZoomOverlayProps
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const clampScale = (value: number) => Math.min(8, Math.max(0.25, value));
+  // Open at a scale that fills the stage rather than the diagram's small
+  // in-article size (mermaid caps the SVG width to the content column, so at
+  // scale 1 the fullscreen overlay showed a tiny diagram surrounded by space).
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const svg = stage?.querySelector("svg");
+    if (!stage || !svg) {
+      return;
+    }
+
+    const svgRect = svg.getBoundingClientRect();
+    const stageWidth = stage.clientWidth;
+    const stageHeight = stage.clientHeight;
+    if (!svgRect.width || !svgRect.height || !stageWidth || !stageHeight) {
+      return;
+    }
+
+    const padding = 0.94;
+    const fit = Math.min((stageWidth * padding) / svgRect.width, (stageHeight * padding) / svgRect.height);
+    setScale(clampScale(fit));
+    setOffset({ x: 0, y: 0 });
+  }, [svgHtml]);
 
   return (
     <div className="powerwiki-mermaid-zoom" role="dialog" aria-modal="true">
@@ -42,6 +66,7 @@ export function MermaidZoomOverlay({ svgHtml, onClose }: MermaidZoomOverlayProps
       </div>
       <div
         className="powerwiki-mermaid-zoom-stage"
+        ref={stageRef}
         onPointerDown={(event) => {
           dragStart.current = { x: event.clientX - offset.x, y: event.clientY - offset.y };
           event.currentTarget.setPointerCapture(event.pointerId);
