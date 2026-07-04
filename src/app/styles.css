@@ -2083,3 +2083,167 @@ button.wiki-move-option:hover {
     min-height: 360px;
   }
 }
+
+/* Export dialog */
+.wiki-export-overlay {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 100;
+}
+
+.wiki-export-dialog {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 8px;
+  box-shadow: var(--pw-menu-shadow);
+  color: var(--pw-text);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 20px;
+  width: min(640px, 92vw);
+}
+
+.wiki-export-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.wiki-export-header h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.wiki-export-close {
+  background: transparent;
+  border: 0;
+  color: var(--pw-text);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.wiki-export-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 14px 0;
+}
+
+.wiki-export-scope label {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.wiki-export-multi {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.wiki-export-pane {
+  border: 1px solid var(--pw-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.wiki-export-pane-title {
+  background: var(--pw-subtle);
+  border-bottom: 1px solid var(--pw-border);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+.wiki-export-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.wiki-export-item {
+  align-items: center;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  padding: 4px 6px;
+}
+
+.wiki-export-item:hover {
+  background: var(--pw-hover);
+}
+
+.wiki-export-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-export-selected {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 4px 6px;
+}
+
+.wiki-export-order {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.wiki-export-order button,
+.wiki-export-actions button {
+  background: transparent;
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font: inherit;
+  padding: 3px 8px;
+}
+
+.wiki-export-order button:disabled,
+.wiki-export-actions button:disabled {
+  color: var(--pw-disabled-text, #999);
+  cursor: default;
+}
+
+.wiki-export-empty {
+  color: var(--pw-text-secondary);
+  padding: 8px;
+}
+
+.wiki-export-error {
+  color: var(--pw-danger, #cc293d);
+  margin: 10px 0 0;
+}
+
+.wiki-export-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.wiki-export-note {
+  color: var(--pw-text-secondary);
+  font-size: 12px;
+  margin-right: auto;
+}
+
+.wiki-export-primary {
+  background: var(--pw-accent) !important;
+  border-color: var(--pw-accent) !important;
+  color: var(--pw-on-accent, #ffffff) !important;
+}

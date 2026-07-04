@@ -704,7 +704,7 @@ function loadMonaco(): Promise<MonacoApi> {
 
   monacoLoadPromise ??= new Promise((resolve, reject) => {
     const existingScript = document.querySelector<HTMLScriptElement>("script[data-powerwiki-monaco-loader='true']");
-    if (existingScript && window.require) {
+    if (existingScript && typeof window.require === "function") {
       configureAndLoadMonaco(resolve, reject);
       return;
     }

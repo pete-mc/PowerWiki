@@ -342,6 +342,25 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     return undefined;
   }
 
+  /**
+   * Fetches the raw bytes of a repository item (e.g. an image attachment) via
+   * the authenticated Git client, used to embed images into exported documents.
+   * Wiki attachments resolve on the repository's default branch, so no version
+   * descriptor is needed.
+   */
+  public async getItemBytes(repositoryId: string, repoPath: string): Promise<ArrayBuffer> {
+    return this.gitClient.getItemContent(
+      repositoryId,
+      repoPath,
+      this.projectName,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true // download: return the raw content
+    );
+  }
+
   public async listComments(wikiId: string, pageId: number): Promise<WikiComment[]> {
     const result = await this.wikiClient.listComments(
       this.projectName,

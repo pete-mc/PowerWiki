@@ -33,6 +33,9 @@ No migration. No proprietary formats. Just better reading and editing for the Ma
   - Never lose work: a browser guard warns before you close or reload with unsaved edits, and local autosave offers to restore an in-progress draft after an accidental reload.
   - Create new pages, move or reorder pages, and delete pages through Azure DevOps Wiki APIs.
 
+- **Export**
+  - Export a page (or a set of pages you select and order) to a real **Word (.docx)** document from the page menu. Markdown headings become native Word heading styles, and Markdown, tables, images, and Mermaid diagrams are rendered into the document.
+
 - **Azure Boards enhancements** (portable by design)
   - `#1234` references render as clickable work item badges that open the native work item form.
   - Embed live query results with `::: query-table <query-id> :::`. PowerWiki renders a table of matching work items with a link back to the original query.

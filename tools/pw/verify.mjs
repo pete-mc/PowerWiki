@@ -27,6 +27,21 @@ function check(condition, message) {
   }
 }
 
+// Best-effort return to view mode (and close any dialog) so one failed
+// editor test can't cascade into the next by leaving the app mid-edit.
+async function leaveEditor(page, frame) {
+  try {
+    await page.keyboard.press("Escape");
+    const cancel = await frame.$('.wiki-editor-toolbar-actions button:has-text("Cancel"), .wiki-export-close');
+    if (cancel) {
+      await cancel.click();
+      await sleep(400);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 const { context, page } = await launch({ headless: false });
 // Answer confirms (discard edits, delete) by accepting, and prompts (new page
@@ -462,8 +477,9 @@ try {
       if (models[0]) models[0].setValue("");
     });
     await frame.click(".wiki-page-editor .monaco-editor");
+    await sleep(400); // let Monaco settle focus/caret before typing the trigger
     await page.keyboard.type("/query");
-    await frame.waitForSelector(".monaco-editor .suggest-widget.visible", { timeout: 10000 });
+    await frame.waitForSelector(".monaco-editor .suggest-widget.visible", { timeout: 15000 });
     await sleep(300);
     await page.keyboard.press("Enter");
     await sleep(300);
@@ -481,6 +497,7 @@ try {
   } catch (error) {
     check(false, `slash-command palette failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "11-slash-error.png") });
+    await leaveEditor(page, frame);
   }
 
   // Authoring R3 #27: in-context table editing — the floating toolbar appears
@@ -522,6 +539,35 @@ try {
   } catch (error) {
     check(false, `in-context table editing failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "12-table-tools-error.png") });
+    await leaveEditor(page, frame);
+  }
+
+  // Export #6: exporting a Mermaid-heavy page downloads a valid .docx (so the
+  // Markdown + Mermaid render pipeline runs end to end without throwing).
+  try {
+    frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Mermaid%20Gallery");
+    // Wait for the Gallery to actually be the active page (its diagrams render),
+    // not just the previously-loaded page (the hash nav is same-document).
+    await frame.waitForSelector(".mermaid-rendered svg", { timeout: 60000 });
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Export to Word" }).click();
+    await frame.waitForSelector(".wiki-export-dialog", { timeout: 10000 });
+    check(true, "export dialog opens from the page menu");
+    const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
+    await frame.getByRole("button", { name: "Export", exact: true }).click();
+    const download = await downloadPromise;
+    const docxPath = path.join(ARTIFACTS_DIR, "export.docx");
+    await download.saveAs(docxPath);
+    const bytes = fs.readFileSync(docxPath);
+    const name = download.suggestedFilename();
+    const isZip = bytes.length > 1000 && bytes[0] === 0x50 && bytes[1] === 0x4b; // "PK"
+    check(isZip, `Word export downloads a valid .docx (${bytes.length} bytes, name=${name})`);
+    check(/mermaid/i.test(name), `export used the Mermaid page (name=${name})`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-export.png") });
+  } catch (error) {
+    check(false, `Word export failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-export-error.png") });
+    await leaveEditor(page, frame);
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);

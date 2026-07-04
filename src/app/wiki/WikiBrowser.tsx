@@ -15,6 +15,9 @@ import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta } from "../../wiki/WikiComment";
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
+import { WikiExportDialog } from "./WikiExportDialog";
+import { toExportImage } from "../../export/imageMeta";
+import type { ExportImage } from "../../export/markdownToDocx";
 import { buildHubPageUrl, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 import { StatusMessage } from "./StatusMessage";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
@@ -300,6 +303,7 @@ export function WikiBrowser({
   // An autosaved draft found for the active page that differs from its saved
   // content, offered for recovery after an accidental reload.
   const [recoverableDraft, setRecoverableDraft] = useState<StoredDraft | undefined>(undefined);
+  const [exportOpen, setExportOpen] = useState(false);
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string>();
@@ -479,6 +483,49 @@ export function WikiBrowser({
     }
   }, [activePage]);
 
+  // Loads a page's raw Markdown for export (may be a page other than the active one).
+  const loadPageContent = useCallback(
+    async (path: string): Promise<string> => {
+      if (!wikiClient || !activeWikiId) {
+        return "";
+      }
+      const page = await wikiClient.getPage(activeWikiId, path);
+      return page.content;
+    },
+    [activeWikiId, wikiClient]
+  );
+
+  // Resolves a Markdown image reference to raw bytes for embedding in an export.
+  const loadExportImage = useCallback(
+    async (src: string, pagePath: string): Promise<ExportImage | null> => {
+      if (!src) {
+        return null;
+      }
+      try {
+        if (HAS_SCHEME.test(src) || src.startsWith("//")) {
+          const response = await fetch(src.startsWith("//") ? `https:${src}` : src);
+          if (!response.ok) {
+            return null;
+          }
+          return await toExportImage(new Uint8Array(await response.arrayBuffer()), src);
+        }
+        if (!wikiClient || !activeWiki?.repositoryId) {
+          return null;
+        }
+        const wikiPath = resolveWikiImagePath(src, pagePath);
+        if (!wikiPath) {
+          return null;
+        }
+        const repoPath = joinRepositoryPath(activeWiki.mappedPath, wikiPath);
+        const bytes = await wikiClient.getItemBytes(activeWiki.repositoryId, repoPath);
+        return await toExportImage(new Uint8Array(bytes), wikiPath);
+      } catch {
+        return null;
+      }
+    },
+    [activeWiki, wikiClient]
+  );
+
   const applySplitRatioFromPointer = useCallback((clientX: number) => {
     const shell = splitShellRef.current;
     if (!shell) {
@@ -522,6 +569,12 @@ export function WikiBrowser({
         id: isEditing ? "cancel-edit" : "edit-page",
         label: isEditing ? "Cancel edit" : "Edit page",
         onClick: isEditing ? cancelEditing : startEditing,
+      },
+      {
+        id: "export",
+        label: "Export to Word",
+        disabled: isEditing,
+        onClick: () => setExportOpen(true),
       },
     ]);
 
@@ -1502,6 +1555,16 @@ export function WikiBrowser({
           onCancel={() => setMoveDialogPath(undefined)}
           onConfirm={(destinationParent) => void handleConfirmMove(destinationParent)}
           onExpand={(path) => void handleNodeExpand(path)}
+        />
+      ) : null}
+
+      {exportOpen && activePage ? (
+        <WikiExportDialog
+          currentPage={{ path: activePage.path, title: pageTitleFromPath(activePage.path) }}
+          loadImage={loadExportImage}
+          loadPageContent={loadPageContent}
+          onClose={() => setExportOpen(false)}
+          pages={pageLinks}
         />
       ) : null}
     </>
