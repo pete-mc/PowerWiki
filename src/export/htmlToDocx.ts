@@ -294,7 +294,20 @@ function katexToMath(katex: HTMLElement): ImportedXmlComponent | null {
     if (!omml || !omml.includes("oMath")) {
       return null;
     }
-    return ImportedXmlComponent.fromXmlString(omml);
+    // Guard against malformed OMML (unsupported MathML constructs) corrupting
+    // the whole document — fall back to TeX text instead.
+    if (new DOMParser().parseFromString(omml, "application/xml").querySelector("parsererror")) {
+      return null;
+    }
+    // fromXmlString wraps the parsed OMML under a nameless root; using that
+    // wrapper directly emits an invalid <undefined> element that makes Word
+    // refuse to open the file. The real <m:oMath> is its first child.
+    const wrapper = ImportedXmlComponent.fromXmlString(omml) as unknown as { readonly root?: readonly unknown[] };
+    const mathElement = wrapper.root?.[0];
+    if (!mathElement || typeof mathElement !== "object") {
+      return null;
+    }
+    return mathElement as ImportedXmlComponent;
   } catch {
     return null;
   }

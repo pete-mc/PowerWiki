@@ -585,7 +585,10 @@ try {
     await download.saveAs(docxPath);
     const zip = await JSZip.loadAsync(fs.readFileSync(docxPath));
     const documentXml = await zip.file("word/document.xml").async("string");
-    check(documentXml.includes("oMath"), "Word export renders KaTeX as native Word equations (OMML)");
+    check(
+      documentXml.includes("oMath") && !documentXml.includes("<undefined>"),
+      `Word export renders KaTeX as valid native Word equations (oMath, no <undefined>)`
+    );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13b-export-math.png") });
   } catch (error) {
     check(false, `Word math export failed: ${error.message}`);

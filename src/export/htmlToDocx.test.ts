@@ -56,6 +56,9 @@ describe("htmlElementToDocxBlocks", () => {
     const documentXml = await zip.file("word/document.xml")!.async("string");
     // Native Word equations use the m: (math) namespace.
     expect(documentXml).toContain("oMath");
+    // Guard against the ImportedXmlComponent wrapper leaking an invalid
+    // <undefined> element, which makes Word refuse to open the file.
+    expect(documentXml).not.toContain("<undefined>");
   });
 
   it("renders a table (e.g. a query result) as a docx Table", async () => {
