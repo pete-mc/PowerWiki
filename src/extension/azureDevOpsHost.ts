@@ -4,7 +4,11 @@ export interface AzureDevOpsHostContext {
   readonly organizationName?: string;
   readonly organizationIsHosted?: boolean;
   readonly projectName?: string;
+  /** Project GUID, used for artifact subscriptions (follow). */
+  readonly projectId?: string;
   readonly userDisplayName: string;
+  /** Current user's identity id, used for artifact subscriptions (follow). */
+  readonly userId?: string;
   /** Full contribution id of the current hub, used to build shareable links. */
   readonly contributionId?: string;
 }
@@ -32,7 +36,9 @@ export async function initializeAzureDevOpsHost(): Promise<AzureDevOpsHostContex
     organizationIsHosted: host.isHosted,
     organizationName: host.name,
     projectName: webContext.project?.name,
+    projectId: webContext.project?.id,
     userDisplayName: user.displayName,
+    userId: user.id,
     contributionId
   };
 }

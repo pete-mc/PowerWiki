@@ -20,6 +20,11 @@ export function isImageFile(file: File): boolean {
   return file.type.startsWith("image/");
 }
 
+/** True when a stored attachment path looks like an image (by extension). */
+export function isImagePath(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(path);
+}
+
 /** Base64-encodes the file's bytes for the wiki attachments API request body. */
 export async function fileToBase64(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());

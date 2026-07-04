@@ -14,9 +14,15 @@ import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemCl
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
-import type { WikiComment, WikiPageChange, WikiPageMeta } from "../../wiki/WikiComment";
+import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "../../wiki/WikiComment";
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
+import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
+import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
+import { WikiAttachmentsDialog } from "./WikiAttachmentsDialog";
 import { WikiExportDialog } from "./WikiExportDialog";
+import { WikiHistoryDialog } from "./WikiHistoryDialog";
+import { WikiFollowClient } from "../../wiki/followClient";
+import { WikiLinkUpdateDialog, type InboundLinkUpdate } from "./WikiLinkUpdateDialog";
 import { toExportImage } from "../../export/imageMeta";
 import type { ExportImage } from "../../export/types";
 import { buildHubPageUrl, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
@@ -37,7 +43,9 @@ interface WikiBrowserProps {
   readonly onPageTitleChange?: (title: string | undefined) => void;
   readonly organizationIsHosted?: boolean;
   readonly organizationName?: string;
+  readonly projectId?: string;
   readonly projectName?: string;
+  readonly userId?: string;
 }
 
 type LoadState = "failed" | "loading" | "ready";
@@ -295,7 +303,9 @@ export function WikiBrowser({
   onPageTitleChange,
   organizationIsHosted,
   organizationName,
-  projectName
+  projectId,
+  projectName,
+  userId
 }: WikiBrowserProps) {
   const [activePage, setActivePage] = useState<WikiPage>();
   // Heading slug to scroll to once the active page renders (from an &anchor=
@@ -305,6 +315,22 @@ export function WikiBrowser({
   // content, offered for recovery after an accidental reload.
   const [recoverableDraft, setRecoverableDraft] = useState<StoredDraft | undefined>(undefined);
   const [exportOpen, setExportOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  // Follow state for the active page: undefined = unknown/loading, null = not
+  // following, string = the follow subscription's id.
+  const [followSubscriptionId, setFollowSubscriptionId] = useState<string | null | undefined>(undefined);
+  const [followBusy, setFollowBusy] = useState(false);
+  // Pending inbound-link rewrites after a rename/move, awaiting user confirm.
+  const [linkUpdatePlan, setLinkUpdatePlan] = useState<
+    { oldPath: string; newPath: string; updates: readonly InboundLinkUpdate[] } | undefined
+  >(undefined);
+  const [linkUpdateBusy, setLinkUpdateBusy] = useState(false);
+  // Session cache of every page's content, for the rename inbound-link scan
+  // (rebuilt when stale).
+  const contentIndexRef = useRef<{ wikiId: string; pages: readonly IndexedWikiPage[]; builtAt: number } | undefined>(
+    undefined
+  );
   const themeMode = useThemeMode();
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [draftContent, setDraftContent] = useState("");
@@ -346,6 +372,7 @@ export function WikiBrowser({
   const wikiClient = useMemo(() => {
     return projectName ? new AzureDevOpsWikiRepositoryClient(projectName) : undefined;
   }, [projectName]);
+  const followClient = useMemo(() => new WikiFollowClient(), []);
   const workItemClient = useMemo(() => {
     return projectName ? new AzureDevOpsWorkItemClient(projectName) : undefined;
   }, [projectName]);
@@ -497,6 +524,135 @@ export function WikiBrowser({
     [activeWikiId, wikiClient]
   );
 
+  // Lists the active page's revisions from its Git history (newest first).
+  const loadPageRevisions = useCallback(async (): Promise<readonly WikiPageRevision[]> => {
+    if (!wikiClient || !activeWiki?.repositoryId || !pageMeta?.gitItemPath) {
+      return [];
+    }
+    return wikiClient.getPageRevisions(activeWiki.repositoryId, pageMeta.gitItemPath, activeWiki.version);
+  }, [activeWiki, pageMeta?.gitItemPath, wikiClient]);
+
+  // Reads the page's Markdown as it was at a given revision.
+  const loadRevisionContent = useCallback(
+    async (revision: WikiPageRevision): Promise<string> => {
+      if (!wikiClient || !activeWiki?.repositoryId) {
+        throw new Error("Wiki repository unavailable.");
+      }
+      return wikiClient.getPageContentAtCommit(activeWiki.repositoryId, revision.gitItemPath, revision.commitId);
+    },
+    [activeWiki, wikiClient]
+  );
+
+  // Restoring opens the editor with the historical content as the draft, so the
+  // user reviews and saves through the normal path (nothing is written blindly).
+  const handleRestoreRevision = useCallback(
+    (content: string) => {
+      if (!activePage) {
+        return;
+      }
+      setDraftContent(content);
+      setEditMode("code");
+      setSaveError(undefined);
+      setSaveState("idle");
+      setIsEditing(true);
+    },
+    [activePage]
+  );
+
+  // Returns the wiki-wide content index, rebuilding it when missing or stale.
+  const ensureContentIndex = useCallback(async (): Promise<readonly IndexedWikiPage[]> => {
+    if (!wikiClient || !activeWikiId) {
+      return [];
+    }
+    const cached = contentIndexRef.current;
+    if (cached && cached.wikiId === activeWikiId && Date.now() - cached.builtAt < 60000) {
+      return cached.pages;
+    }
+    const pages = await loadAllWikiPages(wikiClient, activeWikiId);
+    contentIndexRef.current = { wikiId: activeWikiId, pages, builtAt: Date.now() };
+    return pages;
+  }, [activeWikiId, wikiClient]);
+
+  const invalidateContentIndex = useCallback(() => {
+    contentIndexRef.current = undefined;
+  }, []);
+
+  // Query whether the current user follows the active page (parity #20).
+  useEffect(() => {
+    setFollowSubscriptionId(undefined);
+    if (!projectId || !userId || !activeWikiId || !pageMeta?.id) {
+      return;
+    }
+
+    let cancelled = false;
+    const target = { projectId, wikiId: activeWikiId, pageId: pageMeta.id, userId };
+    followClient
+      .getFollowSubscription(target)
+      .then((subscriptionId) => {
+        if (!cancelled) {
+          setFollowSubscriptionId(subscriptionId ?? null);
+        }
+      })
+      .catch(() => {
+        // Leave as unknown: the menu entry stays disabled rather than lying.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWikiId, followClient, pageMeta?.id, projectId, userId]);
+
+  const toggleFollow = useCallback(async () => {
+    if (!projectId || !userId || !activeWikiId || !pageMeta?.id || followSubscriptionId === undefined) {
+      return;
+    }
+    setFollowBusy(true);
+    try {
+      if (followSubscriptionId === null) {
+        const target = { projectId, wikiId: activeWikiId, pageId: pageMeta.id, userId };
+        const created = await followClient.follow(target);
+        setFollowSubscriptionId(created);
+      } else {
+        await followClient.unfollow(followSubscriptionId);
+        setFollowSubscriptionId(null);
+      }
+    } catch (followError: unknown) {
+      window.alert(`Could not update follow: ${formatError(followError)}`);
+    } finally {
+      setFollowBusy(false);
+    }
+  }, [activeWikiId, followClient, followSubscriptionId, pageMeta?.id, projectId, userId]);
+
+  // Lists the wiki's stored attachments (for the editor picker and the dialog).
+  const listWikiAttachments = useCallback(async () => {
+    if (!wikiClient || !activeWiki?.repositoryId) {
+      return [];
+    }
+    return wikiClient.listAttachments(activeWiki.repositoryId, activeWiki.mappedPath);
+  }, [activeWiki, wikiClient]);
+
+  // After a rename/move, finds pages whose links point at the old path and asks
+  // the user to update them (nothing is rewritten without confirmation).
+  const scanInboundLinks = useCallback(
+    async (oldPath: string, newPath: string) => {
+      if (!wikiClient || !activeWikiId) {
+        return;
+      }
+      try {
+        invalidateContentIndex();
+        const pages = await ensureContentIndex();
+        const updates = pages
+          .map((page) => ({ path: page.path, count: rewriteWikiLinks(page.content, oldPath, newPath).count }))
+          .filter((update) => update.count > 0);
+        if (updates.length > 0) {
+          setLinkUpdatePlan({ oldPath, newPath, updates });
+        }
+      } catch {
+        // Best-effort: a failed scan should never block the move itself.
+      }
+    },
+    [activeWikiId, ensureContentIndex, invalidateContentIndex, wikiClient]
+  );
+
   // Resolves a Markdown image reference to raw bytes for embedding in an export.
   const loadExportImage = useCallback(
     async (src: string, pagePath: string): Promise<ExportImage | null> => {
@@ -573,6 +729,24 @@ export function WikiBrowser({
         onClick: isEditing ? cancelEditing : startEditing,
       },
       {
+        id: "history",
+        label: "History",
+        disabled: isEditing,
+        onClick: () => setHistoryOpen(true),
+      },
+      {
+        id: "follow",
+        label: followSubscriptionId ? "Unfollow page" : "Follow page",
+        disabled: isEditing || followBusy || followSubscriptionId === undefined,
+        onClick: () => void toggleFollow(),
+      },
+      {
+        id: "attachments",
+        label: "Attachments…",
+        disabled: isEditing,
+        onClick: () => setAttachmentsOpen(true),
+      },
+      {
         id: "export",
         label: "Export…",
         disabled: isEditing,
@@ -583,7 +757,7 @@ export function WikiBrowser({
     return () => {
       onHeaderMenuActionsChange?.([]);
     };
-  }, [activePage, cancelEditing, isEditing, onHeaderMenuActionsChange, startEditing]);
+  }, [activePage, cancelEditing, followBusy, followSubscriptionId, isEditing, onHeaderMenuActionsChange, startEditing, toggleFollow]);
 
   // Loads a page by path, trying hyphen/space variants, and (optionally) syncs
   // the URL hash. This is the single entry point for all navigation:
@@ -624,6 +798,39 @@ export function WikiBrowser({
     },
     [activeWiki, activeWikiId, wikiClient, wikis]
   );
+
+  const handleConfirmLinkUpdates = useCallback(async () => {
+    const plan = linkUpdatePlan;
+    if (!plan || !wikiClient || !activeWikiId) {
+      return;
+    }
+    setLinkUpdateBusy(true);
+    const failures: string[] = [];
+    try {
+      for (const update of plan.updates) {
+        try {
+          const page = await wikiClient.getPage(activeWikiId, update.path);
+          const rewritten = rewriteWikiLinks(page.content, plan.oldPath, plan.newPath);
+          if (rewritten.count > 0) {
+            await wikiClient.savePage(activeWikiId, { ...page, content: rewritten.content });
+          }
+        } catch {
+          failures.push(update.path);
+        }
+      }
+      invalidateContentIndex();
+      // Refresh the active page if its content was just rewritten.
+      if (activePage && plan.updates.some((update) => update.path === activePage.path)) {
+        await loadPageByPath(activePage.path, false);
+      }
+      if (failures.length > 0) {
+        window.alert(`Could not update links on: ${failures.join(", ")}`);
+      }
+    } finally {
+      setLinkUpdateBusy(false);
+      setLinkUpdatePlan(undefined);
+    }
+  }, [activePage, activeWikiId, invalidateContentIndex, linkUpdatePlan, loadPageByPath, wikiClient]);
 
   // Absolute, shareable Azure DevOps deep link to a heading on the current page.
   const buildHeadingUrl = useCallback(
@@ -1155,11 +1362,14 @@ export function WikiBrowser({
           const followedPath = newPath + activePage.path.slice(sourcePath.length);
           await loadPageByPath(followedPath, true);
         }
+
+        // Offer to fix inbound links now pointing at the old path (#21 parity).
+        void scanInboundLinks(sourcePath, newPath);
       } catch (moveError: unknown) {
         window.alert(`Could not move page: ${formatError(moveError)}`);
       }
     },
-    [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, wikiClient]
+    [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, scanInboundLinks, wikiClient]
   );
 
   const handleOpenMoveDialog = useCallback(
@@ -1221,6 +1431,7 @@ export function WikiBrowser({
       });
       clearDraft(activeWikiId, activePage.path);
       setRecoverableDraft(undefined);
+      invalidateContentIndex();
       setActivePage(savedPage);
       setDraftContent(savedPage.content);
       setIsEditing(false);
@@ -1450,6 +1661,7 @@ export function WikiBrowser({
               <WikiPageEditor
                 disabled={saveState === "saving"}
                 onChange={setDraftContent}
+                onListAttachments={listWikiAttachments}
                 onUploadAttachment={uploadAttachment}
                 pages={pageLinks}
                 value={draftContent}
@@ -1461,6 +1673,7 @@ export function WikiBrowser({
                   <WikiPageEditor
                     disabled={saveState === "saving"}
                     onChange={setDraftContent}
+                    onListAttachments={listWikiAttachments}
                     onUploadAttachment={uploadAttachment}
                     pages={pageLinks}
                     value={draftContent}
@@ -1557,6 +1770,36 @@ export function WikiBrowser({
           onCancel={() => setMoveDialogPath(undefined)}
           onConfirm={(destinationParent) => void handleConfirmMove(destinationParent)}
           onExpand={(path) => void handleNodeExpand(path)}
+        />
+      ) : null}
+
+      {attachmentsOpen ? (
+        <WikiAttachmentsDialog
+          loadAttachments={listWikiAttachments}
+          onClose={() => setAttachmentsOpen(false)}
+          resolveImageSrc={resolveImageSrc}
+        />
+      ) : null}
+
+      {linkUpdatePlan ? (
+        <WikiLinkUpdateDialog
+          busy={linkUpdateBusy}
+          newPath={linkUpdatePlan.newPath}
+          oldPath={linkUpdatePlan.oldPath}
+          onConfirm={() => void handleConfirmLinkUpdates()}
+          onSkip={() => setLinkUpdatePlan(undefined)}
+          updates={linkUpdatePlan.updates}
+        />
+      ) : null}
+
+      {historyOpen && activePage ? (
+        <WikiHistoryDialog
+          currentContent={activePage.content}
+          loadContentAt={loadRevisionContent}
+          loadRevisions={loadPageRevisions}
+          onClose={() => setHistoryOpen(false)}
+          onRestore={handleRestoreRevision}
+          pageTitle={pageTitleFromPath(activePage.path)}
         />
       ) : null}
 

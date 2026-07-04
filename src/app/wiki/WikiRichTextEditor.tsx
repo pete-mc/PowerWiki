@@ -494,7 +494,7 @@ export function WikiRichTextEditor({
             <button onClick={() => addTableRow(true)} title="Insert row below" type="button">＋↓</button>
             <button onClick={() => moveTableRow(false)} title="Move row up" type="button">↑</button>
             <button onClick={() => moveTableRow(true)} title="Move row down" type="button">↓</button>
-            <button onClick={removeTableRow} title="Delete row" type="button">🗑</button>
+            <button className="wiki-richtext-table-delete" onClick={removeTableRow} title="Delete row" type="button">✕</button>
           </span>
           <span className="wiki-richtext-table-sep" aria-hidden="true" />
           <span className="wiki-richtext-table-group" aria-label="Columns">
@@ -503,7 +503,7 @@ export function WikiRichTextEditor({
             <button onClick={() => addTableColumn(true)} title="Insert column right" type="button">＋→</button>
             <button onClick={() => moveTableColumn(false)} title="Move column left" type="button">←</button>
             <button onClick={() => moveTableColumn(true)} title="Move column right" type="button">→</button>
-            <button onClick={removeTableColumn} title="Delete column" type="button">🗑</button>
+            <button className="wiki-richtext-table-delete" onClick={removeTableColumn} title="Delete column" type="button">✕</button>
           </span>
         </div>
       ) : null}

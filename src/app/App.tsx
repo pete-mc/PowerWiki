@@ -121,7 +121,9 @@ export function App({ error, hostContext, status }: AppProps) {
           onPageTitleChange={handlePageTitleChange}
           organizationIsHosted={hostContext?.organizationIsHosted}
           organizationName={hostContext?.organizationName}
+          projectId={hostContext?.projectId}
           projectName={hostContext?.projectName}
+          userId={hostContext?.userId}
         />
       )}
     </main>

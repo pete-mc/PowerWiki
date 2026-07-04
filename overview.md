@@ -1,77 +1,65 @@
-# PowerWiki
+# PowerWiki — a modern wiki for Azure DevOps
 
-PowerWiki brings a modern wiki experience to Azure DevOps without touching your existing content. It adds a **Power Wiki** menu alongside the built-in Azure DevOps Wiki and continues to use your standard wiki Git repositories as the single source of truth.
+**The wiki you already have, the experience it deserves.** PowerWiki adds a Power Wiki hub next to the built-in Azure DevOps Wiki and reads and writes the *same* wiki Git repositories. No migration, no proprietary formats, no lock-in — turn it off tomorrow and your wiki is untouched.
 
-No migration. No proprietary formats. Just better reading and editing for the Markdown and Mermaid you already have.
+![PowerWiki rendering a wiki page with work item badges, an embedded Azure Boards query table, a per-page byline, and a Mermaid diagram](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-rendering.png)
 
-## Why PowerWiki?
+## Why teams switch
 
-- Use the latest Markdown and Mermaid rendering instead of the frozen versions bundled in Azure DevOps.
-- Edit with a full-featured Monaco editor, the same editor that powers VS Code.
-- Get rich Azure Boards integration that still renders as readable plain text in the standard wiki.
-- Keep the familiar Azure DevOps Wiki experience available for your whole team. PowerWiki is purely additive.
-- Follow Azure DevOps light, dark, and custom themes automatically.
+- 🧜 **Today's Mermaid, today's Markdown.** Mermaid v11 (architecture, kanban, sankey, xy-chart, mindmap, timeline and more), GitHub-style callouts, KaTeX math, syntax-highlighted code — instead of the frozen renderers bundled with Azure DevOps.
+- 📤 **Export to Word and PDF.** Turn one page — or an ordered set of pages — into a real `.docx` with native Word heading styles and equations, or a print-perfect PDF. Diagrams, query tables, and images included.
+- 🕑 **Never lose the thread.** Page history with side-by-side diffs and one-click restore, follow pages for change notifications, and safe renames that fix inbound links for you.
+- 🧩 **Azure Boards, live on the page.** `#1234` becomes a rich work item badge; `::: query-table <id> :::` embeds live query results — and both stay readable as plain text in the built-in wiki.
+- ✍️ **An editor you'll actually enjoy.** Monaco (the VS Code editor) with a `/` command palette, keyboard shortcuts, page-link and attachment pickers, autosaved drafts, and a WYSIWYG mode with in-context table editing.
 
-## Key Features
+## Reading, upgraded
 
-- **Modern rendering**
-  - Current CommonMark + GFM pipeline with heading anchors.
-  - Syntax-highlighted code blocks with a one-click copy button.
-  - GitHub-style callouts / admonitions (`> [!NOTE]`, `[!TIP]`, `[!WARNING]`, etc.), rendered as styled blocks and still readable in the built-in wiki.
-  - Hover permalinks on headings (copy a shareable Azure DevOps deep link) and click-to-zoom on images.
-  - LaTeX math rendering with KaTeX (`$inline$` and `$$display$$`).
-  - Full support for `[[_TOC_]]` and `[[_TOSP_]]` placeholders.
-  - Up-to-date Mermaid (v11) — including the latest diagram types (architecture, block, kanban, sankey, xy-chart, requirement) — with automatic light/dark theming, a fit-to-screen pan/zoom fullscreen view, and SVG export. Works with both standard ````mermaid` fences and Azure DevOps-style `::: mermaid` blocks.
+- Current CommonMark + GFM pipeline, `[[_TOC_]]` and `[[_TOSP_]]` support, and native-feeling deep links.
+- Mermaid v11 with automatic light/dark theming, a fit-to-screen pan/zoom viewer, and SVG download. Works with ` ```mermaid ` fences and `::: mermaid` blocks alike.
+- LaTeX math with KaTeX (`$inline$` and `$$display$$`).
+- Callouts (`> [!NOTE]`, `[!TIP]`, `[!WARNING]`…), heading permalinks that copy a shareable Azure DevOps link, click-to-zoom images, and copy buttons on code blocks.
+- Per-page byline (last editor and time, straight from Git history) and page comments.
 
-- **Powerful editing**
-  - Monaco-based Markdown editor with word wrap, syntax awareness, and comfortable editing.
-  - Save changes directly back to your Azure DevOps wiki repository.
-  - Formatting helpers for headings, emphasis, code, lists, links, and starter Mermaid diagrams, plus keyboard shortcuts (Ctrl+B / Ctrl+I / Ctrl+K).
-  - Type `/` for a slash-command palette that inserts headings, tables, code, Mermaid diagrams, work-item references, query tables, and more.
-  - Page-link picker to insert links to other wiki pages from a searchable list.
-  - In-context table editing in the rich text editor: a floating toolbar next to the table adds, deletes, and reorders rows and columns.
-  - Never lose work: a browser guard warns before you close or reload with unsaved edits, and local autosave offers to restore an in-progress draft after an accidental reload.
-  - Create new pages, move or reorder pages, and delete pages through Azure DevOps Wiki APIs.
+![Mermaid v11 diagrams rendered by PowerWiki with a pan-and-zoom viewer and SVG export](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-mermaid.png)
 
-- **Export**
-  - Export a page (or a set of pages you select and order from a lazy-loading page tree) to **Word (.docx)** or **PDF** from the page menu.
-  - Word produces a real .docx where Markdown headings become native Word heading styles; PDF uses the browser's print for full fidelity.
-  - Both formats render Markdown, tables, images, Mermaid diagrams, math, work-item badges, embedded query tables, and embedded HTML.
+![KaTeX math rendering with inline and display equations](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-math.png)
 
-- **Azure Boards enhancements** (portable by design)
-  - `#1234` references render as clickable work item badges that open the native work item form.
-  - Embed live query results with `::: query-table <query-id> :::`. PowerWiki renders a table of matching work items with a link back to the original query.
+## Writing, without friction
 
-- **Navigation & structure**
-  - Switch between multiple project wikis.
-  - Hierarchical page tree with lazy-loaded children, collapse/expand behavior, and drag-and-drop reorder.
-  - Deep linking and in-page navigation that feels native.
-  - Relative images and Azure DevOps-hosted wiki images are resolved and displayed correctly.
-  - Per-page byline showing the last editor and edit time from the page's Git history, plus top-level wiki comments.
-  - Work item badges and embedded query tables stay rendered across page navigation, editor resizing, and live preview edits.
+- **Monaco Markdown editor** with live split preview, word wrap, and Azure DevOps theming.
+- **Type `/` for anything**: headings, tables, code blocks, every Mermaid diagram type, work-item references, query tables, links.
+- **Ctrl+B / Ctrl+I / Ctrl+K**, a searchable page-link picker, and an attachment picker for files you've already uploaded.
+- **Paste or drop images** into any editor — they upload to `.attachments` and the reference is inserted for you.
+- **Rich text mode** with a floating table toolbar: insert, delete, and reorder rows and columns right at the table.
+- **Never lose work**: unsaved-changes protection on refresh/close and local draft autosave with one-click recovery.
 
-- **Theme aware**
-  - Uses Azure DevOps host CSS variables for the PowerWiki UI.
-  - Detects light or dark mode from host color luminance rather than hard-coded theme names.
-  - Keeps Monaco and Mermaid diagrams aligned with the current Azure DevOps theme.
+![PowerWiki split editor with Monaco Markdown source, live preview, and the slash command palette](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-editing.png)
 
-## Screenshots
+## History and stewardship
 
-![PowerWiki rendering a wiki page in Azure DevOps with a per-page author and last-edited byline, table of contents, subpage tree, Markdown tables, code blocks, and a Mermaid diagram](media/screenshots/powerwiki-rendering.png)
+- **Page history** from Git: browse revisions, compare side by side (changes per revision or against current), and restore any version through the normal save path.
+- **Follow pages** to get Azure DevOps notifications when they change — the same subscriptions the built-in wiki uses.
+- **Attachment manager**: browse everything in `.attachments` with previews and copy Markdown references in a click.
+- **Safe renames**: when you move or rename a page, PowerWiki finds every inbound link, shows you the affected pages, and updates them on confirm.
 
-![PowerWiki split-code editor showing the Monaco Markdown source on the left and a live rendered preview on the right](media/screenshots/powerwiki-editing.png)
+![Page history with a side-by-side Monaco diff and restore](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-history.png)
 
-![PowerWiki rich text editor providing a WYSIWYG editing surface with formatting, link, image, and table controls](media/screenshots/powerwiki-rich-text.png)
+## Export that looks like you spent all day on it
 
-## How It Works
+- **Word (.docx)**: Markdown headings become real Word heading styles (navigation pane ready), equations become native editable Word math, Mermaid renders as crisp images, and tables/images/query results come across.
+- **PDF**: full-fidelity print with selectable text.
+- Export one page, or select and order any set of pages from a tree into a single document.
 
-PowerWiki reads and writes the exact same wiki pages stored in your project's Azure DevOps Git wiki repositories. Everything you edit is stored as normal Markdown, fully compatible with the built-in Azure DevOps Wiki, clone, and any other tools that consume the repository.
+![Export dialog with Word and PDF formats and multi-page selection](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-export.png)
 
-## Requirements & Scope
+## Your content stays yours
 
-- Requires an Azure DevOps project with at least one wiki.
-- Works for both Azure DevOps Services and Server where extension APIs are available.
-- Requests read/write access to Wiki, read access to Work Items, and read access to Code. The Code (read) permission is used only to look up each page's last-edit author and date from the wiki's Git history for the byline.
-- Current focus: excellent page viewing, content editing, page tree management, comments, and modern rendering. Full attachment management, full page history/compare, and search are on the roadmap.
+PowerWiki stores nothing outside your wiki's Git repository. Every page remains plain, portable Markdown that renders in the built-in wiki, in clones, and in any Markdown tool. PowerWiki-specific niceties (badges, query tables, callouts) degrade to readable text everywhere else. The built-in wiki stays available to your whole team — PowerWiki is purely additive.
 
-Choose the experience that works best for you on any given day. Your wiki content stays exactly where it belongs.
+## Requirements & permissions
+
+- An Azure DevOps project with at least one wiki (Services; Server where extension APIs are available).
+- Scopes: **Wiki (read/write)** for pages and attachments; **Work Items (read)** for badges and query tables; **Code (read)** for page history, the byline, and attachment listings from the wiki's Git repository; **Notifications (write)** for follow/unfollow page subscriptions.
+- Light, dark, and custom Azure DevOps themes are detected automatically.
+
+Install it, open **Power Wiki** in your project, and give your wiki the experience it deserves.

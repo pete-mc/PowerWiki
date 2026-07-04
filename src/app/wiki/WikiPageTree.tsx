@@ -231,6 +231,7 @@ function WikiPageTreeItem({ initialExpanded, node }: WikiPageTreeItemProps) {
           aria-current={isActive ? "page" : undefined}
           className="wiki-page-tree-link"
           onClick={() => actions.onPageSelected(node.path)}
+          title={node.name}
           type="button"
         >
           <span className="wiki-page-tree-icon">

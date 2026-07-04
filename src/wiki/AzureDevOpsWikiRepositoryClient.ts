@@ -17,7 +17,7 @@ import {
   type WikiPageMove
 } from "azure-devops-extension-api/Wiki";
 
-import type { WikiComment, WikiPageChange, WikiPageMeta } from "./WikiComment";
+import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "./WikiComment";
 import type { WikiAttachment, WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
 
@@ -340,6 +340,104 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     }
 
     return undefined;
+  }
+
+  /**
+   * Lists a page's revisions: the Git commits that touched its file on the wiki
+   * branch, newest first. Tries hyphen/space path variants like the byline does.
+   */
+  public async getPageRevisions(
+    repositoryId: string,
+    gitItemPath: string,
+    branch?: string,
+    top = 50
+  ): Promise<WikiPageRevision[]> {
+    const itemVersion = branch
+      ? {
+          version: branch,
+          versionOptions: GitVersionOptions.None,
+          versionType: GitVersionType.Branch,
+        }
+      : undefined;
+
+    for (const candidatePath of gitItemPathCandidates(gitItemPath)) {
+      try {
+        const criteria = {
+          $skip: 0,
+          $top: top,
+          itemPath: candidatePath,
+          itemVersion,
+        } as unknown as GitQueryCommitsCriteria;
+        const commits = await this.gitClient.getCommitsBatch(criteria, repositoryId, this.projectName, 0, top, false);
+        if (commits.length === 0) {
+          continue;
+        }
+
+        return commits.map((commit) => ({
+          commitId: commit.commitId,
+          authorName: (commit.author ?? commit.committer)?.name,
+          date: (commit.author ?? commit.committer)?.date
+            ? new Date((commit.author ?? commit.committer).date).toISOString()
+            : undefined,
+          comment: commit.comment,
+          gitItemPath: candidatePath,
+        }));
+      } catch {
+        // Try the next candidate path before giving up.
+      }
+    }
+
+    return [];
+  }
+
+  /** Reads a page's Markdown as it was at a specific commit. */
+  public async getPageContentAtCommit(
+    repositoryId: string,
+    gitItemPath: string,
+    commitId: string
+  ): Promise<string> {
+    return this.gitClient.getItemText(
+      repositoryId,
+      gitItemPath,
+      this.projectName,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+      {
+        version: commitId,
+        versionOptions: GitVersionOptions.None,
+        versionType: GitVersionType.Commit,
+      },
+      true
+    );
+  }
+
+  /**
+   * Lists the wiki's stored attachments (the `.attachments` folder in its
+   * backing repository). Returns an empty list when the folder doesn't exist.
+   */
+  public async listAttachments(repositoryId: string, mappedPath: string | undefined): Promise<WikiAttachment[]> {
+    const base = !mappedPath || mappedPath === "/" ? "" : mappedPath.replace(/\/+$/, "");
+    const scopePath = `${base}/.attachments`;
+    try {
+      const items = await this.gitClient.getItems(
+        repositoryId,
+        this.projectName,
+        scopePath,
+        VersionControlRecursionType.OneLevel
+      );
+      return items
+        .filter((item) => !item.isFolder)
+        .map((item) => {
+          const name = item.path.split("/").filter(Boolean).at(-1) ?? item.path;
+          return { name, path: `/.attachments/${name}` };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return [];
+    }
   }
 
   /**

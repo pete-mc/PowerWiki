@@ -122,8 +122,12 @@ The current implementation provides a working Power Wiki experience:
 - Resolves relative wiki images and Azure DevOps-hosted image URLs back to the wiki Git repository item API.
 - Shows the last known page edit author/date from Git history when available.
 - Lists and adds top-level page comments through the Azure DevOps comments APIs.
-
-Full attachment management, full page history/compare views, and search are planned follow-up slices.
+- Page history from Git commits with a side-by-side Monaco diff and restore-through-edit.
+- Follow/unfollow pages via Azure DevOps notification subscriptions (same contract as the built-in wiki).
+- Attachment management: browse and insert existing attachments with image previews.
+- Inbound-link updates on page rename/move, with a preview/confirm dialog.
+- Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML.
+- Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
 
 ## Theming
 

@@ -10,6 +10,16 @@ export interface WikiPageChange {
   readonly date?: string;
 }
 
+/** One revision of a wiki page (a Git commit that touched its file). */
+export interface WikiPageRevision {
+  readonly commitId: string;
+  readonly authorName?: string;
+  readonly date?: string;
+  readonly comment?: string;
+  /** Git item path of the page's file at that revision. */
+  readonly gitItemPath: string;
+}
+
 /** A single comment on a wiki page. */
 export interface WikiComment {
   readonly authorImageUrl?: string;

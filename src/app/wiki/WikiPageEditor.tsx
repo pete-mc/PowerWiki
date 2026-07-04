@@ -8,9 +8,12 @@ import {
   dragHasFiles,
   filesFromDataTransfer,
   isImageFile,
+  isImagePath,
   type UploadAttachment,
 } from "../../wiki/attachmentUpload";
+import type { WikiAttachment } from "../../wiki/WikiPage";
 import { MERMAID_SNIPPETS } from "./mermaidSnippets";
+import { formatEditorLoadError, loadMonaco, type MonacoApi } from "./monacoLoader";
 import { registerSlashCommands } from "./slashCommands";
 
 /** A wiki page offered by the page-link picker. */
@@ -22,6 +25,8 @@ export interface WikiPageLink {
 interface WikiPageEditorProps {
   readonly disabled?: boolean;
   readonly onChange: (value: string) => void;
+  /** Lists the wiki's existing attachments for the insert picker. */
+  readonly onListAttachments?: () => Promise<readonly WikiAttachment[]>;
   /** Uploads a pasted/dropped/picked file and returns its wiki reference. */
   readonly onUploadAttachment?: UploadAttachment;
   /** Wiki pages the page-link picker can insert links to. */
@@ -29,24 +34,7 @@ interface WikiPageEditorProps {
   readonly value: string;
 }
 
-type MonacoApi = typeof Monaco;
-
-interface MonacoAmdRequire {
-  (dependencies: readonly string[], onLoad: () => void, onError?: (error: unknown) => void): void;
-  config(options: { paths: { vs: string } }): void;
-}
-
-declare global {
-  interface Window {
-    monaco?: MonacoApi;
-    require?: MonacoAmdRequire;
-  }
-}
-
-
-let monacoLoadPromise: Promise<MonacoApi> | undefined;
-
-export function WikiPageEditor({ disabled, onChange, onUploadAttachment, pages, value }: WikiPageEditorProps) {
+export function WikiPageEditor({ disabled, onChange, onListAttachments, onUploadAttachment, pages, value }: WikiPageEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<MonacoApi | undefined>(undefined);
@@ -54,12 +42,16 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, pages, 
   const mermaidRef = useRef<HTMLDivElement>(null);
   const linkPickerRef = useRef<HTMLDivElement>(null);
   const linkSearchRef = useRef<HTMLInputElement>(null);
+  const attachPickerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [mermaidOpen, setMermaidOpen] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
+  const [attachPickerOpen, setAttachPickerOpen] = useState(false);
+  const [attachQuery, setAttachQuery] = useState("");
+  const [attachments, setAttachments] = useState<readonly WikiAttachment[] | undefined>(undefined);
   const [editorReady, setEditorReady] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
   const [uploadError, setUploadError] = useState<string>();
@@ -404,6 +396,62 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, pages, 
     return () => disposables.forEach((disposable) => disposable.dispose());
   }, [applyLink, applyWrap, editorReady]);
 
+  // Inserts a reference to an existing attachment at the cursor.
+  const insertAttachment = useCallback((attachment: WikiAttachment) => {
+    const editor = editorRef.current;
+    const selection = editor?.getSelection();
+    if (!editor || !selection) {
+      return;
+    }
+    const markdown = attachmentMarkdown({
+      name: attachment.name,
+      path: attachment.path,
+      isImage: isImagePath(attachment.path),
+    });
+    editor.executeEdits("wiki-attach", [{ range: selection, text: markdown, forceMoveMarkers: true }]);
+    setAttachPickerOpen(false);
+    setAttachQuery("");
+    editor.focus();
+  }, []);
+
+  // Load the attachment list when the picker opens; close on outside click/Esc.
+  useEffect(() => {
+    if (!attachPickerOpen) {
+      setAttachQuery("");
+      return;
+    }
+
+    if (!attachments && onListAttachments) {
+      onListAttachments()
+        .then(setAttachments)
+        .catch(() => setAttachments([]));
+    }
+
+    function onPointerDown(event: MouseEvent) {
+      if (attachPickerRef.current && !attachPickerRef.current.contains(event.target as Node)) {
+        setAttachPickerOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setAttachPickerOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [attachPickerOpen, attachments, onListAttachments]);
+
+  const filteredAttachments = useMemo(() => {
+    const all = attachments ?? [];
+    const query = attachQuery.trim().toLowerCase();
+    return (query ? all.filter((attachment) => attachment.name.toLowerCase().includes(query)) : all).slice(0, 50);
+  }, [attachQuery, attachments]);
+
   const filteredPages = useMemo(() => {
     const all = pages ?? [];
     const query = linkQuery.trim().toLowerCase();
@@ -628,6 +676,61 @@ export function WikiPageEditor({ disabled, onChange, onUploadAttachment, pages, 
             ref={fileInputRef}
             type="file"
           />
+          <div className="wiki-format-linkpicker" ref={attachPickerRef}>
+            <button
+              aria-expanded={attachPickerOpen}
+              aria-haspopup="menu"
+              className="wiki-format-button"
+              disabled={formattingDisabled || !onListAttachments}
+              onMouseDown={keepEditorFocus}
+              onClick={() => setAttachPickerOpen((open) => !open)}
+              title="Insert an existing wiki attachment"
+              type="button"
+            >
+              Attachment ▾
+            </button>
+            {attachPickerOpen ? (
+              <div className="wiki-format-linkpicker-popover" role="menu">
+                <input
+                  className="wiki-format-linkpicker-search"
+                  onChange={(event) => setAttachQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && filteredAttachments[0]) {
+                      event.preventDefault();
+                      insertAttachment(filteredAttachments[0]);
+                    }
+                  }}
+                  placeholder={attachments ? "Search attachments…" : "Loading attachments…"}
+                  type="text"
+                  value={attachQuery}
+                />
+                <div className="wiki-format-linkpicker-list">
+                  {filteredAttachments.length === 0 ? (
+                    <div className="wiki-format-linkpicker-empty">
+                      {attachments ? "No attachments found." : "Loading…"}
+                    </div>
+                  ) : (
+                    filteredAttachments.map((attachment) => (
+                      <button
+                        className="wiki-format-linkpicker-item"
+                        key={attachment.path}
+                        onClick={() => insertAttachment(attachment)}
+                        onMouseDown={keepEditorFocus}
+                        role="menuitem"
+                        title={attachment.path}
+                        type="button"
+                      >
+                        <span className="wiki-format-linkpicker-title">{attachment.name}</span>
+                        <span className="wiki-format-linkpicker-path">
+                          {isImagePath(attachment.path) ? "image" : "file"}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
         {uploadCount > 0 ? <span className="wiki-format-status" role="status">Uploading…</span> : null}
         {uploadError ? <span className="wiki-format-status wiki-format-status-error" role="alert">{uploadError}</span> : null}
@@ -697,51 +800,3 @@ function toggleQuote(content: string): string {
   return /^>\s?/.test(content) ? content.replace(/^>\s?/, "") : `> ${content}`;
 }
 
-function loadMonaco(): Promise<MonacoApi> {
-  if (window.monaco) {
-    return Promise.resolve(window.monaco);
-  }
-
-  monacoLoadPromise ??= new Promise((resolve, reject) => {
-    const existingScript = document.querySelector<HTMLScriptElement>("script[data-powerwiki-monaco-loader='true']");
-    if (existingScript && typeof window.require === "function") {
-      configureAndLoadMonaco(resolve, reject);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.async = true;
-    script.dataset.powerwikiMonacoLoader = "true";
-    script.src = "vs/loader.js";
-    script.onload = () => configureAndLoadMonaco(resolve, reject);
-    script.onerror = () => reject(new Error("Unable to load Monaco editor assets."));
-    document.head.appendChild(script);
-  });
-
-  return monacoLoadPromise;
-}
-
-function configureAndLoadMonaco(resolve: (monaco: MonacoApi) => void, reject: (error: unknown) => void): void {
-  if (!window.require) {
-    reject(new Error("Monaco loader did not initialize."));
-    return;
-  }
-
-  window.require.config({ paths: { vs: "vs" } });
-  window.require(["vs/editor/editor.main"], () => {
-    if (window.monaco) {
-      resolve(window.monaco);
-      return;
-    }
-
-    reject(new Error("Monaco editor did not initialize."));
-  }, reject);
-}
-
-function formatEditorLoadError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unable to load Monaco editor.";
-}

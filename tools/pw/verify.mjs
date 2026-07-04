@@ -668,6 +668,97 @@ try {
     check(false, `export tree lazy load failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "15-export-tree-error.png") });
   }
+
+  // Parity #33: tree page names carry a tooltip with the full name.
+  // Parity #7: the History dialog lists revisions and shows a Monaco diff.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    const hasTooltip = await frame.$eval(
+      ".wiki-page-tree-link",
+      (el) => (el.getAttribute("title") || "").length > 0
+    );
+    check(hasTooltip, "tree page names have a full-name tooltip");
+
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "History" }).click();
+    await frame.waitForSelector(".wiki-history-item", { timeout: 60000 });
+    const revisionCount = await frame.$$eval(".wiki-history-item", (els) => els.length);
+    check(revisionCount > 0, `history lists revisions (${revisionCount})`);
+    await frame.waitForSelector(".wiki-history-diff .monaco-diff-editor", { timeout: 60000 });
+    check(true, "history shows a Monaco diff for the selected revision");
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "16-history.png") });
+    await frame.click(".wiki-export-close");
+    await sleep(300);
+  } catch (error) {
+    check(false, `history/compare failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "16-history-error.png") });
+  }
+
+  // Parity #17: attachments dialog lists the wiki's stored files.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Attachments…" }).click();
+    await frame.waitForSelector(".wiki-attachment-card", { timeout: 60000 });
+    const attachmentCount = await frame.$$eval(".wiki-attachment-card", (els) => els.length);
+    check(attachmentCount > 0, `attachments dialog lists files (${attachmentCount})`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "18-attachments.png") });
+    await frame.click(".wiki-export-close");
+    await sleep(300);
+  } catch (error) {
+    check(false, `attachments dialog failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "18-attachments-error.png") });
+  }
+
+  // Parity #17: the editor's attachment picker inserts an existing reference.
+  try {
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Edit page" }).click();
+    await frame.waitForSelector(".wiki-page-editor .monaco-editor", { timeout: 30000 });
+    await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      if (models[0]) models[0].setValue("");
+    });
+    await frame.getByRole("button", { name: "Attachment ▾" }).click();
+    await frame.waitForSelector(".wiki-format-linkpicker-item", { timeout: 60000 });
+    await frame.click(".wiki-format-linkpicker-item");
+    await sleep(300);
+    const inserted = await frame.evaluate(() => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      return models[0] ? models[0].getValue() : "";
+    });
+    check(inserted.includes("/.attachments/"), `attachment picker inserts a reference (${JSON.stringify(inserted.slice(0, 50))})`);
+    await frame.getByRole("button", { name: "Cancel" }).click();
+    await sleep(500);
+  } catch (error) {
+    check(false, `attachment picker failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "19-attach-picker-error.png") });
+    await leaveEditor(page, frame);
+  }
+
+  // Parity #20: follow round-trip — Follow page flips to Unfollow, then back.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    const followItem = frame.getByRole("menuitem", { name: /^(Follow|Unfollow) page$/ });
+    await followItem.waitFor({ timeout: 30000 });
+    const initialLabel = (await followItem.textContent()) ?? "";
+    await followItem.click();
+    await sleep(2500);
+    await frame.click(".powerwiki-header-menu-button");
+    const toggledLabel = (await frame.getByRole("menuitem", { name: /^(Follow|Unfollow) page$/ }).textContent()) ?? "";
+    const flipped =
+      (initialLabel.trim() === "Follow page" && toggledLabel.trim() === "Unfollow page") ||
+      (initialLabel.trim() === "Unfollow page" && toggledLabel.trim() === "Follow page");
+    check(flipped, `follow toggles (${initialLabel.trim()} -> ${toggledLabel.trim()})`);
+    // Toggle back to restore the original state.
+    await frame.getByRole("menuitem", { name: /^(Follow|Unfollow) page$/ }).click();
+    await sleep(2000);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "20-follow.png") });
+  } catch (error) {
+    check(false, `follow toggle failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "20-follow-error.png") });
+  }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
 } finally {
