@@ -5,6 +5,8 @@ import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholders
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
 import { addCopyButtons, highlightCodeBlocks } from "./enhancePreview";
+import { MermaidZoomOverlay } from "./MermaidZoomOverlay";
+import { addMermaidToolbars, downloadMermaidPng, downloadMermaidSvg } from "./mermaidTools";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
 
@@ -121,6 +123,8 @@ export function MarkdownPreview({
   const [enrichmentVersion, setEnrichmentVersion] = useState(0);
   // The image currently shown in the click-to-zoom lightbox, if any.
   const [lightboxSrc, setLightboxSrc] = useState<string | undefined>(undefined);
+  // Serialized SVG of the Mermaid diagram open in the pan/zoom overlay, if any.
+  const [mermaidZoom, setMermaidZoom] = useState<string | undefined>(undefined);
   const themeMode = useThemeMode();
 
   useEffect(() => {
@@ -211,12 +215,31 @@ export function MarkdownPreview({
       return;
     }
 
-    void renderMermaidDiagrams(container, themeMode);
+    void renderMermaidDiagrams(container, themeMode).then(() => {
+      addMermaidToolbars(container);
+    });
   }, [html, themeMode]);
 
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {
     // Ignore modified clicks so users can still open links in a new tab.
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const mermaidButton = (event.target as HTMLElement).closest<HTMLElement>("[data-mermaid-action]");
+    if (mermaidButton) {
+      event.preventDefault();
+      const svg = mermaidButton.closest("pre")?.querySelector("svg");
+      const action = mermaidButton.getAttribute("data-mermaid-action");
+      if (svg) {
+        if (action === "zoom") {
+          setMermaidZoom(svg.outerHTML);
+        } else if (action === "svg") {
+          downloadMermaidSvg(svg);
+        } else if (action === "png") {
+          downloadMermaidPng(svg);
+        }
+      }
       return;
     }
 
@@ -294,6 +317,9 @@ export function MarkdownPreview({
         >
           <img alt="" src={lightboxSrc} />
         </div>
+      ) : null}
+      {mermaidZoom ? (
+        <MermaidZoomOverlay onClose={() => setMermaidZoom(undefined)} svgHtml={mermaidZoom} />
       ) : null}
     </>
   );

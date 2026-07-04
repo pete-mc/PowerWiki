@@ -173,6 +173,72 @@ const MERMAID_SNIPPETS: readonly MermaidSnippet[] = [
       "    merge develop",
     ].join("\n"),
   },
+  {
+    label: "Architecture",
+    code: [
+      "architecture-beta",
+      "    group api(cloud)[API]",
+      "    service db(database)[Database] in api",
+      "    service server(server)[Server] in api",
+      "    db:L -- R:server",
+    ].join("\n"),
+  },
+  {
+    label: "Block",
+    code: [
+      "block-beta",
+      "    columns 3",
+      '    a["A"] b["B"] c["C"]',
+      "    d[\"D\"] space e[\"E\"]",
+    ].join("\n"),
+  },
+  {
+    label: "Kanban",
+    code: [
+      "kanban",
+      "    Todo",
+      "        t1[Design the feature]",
+      "    In progress",
+      "        t2[Build it]",
+      "    Done",
+      "        t3[Ship it]",
+    ].join("\n"),
+  },
+  {
+    label: "Sankey",
+    code: [
+      "sankey-beta",
+      "    Source,Middle,5",
+      "    Middle,Target A,3",
+      "    Middle,Target B,2",
+    ].join("\n"),
+  },
+  {
+    label: "XY chart",
+    code: [
+      "xychart-beta",
+      '    title "Monthly revenue"',
+      "    x-axis [jan, feb, mar, apr]",
+      '    y-axis "Revenue" 0 --> 100',
+      "    bar [30, 50, 80, 65]",
+    ].join("\n"),
+  },
+  {
+    label: "Requirement",
+    code: [
+      "requirementDiagram",
+      "    requirement req1 {",
+      "        id: 1",
+      "        text: The system shall render diagrams.",
+      "        risk: medium",
+      "        verifymethod: test",
+      "    }",
+      "    element e1 {",
+      "        type: simulation",
+      "    }",
+      "    e1 - verifies -> req1",
+    ].join("\n"),
+  },
 ];
 
 let monacoLoadPromise: Promise<MonacoApi> | undefined;

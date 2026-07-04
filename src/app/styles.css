@@ -945,6 +945,101 @@ body {
   object-fit: contain;
 }
 
+/* Mermaid diagram toolbar + pan/zoom overlay */
+.markdown-preview pre.mermaid-rendered {
+  position: relative;
+}
+
+.powerwiki-mermaid-tools {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  transition: opacity 0.1s ease;
+}
+
+.markdown-preview pre.mermaid-rendered:hover .powerwiki-mermaid-tools,
+.powerwiki-mermaid-tools:focus-within {
+  opacity: 1;
+}
+
+.powerwiki-mermaid-tools button {
+  background: var(--pw-surface, rgba(128, 128, 128, 0.15));
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.powerwiki-mermaid-tools button:hover {
+  background: var(--pw-hover);
+  border-color: var(--pw-accent);
+}
+
+.powerwiki-mermaid-zoom {
+  background: rgba(0, 0, 0, 0.75);
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.powerwiki-mermaid-zoom-bar {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  padding: 10px;
+}
+
+.powerwiki-mermaid-zoom-bar button {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  min-width: 32px;
+  padding: 4px 10px;
+}
+
+.powerwiki-mermaid-zoom-bar button:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.powerwiki-mermaid-zoom-stage {
+  align-items: center;
+  cursor: grab;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.powerwiki-mermaid-zoom-stage:active {
+  cursor: grabbing;
+}
+
+.powerwiki-mermaid-zoom-content {
+  background: #fff;
+  border-radius: 4px;
+  padding: 16px;
+  transform-origin: center center;
+}
+
+.powerwiki-mermaid-zoom-content svg {
+  max-width: none;
+}
+
 .wiki-format-mermaid {
   margin-left: auto;
   position: relative;

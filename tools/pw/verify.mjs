@@ -215,6 +215,31 @@ try {
     check(false, `rendering features failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-rendering-error.png") });
   }
+
+  // Release B: a latest-generation Mermaid type renders (validates the diagram
+  // chunk loads), and the diagram toolbar + pan/zoom overlay work.
+  try {
+    const mermaidMd = '```mermaid\nxychart-beta\n  title "Test"\n  x-axis [a, b, c]\n  y-axis "V" 0 --> 10\n  bar [3, 6, 9]\n```\n';
+    await frame.evaluate((value) => {
+      const models = window.monaco && window.monaco.editor ? window.monaco.editor.getModels() : [];
+      if (models[0]) {
+        models[0].setValue(value);
+      }
+    }, mermaidMd);
+
+    const preview = ".wiki-editor-split-pane-preview .markdown-preview";
+    await frame.waitForSelector(`${preview} pre.mermaid-rendered svg`, { timeout: 30000 });
+    check(!(await frame.$(`${preview} .mermaid-error`)), "latest Mermaid type (xychart) renders without error");
+    await frame.waitForSelector(`${preview} .powerwiki-mermaid-tools`, { timeout: 10000 });
+    check(true, "mermaid diagram toolbar present");
+    await frame.click(`${preview} [data-mermaid-action="zoom"]`);
+    await frame.waitForSelector(".powerwiki-mermaid-zoom", { timeout: 10000 });
+    check(true, "mermaid pan/zoom overlay opens");
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-mermaid.png") });
+  } catch (error) {
+    check(false, `mermaid features failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-mermaid-error.png") });
+  }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
 } finally {
