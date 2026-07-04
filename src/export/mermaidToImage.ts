@@ -47,6 +47,11 @@ function readSvgSize(svg: string): { width: number; height: number } {
   return { width: 800, height: 600 };
 }
 
+/** Rasterizes an in-DOM SVG element (e.g. a rendered Mermaid diagram) to PNG. */
+export function rasterizeSvgElement(svg: SVGElement): Promise<RasterImage | null> {
+  return svgToPng(new XMLSerializer().serializeToString(svg));
+}
+
 function svgToPng(svg: string): Promise<RasterImage | null> {
   return new Promise((resolve) => {
     const fallback = readSvgSize(svg);

@@ -2224,6 +2224,47 @@ button.wiki-move-option:hover {
   padding: 8px;
 }
 
+.wiki-export-tree,
+.wiki-export-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wiki-export-tree ul {
+  padding-left: 16px;
+}
+
+.wiki-export-tree-row {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.wiki-export-tree-toggle {
+  background: transparent;
+  border: 0;
+  color: var(--pw-text-secondary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 4px;
+  width: 20px;
+}
+
+.wiki-export-tree-toggle:disabled {
+  cursor: default;
+  visibility: hidden;
+}
+
+.wiki-export-tree-loading {
+  color: var(--pw-text-secondary);
+  font-size: 12px;
+  margin: 0;
+  padding: 2px 0 2px 36px;
+}
+
 .wiki-export-error {
   color: var(--pw-danger, #cc293d);
   margin: 10px 0 0;

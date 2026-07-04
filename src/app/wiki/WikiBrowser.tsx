@@ -7,6 +7,7 @@ import {
 } from "azure-devops-extension-api/WorkItemTracking";
 import type { HeaderMenuAction } from "../HeaderMenuAction";
 import { ErrorBoundary } from "../ErrorBoundary";
+import { useThemeMode } from "../themeMode";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
 import { buildAttachmentName, fileToBase64, isImageFile } from "../../wiki/attachmentUpload";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
@@ -17,7 +18,7 @@ import type { WikiComment, WikiPageChange, WikiPageMeta } from "../../wiki/WikiC
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
 import { WikiExportDialog } from "./WikiExportDialog";
 import { toExportImage } from "../../export/imageMeta";
-import type { ExportImage } from "../../export/markdownToDocx";
+import type { ExportImage } from "../../export/types";
 import { buildHubPageUrl, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 import { StatusMessage } from "./StatusMessage";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
@@ -304,6 +305,7 @@ export function WikiBrowser({
   // content, offered for recovery after an accidental reload.
   const [recoverableDraft, setRecoverableDraft] = useState<StoredDraft | undefined>(undefined);
   const [exportOpen, setExportOpen] = useState(false);
+  const themeMode = useThemeMode();
   const [activeWikiId, setActiveWikiId] = useState<string>();
   const [draftContent, setDraftContent] = useState("");
   const [error, setError] = useState<string>();
@@ -572,7 +574,7 @@ export function WikiBrowser({
       },
       {
         id: "export",
-        label: "Export to Word",
+        label: "Export…",
         disabled: isEditing,
         onClick: () => setExportOpen(true),
       },
@@ -1564,7 +1566,14 @@ export function WikiBrowser({
           loadImage={loadExportImage}
           loadPageContent={loadPageContent}
           onClose={() => setExportOpen(false)}
-          pages={pageLinks}
+          onExpandNode={(path) => void handleNodeExpand(path)}
+          renderOptions={{
+            themeMode,
+            resolveImageSrc,
+            loadQueryTable,
+            loadWorkItemBadge,
+          }}
+          treeNodes={pageTree}
         />
       ) : null}
     </>

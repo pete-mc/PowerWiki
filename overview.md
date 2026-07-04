@@ -34,7 +34,9 @@ No migration. No proprietary formats. Just better reading and editing for the Ma
   - Create new pages, move or reorder pages, and delete pages through Azure DevOps Wiki APIs.
 
 - **Export**
-  - Export a page (or a set of pages you select and order) to a real **Word (.docx)** document from the page menu. Markdown headings become native Word heading styles, and Markdown, tables, images, and Mermaid diagrams are rendered into the document.
+  - Export a page (or a set of pages you select and order from a lazy-loading page tree) to **Word (.docx)** or **PDF** from the page menu.
+  - Word produces a real .docx where Markdown headings become native Word heading styles; PDF uses the browser's print for full fidelity.
+  - Both formats render Markdown, tables, images, Mermaid diagrams, math, work-item badges, embedded query tables, and embedded HTML.
 
 - **Azure Boards enhancements** (portable by design)
   - `#1234` references render as clickable work item badges that open the native work item form.

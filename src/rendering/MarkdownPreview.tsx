@@ -527,7 +527,7 @@ function renderQueryLoading(container: HTMLElement, queryId: string): void {
   container.appendChild(message);
 }
 
-function renderQueryMessage(container: HTMLElement, message: string): void {
+export function renderQueryMessage(container: HTMLElement, message: string): void {
   container.replaceChildren();
   container.classList.add("powerwiki-query-table-error");
 
@@ -537,7 +537,7 @@ function renderQueryMessage(container: HTMLElement, message: string): void {
   container.appendChild(paragraph);
 }
 
-function renderQueryResult(container: HTMLElement, result: QueryTableResult): void {
+export function renderQueryResult(container: HTMLElement, result: QueryTableResult): void {
   container.replaceChildren();
   container.classList.remove("powerwiki-query-table-error");
 
@@ -622,7 +622,7 @@ function renderQueryResult(container: HTMLElement, result: QueryTableResult): vo
   container.appendChild(scroller);
 }
 
-function renderWorkItemBadge(badge: HTMLElement, details: WorkItemBadgeDetails): void {
+export function renderWorkItemBadge(badge: HTMLElement, details: WorkItemBadgeDetails): void {
   const titleParts = [
     details.type,
     `#${details.id}`,

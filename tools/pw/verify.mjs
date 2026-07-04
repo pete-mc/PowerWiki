@@ -550,11 +550,11 @@ try {
     // not just the previously-loaded page (the hash nav is same-document).
     await frame.waitForSelector(".mermaid-rendered svg", { timeout: 60000 });
     await frame.click(".powerwiki-header-menu-button");
-    await frame.getByRole("menuitem", { name: "Export to Word" }).click();
+    await frame.getByRole("menuitem", { name: "Export…" }).click();
     await frame.waitForSelector(".wiki-export-dialog", { timeout: 10000 });
     check(true, "export dialog opens from the page menu");
     const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
-    await frame.getByRole("button", { name: "Export", exact: true }).click();
+    await frame.getByRole("button", { name: "Export Word" }).click();
     const download = await downloadPromise;
     const docxPath = path.join(ARTIFACTS_DIR, "export.docx");
     await download.saveAs(docxPath);
@@ -568,6 +568,80 @@ try {
     check(false, `Word export failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-export-error.png") });
     await leaveEditor(page, frame);
+  }
+
+  // Export #18: PDF export renders enriched HTML (query tables, work-item
+  // badges, mermaid) into a print root. window.print is stubbed so the headless
+  // run doesn't hang, and the print root persists (afterprint never fires) so we
+  // can assert its content.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.waitForSelector(".powerwiki-query-table table", { timeout: 60000 });
+    await frame.evaluate(() => {
+      window.print = () => {};
+    });
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Export…" }).click();
+    await frame.waitForSelector(".wiki-export-dialog", { timeout: 10000 });
+    await frame.getByText("PDF (print)").click();
+    await frame.getByRole("button", { name: "Export PDF" }).click();
+    // The print root is display:none on screen (only shown while printing), so
+    // wait for it to be attached rather than visible.
+    await frame.waitForSelector(".pw-print-root", { state: "attached", timeout: 60000 });
+    const pdf = await frame.evaluate(() => {
+      const root = document.querySelector(".pw-print-root");
+      return {
+        queryTables: root ? root.querySelectorAll(".powerwiki-query-table table").length : 0,
+        richBadges: root ? root.querySelectorAll(".powerwiki-work-item-badge-rich").length : 0,
+      };
+    });
+    check(
+      pdf.queryTables > 0 && pdf.richBadges > 0,
+      `PDF export renders enriched HTML (queryTables=${pdf.queryTables}, badges=${pdf.richBadges})`
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "14-pdf.png") });
+    await frame.evaluate(() => document.querySelector(".pw-print-root")?.remove());
+  } catch (error) {
+    check(false, `PDF export failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "14-pdf-error.png") });
+  }
+
+  // Export selector: the multi-page tree lazy-loads child page names on expand.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Export…" }).click();
+    await frame.waitForSelector(".wiki-export-dialog", { timeout: 10000 });
+    await frame.getByText("Multiple pages").click();
+    await frame.waitForSelector(".wiki-export-tree", { timeout: 10000 });
+    const before = await frame.$$eval(".wiki-export-tree .wiki-export-item", (els) => els.length);
+    // Expand the first node that has children.
+    const expanded = await frame.evaluate(() => {
+      const toggles = Array.from(document.querySelectorAll(".wiki-export-tree-toggle"));
+      const toggle = toggles.find((button) => !button.disabled);
+      if (toggle) {
+        toggle.click();
+        return true;
+      }
+      return false;
+    });
+    let grew = false;
+    if (expanded) {
+      grew = await frame
+        .waitForFunction(
+          (n) => document.querySelectorAll(".wiki-export-tree .wiki-export-item").length > n,
+          before,
+          { timeout: 15000 }
+        )
+        .then(() => true)
+        .catch(() => false);
+    }
+    check(expanded && grew, `export tree lazy-loads children on expand (before=${before})`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "15-export-tree.png") });
+    await frame.getByRole("button", { name: "Cancel" }).click();
+  } catch (error) {
+    check(false, `export tree lazy load failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "15-export-tree-error.png") });
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);

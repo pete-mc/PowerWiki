@@ -1,6 +1,7 @@
-// Orchestrates a Word (.docx) export: converts one or more pages' Markdown to
-// docx blocks, combines them into a single document (page-title headings and
-// page breaks between pages), and triggers a download. Loaded lazily.
+// Orchestrates a Word (.docx) export. Each page is rendered through the shared
+// enriched-HTML pipeline (so query tables, work-item badges, embedded HTML,
+// Mermaid, and math come across) and then converted to docx blocks, combined
+// into one document (page-title headings + page breaks), and downloaded.
 
 import {
   AlignmentType,
@@ -13,16 +14,15 @@ import {
   TextRun,
 } from "docx";
 
-import { markdownToDocxBlocks, ORDERED_NUMBERING_REFERENCE, type DocxBlock, type ExportImage } from "./markdownToDocx";
+import { htmlElementToDocxBlocks } from "./htmlToDocx";
+import { renderPageToElement, type PageRenderOptions } from "./renderPageHtml";
+import { ORDERED_NUMBERING_REFERENCE, type DocxBlock, type LoadExportImage } from "./types";
 
 export interface ExportPage {
   readonly title: string;
   readonly path: string;
   readonly content: string;
 }
-
-/** Resolves a Markdown image src (relative to pagePath) to bytes, or null. */
-export type LoadExportImage = (src: string, pagePath: string) => Promise<ExportImage | null>;
 
 const ORDERED_LEVELS = [0, 1, 2, 3, 4, 5].map((level) => ({
   level,
@@ -35,6 +35,7 @@ const ORDERED_LEVELS = [0, 1, 2, 3, 4, 5].map((level) => ({
 /** Builds a .docx from the given pages and downloads it as fileName. */
 export async function exportPagesToWord(
   pages: readonly ExportPage[],
+  renderOptions: PageRenderOptions,
   loadImage: LoadExportImage,
   fileName: string
 ): Promise<void> {
@@ -49,7 +50,13 @@ export async function exportPagesToWord(
     if (multi) {
       children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(page.title)] }));
     }
-    children.push(...(await markdownToDocxBlocks(page.content, { loadImage: (src) => loadImage(src, page.path) })));
+
+    const element = await renderPageToElement(page.content, { ...renderOptions, currentPath: page.path });
+    try {
+      children.push(...(await htmlElementToDocxBlocks(element, { loadImage, pagePath: page.path })));
+    } finally {
+      element.remove();
+    }
   }
 
   const document = new Document({

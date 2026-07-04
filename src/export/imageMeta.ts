@@ -1,4 +1,4 @@
-import type { ExportImage } from "./markdownToDocx";
+import type { ExportImage } from "./types";
 
 type ExportImageType = ExportImage["type"];
 
