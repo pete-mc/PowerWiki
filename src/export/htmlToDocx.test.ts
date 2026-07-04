@@ -1,7 +1,12 @@
 import { Document, Packer } from "docx";
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 
 import { htmlElementToDocxBlocks } from "./htmlToDocx";
+
+// A minimal rendered-KaTeX element: the katex-mathml <math> carries the
+// presentation MathML that becomes native Word math (OMML).
+const KATEX_HTML = `<p>Inline <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true">E=mc2</span></span>.</p>`;
 
 function elementFrom(html: string): HTMLElement {
   const div = document.createElement("div");
@@ -37,6 +42,20 @@ describe("htmlElementToDocxBlocks", () => {
     expect(buffer[0]).toBe(0x50); // P
     expect(buffer[1]).toBe(0x4b); // K
     expect(buffer.length).toBeGreaterThan(1000);
+  });
+
+  it("renders KaTeX as native Word math (OMML), not plain text", async () => {
+    const blocks = await htmlElementToDocxBlocks(elementFrom(KATEX_HTML), {
+      pagePath: "/Home",
+      loadImage: async () => null,
+    });
+    const doc = new Document({ sections: [{ children: blocks }] });
+    const buffer = await Packer.toBuffer(doc);
+
+    const zip = await JSZip.loadAsync(buffer);
+    const documentXml = await zip.file("word/document.xml")!.async("string");
+    // Native Word equations use the m: (math) namespace.
+    expect(documentXml).toContain("oMath");
   });
 
   it("renders a table (e.g. a query result) as a docx Table", async () => {

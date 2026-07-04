@@ -2242,20 +2242,38 @@ button.wiki-move-option:hover {
 }
 
 .wiki-export-tree-toggle {
+  align-items: center;
   background: transparent;
   border: 0;
-  color: var(--pw-text-secondary);
+  border-radius: 4px;
+  color: var(--pw-text);
   cursor: pointer;
+  display: inline-flex;
   flex: 0 0 auto;
-  font-size: 11px;
-  line-height: 1;
-  padding: 2px 4px;
-  width: 20px;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  width: 26px;
+}
+
+.wiki-export-tree-toggle:hover:not(:disabled) {
+  background: var(--pw-hover);
+  color: var(--pw-accent);
 }
 
 .wiki-export-tree-toggle:disabled {
   cursor: default;
   visibility: hidden;
+}
+
+.wiki-export-tree-toggle svg {
+  height: 15px;
+  transition: transform 0.12s ease;
+  width: 15px;
+}
+
+.wiki-export-tree-toggle svg.expanded {
+  transform: rotate(90deg);
 }
 
 .wiki-export-tree-loading {

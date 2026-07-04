@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ExportImage } from "../../export/types";
 import type { PageRenderOptions } from "../../export/renderPageHtml";
 import type { WikiPageTreeNode } from "../../wiki/WikiPageTree";
+import { ChevronIcon } from "./WikiPageIcons";
 
 export interface ExportPageRef {
   readonly path: string;
@@ -232,13 +233,13 @@ function ExportTreeItem({ node, selected, onToggle, onExpand }: { node: WikiPage
     <li>
       <div className="wiki-export-tree-row">
         <button
-          aria-label={node.hasChildren ? (expanded ? "Collapse" : "Expand") : undefined}
+          aria-label={node.hasChildren ? (expanded ? `Collapse ${node.name}` : `Expand ${node.name}`) : undefined}
           className="wiki-export-tree-toggle"
           disabled={!node.hasChildren}
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
-          {node.hasChildren ? (expanded ? "▾" : "▸") : ""}
+          {node.hasChildren ? <ChevronIcon className={expanded ? "expanded" : undefined} /> : null}
         </button>
         <label className="wiki-export-item" title={node.path}>
           <input checked={selected.includes(node.path)} onChange={() => onToggle(node.path)} type="checkbox" />

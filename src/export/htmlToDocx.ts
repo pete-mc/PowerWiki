@@ -5,10 +5,12 @@
 // (KaTeX -> its source TeX), lists, code, and images. Loaded lazily with docx.
 
 import {
+  AlignmentType,
   BorderStyle,
   ExternalHyperlink,
   HeadingLevel,
   ImageRun,
+  ImportedXmlComponent,
   Paragraph,
   ShadingType,
   Table,
@@ -18,6 +20,7 @@ import {
   WidthType,
   type IParagraphOptions,
 } from "docx";
+import { mml2omml } from "mathml2omml";
 
 import { rasterizeSvgElement } from "./mermaidToImage";
 import { ORDERED_NUMBERING_REFERENCE, type DocxBlock, type ExportImage, type LoadExportImage } from "./types";
@@ -98,6 +101,13 @@ async function blocksFromNode(parent: Node, ctx: HtmlToDocxContext, opts: IParag
       const png = await rasterizeSvgElement(node as unknown as SVGElement);
       if (png) {
         blocks.push(new Paragraph({ children: [imageRun({ ...png, type: "png" })] }));
+      }
+    } else if (node.classList.contains("powerwiki-math")) {
+      // A block ("display") equation wrapper — emit a centered math paragraph.
+      const runs = await inlineRuns(node, ctx, {});
+      if (runs.length > 0) {
+        const display = node.getAttribute("data-powerwiki-math") === "display";
+        blocks.push(new Paragraph({ alignment: display ? AlignmentType.CENTER : undefined, children: runs }));
       }
     } else {
       // Callouts, divs, sections, spans that wrap block content — recurse.
@@ -199,11 +209,17 @@ async function inlineRunsFromNodes(
       continue;
     }
 
-    // KaTeX: emit the source TeX (from its annotation) as italic text.
+    // KaTeX: emit a native Word equation (OMML) from its MathML, falling back
+    // to the source TeX as italic text if the equation can't be converted.
     if (node.classList.contains("katex")) {
-      const tex = (node.querySelector("annotation")?.textContent ?? node.textContent ?? "").trim();
-      if (tex) {
-        out.push(textRun(tex, { ...style, italics: true }));
+      const math = katexToMath(node);
+      if (math) {
+        out.push(math as unknown as TextRun);
+      } else {
+        const tex = (node.querySelector("annotation")?.textContent ?? node.textContent ?? "").trim();
+        if (tex) {
+          out.push(textRun(tex, { ...style, italics: true }));
+        }
       }
       continue;
     }
@@ -259,6 +275,29 @@ async function inlineRunsFromNodes(
   }
 
   return out;
+}
+
+/**
+ * Converts a rendered KaTeX element to a native Word equation (OMML) via its
+ * MathML. Returns null if there's no MathML or the conversion fails, so the
+ * caller can fall back to the source TeX text.
+ */
+function katexToMath(katex: HTMLElement): ImportedXmlComponent | null {
+  const math = katex.querySelector("math");
+  if (!math) {
+    return null;
+  }
+  const clone = math.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("annotation").forEach((annotation) => annotation.remove());
+  try {
+    const omml = mml2omml(clone.outerHTML);
+    if (!omml || !omml.includes("oMath")) {
+      return null;
+    }
+    return ImportedXmlComponent.fromXmlString(omml);
+  } catch {
+    return null;
+  }
 }
 
 function textRun(text: string, style: InlineStyle): TextRun {

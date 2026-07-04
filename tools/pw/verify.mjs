@@ -5,6 +5,7 @@
 // once first. Screenshots and a summary are written to tools/pw/artifacts/.
 import fs from "node:fs";
 import path from "node:path";
+import JSZip from "jszip";
 import {
   ARTIFACTS_DIR,
   launch,
@@ -568,6 +569,27 @@ try {
     check(false, `Word export failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-export-error.png") });
     await leaveEditor(page, frame);
+  }
+
+  // Word export of a math page produces native Word equations (OMML), not TeX.
+  try {
+    frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Math%20with%20KaTeX");
+    await frame.waitForSelector(".markdown-preview .katex", { state: "attached", timeout: 60000 });
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Export…" }).click();
+    await frame.waitForSelector(".wiki-export-dialog", { timeout: 10000 });
+    const mathDownload = page.waitForEvent("download", { timeout: 120000 });
+    await frame.getByRole("button", { name: "Export Word" }).click();
+    const download = await mathDownload;
+    const docxPath = path.join(ARTIFACTS_DIR, "export-math.docx");
+    await download.saveAs(docxPath);
+    const zip = await JSZip.loadAsync(fs.readFileSync(docxPath));
+    const documentXml = await zip.file("word/document.xml").async("string");
+    check(documentXml.includes("oMath"), "Word export renders KaTeX as native Word equations (OMML)");
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13b-export-math.png") });
+  } catch (error) {
+    check(false, `Word math export failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13b-export-math-error.png") });
   }
 
   // Export #18: PDF export renders enriched HTML (query tables, work-item
