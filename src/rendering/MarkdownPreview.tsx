@@ -5,6 +5,7 @@ import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholders
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
 import { addCopyButtons, highlightCodeBlocks } from "./enhancePreview";
+import { renderMath } from "./mathRender";
 import { MermaidZoomOverlay } from "./MermaidZoomOverlay";
 import { addMermaidToolbars, downloadMermaidPng, downloadMermaidSvg } from "./mermaidTools";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
@@ -189,6 +190,7 @@ export function MarkdownPreview({
     });
     addCopyButtons(container);
     void highlightCodeBlocks(container);
+    void renderMath(container);
   }, [bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
 
   // Close the image lightbox on Escape.

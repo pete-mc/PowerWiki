@@ -240,6 +240,28 @@ try {
     check(false, `mermaid features failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-mermaid-error.png") });
   }
+
+  // Release C: KaTeX math renders (loads the katex chunk + CSS).
+  try {
+    const mathMd = "Inline $E = mc^2$ and a block:\n\n$$\\int_0^1 x^2\\,dx = \\frac{1}{3}$$\n";
+    await frame.evaluate((value) => {
+      const models = window.monaco && window.monaco.editor ? window.monaco.editor.getModels() : [];
+      if (models[0]) {
+        models[0].setValue(value);
+      }
+    }, mathMd);
+
+    const preview = ".wiki-editor-split-pane-preview .markdown-preview";
+    await frame.waitForSelector(`${preview} .katex`, { timeout: 30000 });
+    check(true, "KaTeX math renders");
+    // Let the KaTeX fonts finish loading so the screenshot shows real glyphs.
+    await frame.evaluate(() => document.fonts.ready).catch(() => {});
+    await sleep(1000);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07-math.png") });
+  } catch (error) {
+    check(false, `math rendering failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07-math-error.png") });
+  }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
 } finally {

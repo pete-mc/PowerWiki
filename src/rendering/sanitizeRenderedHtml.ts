@@ -7,6 +7,7 @@ export function sanitizeRenderedHtml(html: string): string {
     // <pre class="mermaid"> and external-link targets intact.
     ADD_ATTR: [
       "class",
+      "data-powerwiki-math",
       "data-powerwiki-placeholder",
       "data-powerwiki-query-id",
       "data-powerwiki-work-item-id",

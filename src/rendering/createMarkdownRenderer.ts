@@ -4,6 +4,7 @@ import markdownItAnchor from "markdown-it-anchor";
 import { adoPlaceholdersPlugin } from "./adoPlaceholdersPlugin";
 import { adoWorkItemsPlugin } from "./adoWorkItemsPlugin";
 import { calloutsPlugin } from "./calloutsPlugin";
+import { mathPlugin } from "./mathPlugin";
 
 /**
  * Adds support for the Azure DevOps Wiki mermaid container syntax:
@@ -86,6 +87,7 @@ export function createMarkdownRenderer(): MarkdownIt {
     })
     .use(mermaidContainerPlugin)
     .use(calloutsPlugin)
+    .use(mathPlugin)
     .use(adoWorkItemsPlugin)
     .use(adoPlaceholdersPlugin);
 
