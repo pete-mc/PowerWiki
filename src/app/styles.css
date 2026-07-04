@@ -1040,6 +1040,20 @@ body {
   max-width: none;
 }
 
+/* KaTeX renders a visually-hidden MathML copy for screen readers alongside the
+   visual HTML. Its own clip rule doesn't reliably apply inside the preview, so
+   pin the hide here to avoid a duplicated, unstyled copy of every equation. */
+.markdown-preview .katex .katex-mathml {
+  border: 0;
+  clip: rect(1px, 1px, 1px, 1px);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
+
 .wiki-format-mermaid {
   margin-left: auto;
   position: relative;

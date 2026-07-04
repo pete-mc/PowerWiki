@@ -254,6 +254,14 @@ try {
     const preview = ".wiki-editor-split-pane-preview .markdown-preview";
     await frame.waitForSelector(`${preview} .katex`, { timeout: 30000 });
     check(true, "KaTeX math renders");
+    // The KaTeX <annotation> stores the exact TeX it rendered. If the equation
+    // was rendered twice on top of itself (the concurrent-renderMath race) the
+    // annotation is the mangled, tripled string rather than the source TeX.
+    const splitAnnotation = await frame.evaluate((sel) => {
+      const a = document.querySelector(`${sel} .katex annotation`);
+      return a ? (a.textContent || "").trim() : null;
+    }, preview);
+    check(splitAnnotation === "E = mc^2", `KaTeX renders the equation once (annotation=${JSON.stringify(splitAnnotation)})`);
     // Let the KaTeX fonts finish loading so the screenshot shows real glyphs.
     await frame.evaluate(() => document.fonts.ready).catch(() => {});
     await sleep(1000);
@@ -261,6 +269,35 @@ try {
   } catch (error) {
     check(false, `math rendering failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07-math-error.png") });
+  }
+
+  // The renderMath race only fires on a full page view (an async subpage list
+  // re-runs the preview layout effect while KaTeX is still importing), not in the
+  // split editor above — so assert directly on the Math showcase viewer page that
+  // every equation's annotation is its source TeX, not a self-stacked copy.
+  try {
+    frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Math%20with%20KaTeX");
+    await frame.waitForSelector(".markdown-preview .katex annotation", { timeout: 30000 });
+    await sleep(2000);
+    const mathViewer = await frame.evaluate(() => {
+      const annotations = Array.from(document.querySelectorAll(".markdown-preview .katex annotation")).map(
+        (a) => (a.textContent || "").trim()
+      );
+      const firstInline = annotations[0] ?? null;
+      // A stacked render repeats the same core (e.g. "mc^2") more than once.
+      const stacked = annotations.filter((t) => (t.match(/mc\^?2/g) || []).length > 1);
+      return { count: annotations.length, firstInline, stacked };
+    });
+    check(
+      mathViewer.firstInline === "E = mc^2" && mathViewer.stacked.length === 0,
+      `math renders once on the viewer page (first=${JSON.stringify(mathViewer.firstInline)}, stacked=${mathViewer.stacked.length})`
+    );
+    await frame.evaluate(() => document.fonts.ready).catch(() => {});
+    await sleep(500);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07b-math-viewer.png") });
+  } catch (error) {
+    check(false, `math viewer rendering failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07b-math-viewer-error.png") });
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);

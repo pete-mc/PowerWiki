@@ -131,3 +131,19 @@ Setup and use (details in `tools/pw/README.md`):
 
 Extend `tools/pw/verify.mjs` with a new assertion whenever you add a feature
 worth guarding, so the harness doubles as a regression smoke test.
+
+## Backlog and work items
+
+Work is tracked as Issues under the **Power Wiki** epic (#5) in the
+`dataversepowertools` Azure DevOps project. Read and update the board with the
+`azure-devops` MCP server (configured in `.mcp.json`; PAT auth via the
+`ADO_MCP_PAT_B64` environment variable — the token is never stored in the repo).
+
+Group related items with a shared **tag** (`foundation`, `rendering`,
+`authoring`, `parity`, `export`, `quality`, …) so the board slices into coherent,
+release-sized batches, and keep every item in exactly one group.
+
+When you finish a work item, **add a resolution comment before (or as) you move
+it to Done**: describe how it was addressed — the approach, the key files
+touched, the published version, and how it was verified. This keeps the board
+self-documenting. Also fill in a real description on any item that lacks one.
