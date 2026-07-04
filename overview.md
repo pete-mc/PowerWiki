@@ -16,6 +16,9 @@ No migration. No proprietary formats. Just better reading and editing for the Ma
 
 - **Modern rendering**
   - Current CommonMark + GFM pipeline with heading anchors.
+  - Syntax-highlighted code blocks with a one-click copy button.
+  - GitHub-style callouts / admonitions (`> [!NOTE]`, `[!TIP]`, `[!WARNING]`, etc.), rendered as styled blocks and still readable in the built-in wiki.
+  - Hover permalinks on headings and click-to-zoom on images.
   - Full support for `[[_TOC_]]` and `[[_TOSP_]]` placeholders.
   - Up-to-date Mermaid (v11) with automatic light/dark theme support. Works with both standard ````mermaid` fences and Azure DevOps-style `::: mermaid` blocks.
 

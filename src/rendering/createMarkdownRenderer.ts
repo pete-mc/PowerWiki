@@ -3,6 +3,7 @@ import markdownItAnchor from "markdown-it-anchor";
 
 import { adoPlaceholdersPlugin } from "./adoPlaceholdersPlugin";
 import { adoWorkItemsPlugin } from "./adoWorkItemsPlugin";
+import { calloutsPlugin } from "./calloutsPlugin";
 
 /**
  * Adds support for the Azure DevOps Wiki mermaid container syntax:
@@ -75,8 +76,16 @@ export function createMarkdownRenderer(): MarkdownIt {
     linkify: true,
     typographer: true,
   })
-    .use(markdownItAnchor)
+    .use(markdownItAnchor, {
+      permalink: markdownItAnchor.permalink.linkInsideHeader({
+        ariaHidden: true,
+        class: "powerwiki-heading-anchor",
+        placement: "after",
+        symbol: "#",
+      }),
+    })
     .use(mermaidContainerPlugin)
+    .use(calloutsPlugin)
     .use(adoWorkItemsPlugin)
     .use(adoPlaceholdersPlugin);
 

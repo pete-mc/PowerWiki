@@ -4,6 +4,7 @@ import { useThemeMode } from "../app/themeMode";
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
+import { addCopyButtons, highlightCodeBlocks } from "./enhancePreview";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
 
@@ -118,6 +119,8 @@ export function MarkdownPreview({
   // Bumped whenever an async enrichment result arrives so the enrichment effect
   // re-runs and re-applies the now-cached result to the current DOM nodes.
   const [enrichmentVersion, setEnrichmentVersion] = useState(0);
+  // The image currently shown in the click-to-zoom lightbox, if any.
+  const [lightboxSrc, setLightboxSrc] = useState<string | undefined>(undefined);
   const themeMode = useThemeMode();
 
   useEffect(() => {
@@ -180,7 +183,24 @@ export function MarkdownPreview({
       onLoadWorkItemBadge,
       onSettled: bumpEnrichment,
     });
+    addCopyButtons(container);
+    void highlightCodeBlocks(container);
   }, [bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+
+  // Close the image lightbox on Escape.
+  useEffect(() => {
+    if (!lightboxSrc) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setLightboxSrc(undefined);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [lightboxSrc]);
 
   // Mermaid runs in its own layout effect (after the one above, by declaration
   // order) so a host theme change re-renders diagrams without disturbing the
@@ -197,6 +217,32 @@ export function MarkdownPreview({
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {
     // Ignore modified clicks so users can still open links in a new tab.
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const copyButton = (event.target as HTMLElement).closest<HTMLButtonElement>(".powerwiki-copy-code");
+    if (copyButton) {
+      event.preventDefault();
+      const code = copyButton.closest("pre")?.querySelector("code");
+      if (code && navigator.clipboard) {
+        void navigator.clipboard
+          .writeText(code.textContent ?? "")
+          .then(() => {
+            copyButton.textContent = "Copied";
+            window.setTimeout(() => {
+              copyButton.textContent = "Copy";
+            }, 1500);
+          })
+          .catch(() => {});
+      }
+      return;
+    }
+
+    // Click a content image (not one that is itself a link) to zoom it.
+    const image = (event.target as HTMLElement).closest<HTMLImageElement>("img");
+    if (image && !image.closest("a")) {
+      event.preventDefault();
+      setLightboxSrc(image.currentSrc || image.src);
       return;
     }
 
@@ -233,11 +279,23 @@ export function MarkdownPreview({
   }
 
   return (
-    <div
-      className="markdown-preview"
-      onClick={handleClick}
-      ref={previewRef}
-    />
+    <>
+      <div
+        className={themeMode === "dark" ? "markdown-preview pw-dark" : "markdown-preview"}
+        onClick={handleClick}
+        ref={previewRef}
+      />
+      {lightboxSrc ? (
+        <div
+          aria-modal="true"
+          className="powerwiki-lightbox"
+          onClick={() => setLightboxSrc(undefined)}
+          role="dialog"
+        >
+          <img alt="" src={lightboxSrc} />
+        </div>
+      ) : null}
+    </>
   );
 }
 

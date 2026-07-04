@@ -813,6 +813,138 @@ body {
   border-color: var(--pw-accent);
 }
 
+/* Callouts / admonitions ([!NOTE] etc.) */
+.markdown-preview .powerwiki-callout {
+  background: rgba(128, 128, 128, 0.08);
+  border-left: 4px solid var(--pw-accent);
+  border-radius: 4px;
+  margin: 12px 0;
+  padding: 6px 14px;
+}
+
+.markdown-preview .powerwiki-callout-title {
+  font-weight: 600;
+  margin: 4px 0;
+}
+
+.powerwiki-callout-note { border-left-color: #0969da; }
+.powerwiki-callout-tip { border-left-color: #1a7f37; }
+.powerwiki-callout-important { border-left-color: #8250df; }
+.powerwiki-callout-warning { border-left-color: #9a6700; }
+.powerwiki-callout-caution { border-left-color: #cf222e; }
+.powerwiki-callout-note .powerwiki-callout-title { color: #348bf0; }
+.powerwiki-callout-tip .powerwiki-callout-title { color: #2da44e; }
+.powerwiki-callout-important .powerwiki-callout-title { color: #a371f7; }
+.powerwiki-callout-warning .powerwiki-callout-title { color: #bf8700; }
+.powerwiki-callout-caution .powerwiki-callout-title { color: #e5534b; }
+
+/* Heading permalink anchors (visible on hover) */
+.markdown-preview .powerwiki-heading-anchor {
+  color: var(--pw-accent);
+  margin-left: 6px;
+  opacity: 0;
+  text-decoration: none;
+}
+
+.markdown-preview :is(h1, h2, h3, h4, h5, h6):hover .powerwiki-heading-anchor,
+.markdown-preview .powerwiki-heading-anchor:focus {
+  opacity: 0.65;
+}
+
+/* Copy-code button on code blocks */
+.markdown-preview .powerwiki-code-block {
+  position: relative;
+}
+
+.markdown-preview .powerwiki-copy-code {
+  background: var(--pw-surface, rgba(128, 128, 128, 0.15));
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  opacity: 0;
+  padding: 2px 8px;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  transition: opacity 0.1s ease;
+}
+
+.markdown-preview .powerwiki-code-block:hover .powerwiki-copy-code,
+.markdown-preview .powerwiki-copy-code:focus {
+  opacity: 1;
+}
+
+/* Syntax highlighting (highlight.js) — GitHub light base, dark overrides */
+.markdown-preview .hljs-comment,
+.markdown-preview .hljs-quote { color: #6e7781; font-style: italic; }
+.markdown-preview .hljs-keyword,
+.markdown-preview .hljs-selector-tag,
+.markdown-preview .hljs-literal,
+.markdown-preview .hljs-section { color: #cf222e; }
+.markdown-preview .hljs-string,
+.markdown-preview .hljs-attr,
+.markdown-preview .hljs-meta .hljs-string { color: #0a7d33; }
+.markdown-preview .hljs-number,
+.markdown-preview .hljs-symbol,
+.markdown-preview .hljs-bullet { color: #953800; }
+.markdown-preview .hljs-title,
+.markdown-preview .hljs-title.function_,
+.markdown-preview .hljs-name { color: #8250df; }
+.markdown-preview .hljs-type,
+.markdown-preview .hljs-built_in,
+.markdown-preview .hljs-class .hljs-title { color: #0550ae; }
+.markdown-preview .hljs-tag,
+.markdown-preview .hljs-attribute { color: #116329; }
+.markdown-preview .hljs-emphasis { font-style: italic; }
+.markdown-preview .hljs-strong { font-weight: 600; }
+
+.markdown-preview.pw-dark .hljs-comment,
+.markdown-preview.pw-dark .hljs-quote { color: #8b949e; }
+.markdown-preview.pw-dark .hljs-keyword,
+.markdown-preview.pw-dark .hljs-selector-tag,
+.markdown-preview.pw-dark .hljs-literal,
+.markdown-preview.pw-dark .hljs-section { color: #ff7b72; }
+.markdown-preview.pw-dark .hljs-string,
+.markdown-preview.pw-dark .hljs-attr,
+.markdown-preview.pw-dark .hljs-meta .hljs-string { color: #7ee787; }
+.markdown-preview.pw-dark .hljs-number,
+.markdown-preview.pw-dark .hljs-symbol,
+.markdown-preview.pw-dark .hljs-bullet { color: #ffa657; }
+.markdown-preview.pw-dark .hljs-title,
+.markdown-preview.pw-dark .hljs-title.function_,
+.markdown-preview.pw-dark .hljs-name { color: #d2a8ff; }
+.markdown-preview.pw-dark .hljs-type,
+.markdown-preview.pw-dark .hljs-built_in,
+.markdown-preview.pw-dark .hljs-class .hljs-title { color: #79c0ff; }
+.markdown-preview.pw-dark .hljs-tag,
+.markdown-preview.pw-dark .hljs-attribute { color: #7ee787; }
+
+/* Image lightbox */
+.powerwiki-lightbox {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.75);
+  bottom: 0;
+  cursor: zoom-out;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  padding: 32px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.powerwiki-lightbox img {
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.5);
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
 .wiki-format-mermaid {
   margin-left: auto;
   position: relative;

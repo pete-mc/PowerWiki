@@ -183,6 +183,38 @@ try {
     check(false, `create/delete round-trip failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "04-create-delete-error.png") });
   }
+
+  // Rendering features (callouts, heading anchors, copy-code, syntax
+  // highlighting) via the split editor's live preview — set the Monaco model
+  // directly so bracket auto-closing can't corrupt the [!NOTE] marker.
+  try {
+    // The create/delete test may have left no active page; reload Home first.
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Edit page" }).click();
+    await frame.waitForSelector(".wiki-editor-mode-select", { timeout: 30000 });
+    await frame.selectOption(".wiki-editor-mode-select", "splitCode");
+    await frame.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 30000 });
+    const testMd = "# Heading One\n\n> [!NOTE]\n> A note callout.\n\n```ts\nconst answer: number = 42;\n```\n";
+    await frame.evaluate((value) => {
+      const models = window.monaco && window.monaco.editor ? window.monaco.editor.getModels() : [];
+      if (models[0]) {
+        models[0].setValue(value);
+      }
+    }, testMd);
+
+    const preview = ".wiki-editor-split-pane-preview .markdown-preview";
+    await frame.waitForSelector(`${preview} .powerwiki-callout-note`, { timeout: 30000 });
+    check(true, "callout renders in the preview");
+    check(!!(await frame.$(`${preview} .powerwiki-heading-anchor`)), "heading permalink anchor present");
+    check(!!(await frame.$(`${preview} pre .powerwiki-copy-code`)), "copy-code button present");
+    await frame.waitForSelector(`${preview} pre code.hljs`, { timeout: 15000 });
+    check(true, "code block is syntax-highlighted");
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-rendering.png") });
+  } catch (error) {
+    check(false, `rendering features failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-rendering-error.png") });
+  }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
 } finally {

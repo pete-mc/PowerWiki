@@ -10,6 +10,12 @@ describe("createMarkdownRenderer", () => {
     expect(html).toContain('<h1 id="hello-world"');
   });
 
+  it("adds a hover permalink anchor inside headings", () => {
+    const html = md.render("# Title");
+    expect(html).toContain("powerwiki-heading-anchor");
+    expect(html).toContain('href="#title"');
+  });
+
   it("renders GFM tables", () => {
     const html = md.render("| A | B |\n| --- | --- |\n| 1 | 2 |");
     expect(html).toContain("<table>");
