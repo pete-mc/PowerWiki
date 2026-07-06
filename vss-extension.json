@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "powerwiki",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "name": "PowerWiki",
   "publisher": "dataversepowertools",
   "description": "An alternate Power Wiki experience for Azure DevOps Wikis with modern Markdown and Mermaid rendering.",

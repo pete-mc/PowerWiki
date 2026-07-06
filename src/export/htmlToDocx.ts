@@ -47,6 +47,12 @@ const HEADINGS = [
   HeadingLevel.HEADING_6,
 ];
 const MAX_IMAGE_WIDTH = 600;
+// Target width for diagrams (Mermaid). Unlike photos, diagrams are vector art
+// rasterized at 2x, so scaling them up to fill the usable page width stays
+// crisp. DIAGRAM_MAX_HEIGHT keeps a tall/narrow diagram from overflowing the
+// page (it's sized to fit height instead, leaving room for the page margins).
+const DIAGRAM_WIDTH = 600;
+const DIAGRAM_MAX_HEIGHT = 800;
 const CODE_FILL = "F4F4F4";
 const QUOTE_OPTS: IParagraphOptions = {
   indent: { left: 360 },
@@ -100,7 +106,7 @@ async function blocksFromNode(parent: Node, ctx: HtmlToDocxContext, opts: IParag
     } else if (tag === "svg") {
       const png = await rasterizeSvgElement(node as unknown as SVGElement);
       if (png) {
-        blocks.push(new Paragraph({ children: [imageRun({ ...png, type: "png" })] }));
+        blocks.push(new Paragraph({ children: [diagramImageRun({ ...png, type: "png" })] }));
       }
     } else if (node.classList.contains("powerwiki-math")) {
       // A block ("display") equation wrapper — emit a centered math paragraph.
@@ -123,7 +129,7 @@ async function preBlocks(pre: HTMLElement): Promise<DocxBlock[]> {
   if (svg) {
     const png = await rasterizeSvgElement(svg);
     if (png) {
-      return [new Paragraph({ children: [imageRun({ ...png, type: "png" })] })];
+      return [new Paragraph({ children: [diagramImageRun({ ...png, type: "png" })] })];
     }
     return [new Paragraph({ children: [new TextRun({ text: "[diagram]", italics: true })] })];
   }
@@ -352,6 +358,24 @@ function imageRun(image: ExportImage): ImageRun {
   if (width > MAX_IMAGE_WIDTH) {
     height = Math.round((height * MAX_IMAGE_WIDTH) / width);
     width = MAX_IMAGE_WIDTH;
+  }
+  return new ImageRun({ data: image.data, type: image.type, transformation: { width, height } });
+}
+
+/**
+ * Sizes a rasterized diagram (Mermaid) to fill the usable page width, scaling
+ * up small diagrams and down oversized ones while preserving aspect ratio. A
+ * tall/narrow diagram is bounded by DIAGRAM_MAX_HEIGHT instead so it fits the
+ * page height rather than overflowing.
+ */
+function diagramImageRun(image: ExportImage): ImageRun {
+  const naturalWidth = image.width || DIAGRAM_WIDTH;
+  const naturalHeight = image.height || Math.round(naturalWidth * 0.6);
+  let width = DIAGRAM_WIDTH;
+  let height = Math.round((naturalHeight * DIAGRAM_WIDTH) / naturalWidth);
+  if (height > DIAGRAM_MAX_HEIGHT) {
+    width = Math.round((naturalWidth * DIAGRAM_MAX_HEIGHT) / naturalHeight);
+    height = DIAGRAM_MAX_HEIGHT;
   }
   return new ImageRun({ data: image.data, type: image.type, transformation: { width, height } });
 }
