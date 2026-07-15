@@ -56,6 +56,7 @@ interface IHostNavigationService {
   getHash(): Promise<string>;
   setHash(hash: string): Promise<void>;
   onHashChanged(callback: (hash: string) => void): void;
+  setDocumentTitle(title: string): void;
 }
 
 interface NavigationTarget {
@@ -921,6 +922,20 @@ export function WikiBrowser({
     }
     void initNavigation();
   }, []);
+
+  // Reflect the active page's name in the host browser tab. The extension runs
+  // in a cross-origin iframe, so setting document.title here has no effect on
+  // the tab — the host navigation service is the only way to update it.
+  useEffect(() => {
+    if (!navigationReady || !activePage) {
+      return;
+    }
+    try {
+      navigationServiceRef.current?.setDocumentTitle(pageTitleFromPath(activePage.path));
+    } catch {
+      // Non-fatal: leave the host-managed title unchanged.
+    }
+  }, [navigationReady, activePage]);
 
   useEffect(() => {
     if (!navigationReady) {

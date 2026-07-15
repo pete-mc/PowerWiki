@@ -97,10 +97,19 @@ try {
   check(byline.length > 0 && !/Not available|Loading/.test(byline), "byline shows author/date on Home");
   await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-home.png") });
 
+  // Host tab title reflects the active page name. The extension runs in a
+  // cross-origin iframe, so this is set via the host navigation service —
+  // document.title inside the iframe wouldn't reach the browser tab.
+  await page.waitForFunction(() => /Home/.test(document.title), { timeout: 15000 }).catch(() => {});
+  check(/Home/.test(await page.title()), `host tab title reflects the page name (title=${JSON.stringify(await page.title())})`);
+
   // 2. Enrichment survives navigation (Home -> Showcase -> Home).
   frame = await openWikiPage(page, "#/PowerWiki%20Showcase");
   await frame.waitForSelector(".mermaid-rendered svg", { timeout: 60000 }).catch(() => {});
   check(!!(await frame.$(".mermaid-rendered svg")), "mermaid diagram rendered on Showcase");
+  // The tab title tracks navigation, not just the first load.
+  await page.waitForFunction(() => /Showcase/.test(document.title), { timeout: 15000 }).catch(() => {});
+  check(/Showcase/.test(await page.title()), `host tab title updates on navigation (title=${JSON.stringify(await page.title())})`);
   frame = await openWikiPage(page, "#/Home");
   await sleep(1500);
   check(!!(await frame.$(".powerwiki-work-item-badge-rich")), "work item badge still enriched after navigation");
