@@ -711,6 +711,21 @@ try {
     await frame.waitForSelector(".wiki-attachment-card", { timeout: 60000 });
     const attachmentCount = await frame.$$eval(".wiki-attachment-card", (els) => els.length);
     check(attachmentCount > 0, `attachments dialog lists files (${attachmentCount})`);
+    // Attachment images sit behind the authenticated Git Items API, so a bare
+    // <img src> 302-redirects to sign-in and never loads. Assert a thumbnail
+    // actually decodes (naturalWidth > 0), proving the credentialed object-URL
+    // fetch works — this guards the image-loading regression.
+    const thumbLoaded = await frame
+      .waitForFunction(
+        () =>
+          Array.from(document.querySelectorAll(".wiki-attachment-card img")).some(
+            (img) => img.complete && img.naturalWidth > 0
+          ),
+        { timeout: 30000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    check(thumbLoaded, "attachment image thumbnail loads (authenticated fetch)");
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "18-attachments.png") });
     await frame.click(".wiki-export-close");
     await sleep(300);

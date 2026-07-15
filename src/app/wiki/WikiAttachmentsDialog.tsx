@@ -6,8 +6,10 @@ import type { WikiAttachment } from "../../wiki/WikiPage";
 
 interface WikiAttachmentsDialogProps {
   readonly loadAttachments: () => Promise<readonly WikiAttachment[]>;
-  /** Resolves an attachment path to a displayable URL for thumbnails. */
+  /** Resolves an attachment path to its authenticated Git Items URL. */
   readonly resolveImageSrc?: (src: string, currentPath: string) => string | undefined;
+  /** Fetches a resolved URL as a displayable object URL (authenticated). */
+  readonly onLoadImage?: (url: string) => Promise<string>;
   readonly onClose: () => void;
 }
 
@@ -15,6 +17,7 @@ interface WikiAttachmentsDialogProps {
 export function WikiAttachmentsDialog({
   loadAttachments,
   resolveImageSrc,
+  onLoadImage,
   onClose,
 }: WikiAttachmentsDialogProps) {
   const [attachments, setAttachments] = useState<readonly WikiAttachment[] | undefined>(undefined);
@@ -103,7 +106,11 @@ export function WikiAttachmentsDialog({
               return (
                 <div className="wiki-attachment-card" key={attachment.path}>
                   <div className="wiki-attachment-thumb">
-                    {thumb ? <img alt="" loading="lazy" src={thumb} /> : <span className="wiki-attachment-ext">{extensionOf(attachment.name)}</span>}
+                    {thumb ? (
+                      <AttachmentThumb url={thumb} onLoadImage={onLoadImage} fallback={extensionOf(attachment.name)} />
+                    ) : (
+                      <span className="wiki-attachment-ext">{extensionOf(attachment.name)}</span>
+                    )}
                   </div>
                   <div className="wiki-attachment-name" title={attachment.path}>{attachment.name}</div>
                   <div className="wiki-attachment-actions">
@@ -118,6 +125,58 @@ export function WikiAttachmentsDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Renders an attachment thumbnail. The Git Items URL is authenticated, so a bare
+ * <img src> can't load it from the sandboxed iframe — the bytes are fetched with
+ * credentials into an object URL instead (revoked when the card unmounts). Shows
+ * the file-extension badge while loading or if the fetch fails.
+ */
+function AttachmentThumb({
+  url,
+  onLoadImage,
+  fallback,
+}: {
+  readonly url: string;
+  readonly onLoadImage?: (url: string) => Promise<string>;
+  readonly fallback: string;
+}) {
+  const [objectUrl, setObjectUrl] = useState<string>();
+
+  useEffect(() => {
+    if (!onLoadImage) {
+      return;
+    }
+    let revoke: string | undefined;
+    let cancelled = false;
+    onLoadImage(url)
+      .then((resolved) => {
+        if (cancelled) {
+          URL.revokeObjectURL(resolved);
+          return;
+        }
+        revoke = resolved;
+        setObjectUrl(resolved);
+      })
+      .catch(() => {
+        // Leave the fallback badge in place.
+      });
+    return () => {
+      cancelled = true;
+      if (revoke) {
+        URL.revokeObjectURL(revoke);
+      }
+    };
+  }, [onLoadImage, url]);
+
+  // With no authenticated loader, fall back to a direct src (best effort).
+  const src = onLoadImage ? objectUrl : url;
+  return src ? (
+    <img alt="" loading="lazy" src={src} />
+  ) : (
+    <span className="wiki-attachment-ext">{fallback}</span>
   );
 }
 

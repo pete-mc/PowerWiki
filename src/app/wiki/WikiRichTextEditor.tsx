@@ -14,8 +14,10 @@ interface WikiRichTextEditorProps {
   readonly currentPath?: string;
   readonly disabled?: boolean;
   readonly onChange: (value: string) => void;
-  /** Resolves a stored image path to a displayable URL for the preview surface. */
+  /** Resolves a stored image path to its authenticated Git Items URL. */
   readonly onResolveImageSrc?: (src: string, currentPath: string) => string | undefined;
+  /** Fetches a resolved URL as a displayable object URL (authenticated). */
+  readonly onLoadImage?: (url: string) => Promise<string>;
   /** Uploads a pasted/dropped/picked file and returns its wiki reference. */
   readonly onUploadAttachment?: UploadAttachment;
   readonly value: string;
@@ -26,6 +28,7 @@ export function WikiRichTextEditor({
   disabled,
   onChange,
   onResolveImageSrc,
+  onLoadImage,
   onUploadAttachment,
   value,
 }: WikiRichTextEditorProps) {
@@ -44,11 +47,55 @@ export function WikiRichTextEditor({
   // Kept in refs so the memoized renderer's image rule always resolves against
   // the current page/resolver without rebuilding the renderer.
   const resolveImageRef = useRef(onResolveImageSrc);
+  const loadImageRef = useRef(onLoadImage);
   const currentPathRef = useRef(currentPath);
   useEffect(() => {
     resolveImageRef.current = onResolveImageSrc;
+    loadImageRef.current = onLoadImage;
     currentPathRef.current = currentPath;
-  }, [currentPath, onResolveImageSrc]);
+  }, [currentPath, onLoadImage, onResolveImageSrc]);
+  // Object URLs created for authenticated attachment images, keyed by resolved
+  // URL, so the editable surface can display them; revoked when the editor
+  // unmounts. See swapAttachmentImages.
+  const imageObjectUrlsRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    const cache = imageObjectUrlsRef.current;
+    return () => {
+      for (const objectUrl of cache.values()) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      cache.clear();
+    };
+  }, []);
+  // Replaces the failing authenticated-URL <img src>s in the editable surface
+  // with credentialed object URLs. Keeps data-wiki-src (the portable path) so
+  // serialization still emits clean Markdown.
+  const swapAttachmentImages = useCallback((editor: HTMLElement) => {
+    const load = loadImageRef.current;
+    if (!load) {
+      return;
+    }
+    const cache = imageObjectUrlsRef.current;
+    for (const image of Array.from(editor.querySelectorAll<HTMLImageElement>("img[data-powerwiki-authed]"))) {
+      const target = image.getAttribute("src");
+      if (!target || target.startsWith("blob:")) {
+        continue;
+      }
+      const cached = cache.get(target);
+      if (cached) {
+        image.src = cached;
+        continue;
+      }
+      void load(target)
+        .then((objectUrl) => {
+          cache.set(target, objectUrl);
+          image.src = objectUrl;
+        })
+        .catch(() => {
+          // Leave the (broken) image in place.
+        });
+    }
+  }, []);
 
   const renderer = useMemo(() => {
     const md = new MarkdownIt({ breaks: false, html: false, linkify: true, typographer: true });
@@ -61,9 +108,15 @@ export function WikiRichTextEditor({
       const srcIndex = token.attrIndex("src");
       if (srcIndex >= 0) {
         const original = token.attrs![srcIndex][1];
-        const resolved = resolveImageRef.current?.(original, currentPathRef.current ?? "") ?? original;
-        token.attrs![srcIndex][1] = resolved;
+        const resolved = resolveImageRef.current?.(original, currentPathRef.current ?? "");
         token.attrPush(["data-wiki-src", original]);
+        if (resolved) {
+          // A wiki attachment resolved to an authenticated Git Items URL: mark it
+          // so swapAttachmentImages fetches it with credentials. External images
+          // keep their original src and are never sent the access token.
+          token.attrs![srcIndex][1] = resolved;
+          token.attrPush(["data-powerwiki-authed", "1"]);
+        }
       }
       return defaultImage
         ? defaultImage(tokens, index, options, env, self)
@@ -123,7 +176,8 @@ export function WikiRichTextEditor({
 
     editor.innerHTML = value.trim().length > 0 ? renderer.render(value) : "<p><br></p>";
     lastAppliedValueRef.current = value;
-  }, [renderer, value]);
+    swapAttachmentImages(editor);
+  }, [renderer, swapAttachmentImages, value]);
 
   function runCommand(command: string, commandValue?: string) {
     if (disabled) {
@@ -365,8 +419,12 @@ export function WikiRichTextEditor({
     const img = document.createElement("img");
     img.src = displaySrc;
     img.setAttribute("data-wiki-src", wikiPath);
+    img.setAttribute("data-powerwiki-authed", "1");
     img.alt = alt;
     document.execCommand("insertHTML", false, `${img.outerHTML}<p><br></p>`);
+    // Swap the just-inserted authenticated URL for a credentialed object URL so
+    // it actually displays (data-wiki-src keeps the portable path for save).
+    swapAttachmentImages(editor);
     syncMarkdownFromDom();
   }
 

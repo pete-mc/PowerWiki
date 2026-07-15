@@ -10,6 +10,7 @@ import { ErrorBoundary } from "../ErrorBoundary";
 import { useThemeMode } from "../themeMode";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
 import { buildAttachmentName, fileToBase64, isImageFile } from "../../wiki/attachmentUpload";
+import { fetchAttachmentObjectUrl } from "../../wiki/attachmentImage";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
@@ -1668,6 +1669,7 @@ export function WikiBrowser({
                 disabled={saveState === "saving"}
                 onChange={setDraftContent}
                 onResolveImageSrc={resolveImageSrc}
+                onLoadImage={fetchAttachmentObjectUrl}
                 onUploadAttachment={uploadAttachment}
                 value={draftContent}
               />
@@ -1717,6 +1719,7 @@ export function WikiBrowser({
                     }}
                     onOpenWorkItem={(id) => void openWorkItem(id)}
                     onResolveImageSrc={resolveImageSrc}
+                    onLoadImage={fetchAttachmentObjectUrl}
                   />
                 </div>
               </div>
@@ -1755,6 +1758,7 @@ export function WikiBrowser({
               }}
               onOpenWorkItem={(id) => void openWorkItem(id)}
               onResolveImageSrc={resolveImageSrc}
+              onLoadImage={fetchAttachmentObjectUrl}
             />
           </>
         ) : (
@@ -1793,6 +1797,7 @@ export function WikiBrowser({
           loadAttachments={listWikiAttachments}
           onClose={() => setAttachmentsOpen(false)}
           resolveImageSrc={resolveImageSrc}
+          onLoadImage={fetchAttachmentObjectUrl}
         />
       ) : null}
 

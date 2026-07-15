@@ -50,6 +50,14 @@ interface MarkdownPreviewProps {
   readonly subPages?: readonly WikiSubPage[];
   /** Resolves rendered image sources before the HTML is inserted into the DOM. */
   readonly onResolveImageSrc?: (src: string, currentPath: string) => string | undefined;
+  /**
+   * Loads a resolved attachment URL as a displayable object URL, fetched with
+   * the extension's Azure DevOps credentials. Wiki attachment images sit behind
+   * an authenticated API that a bare cross-origin <img src> can't reach from the
+   * sandboxed iframe, so they are fetched here instead. When omitted, the
+   * resolved URL is used directly (best effort).
+   */
+  readonly onLoadImage?: (url: string) => Promise<string>;
   /** Loads an embedded Azure Boards query table. */
   readonly onLoadQueryTable?: (queryId: string) => Promise<QueryTableResult>;
   /** Called when an internal wiki link is clicked, with the resolved wiki path. */
@@ -76,6 +84,67 @@ const markdownRenderer = createMarkdownRenderer();
 
 // Matches any URI scheme (http:, https:, mailto:, tel:, etc.).
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+// Holds an attachment image's resolved (authenticated) URL until enrichImages
+// fetches it with credentials and swaps in a displayable object URL.
+const ATTACHMENT_IMAGE_ATTR = "data-powerwiki-image";
+
+interface ImageEnrichmentContext {
+  /** Resolved URL -> object URL for images already fetched this session. */
+  readonly cache: Map<string, string>;
+  readonly inFlight: Set<string>;
+  readonly failed: Set<string>;
+  readonly onLoadImage?: (url: string) => Promise<string>;
+  readonly onSettled: () => void;
+}
+
+// Loads attachment images that resolveImageSources parked in a data attribute.
+// Keyed by the resolved URL (like the work-item badge enricher is keyed by id):
+// several <img>s pointing at the same attachment share one fetch, and an
+// onSettled bump re-runs the layout effect so the cached object URL applies to
+// every current node. Idempotent and self-healing across DOM rebuilds.
+function enrichImages(container: HTMLElement, ctx: ImageEnrichmentContext): void {
+  const images = Array.from(container.querySelectorAll<HTMLImageElement>(`img[${ATTACHMENT_IMAGE_ATTR}]`));
+  for (const image of images) {
+    const target = image.getAttribute(ATTACHMENT_IMAGE_ATTR);
+    if (!target) {
+      continue;
+    }
+
+    const load = ctx.onLoadImage;
+    if (!load) {
+      // No authenticated loader — fall back to the resolved URL directly.
+      if (image.getAttribute("src") !== target) {
+        image.setAttribute("src", target);
+      }
+      continue;
+    }
+
+    const cached = ctx.cache.get(target);
+    if (cached) {
+      if (image.getAttribute("src") !== cached) {
+        image.setAttribute("src", cached);
+      }
+      continue;
+    }
+
+    if (ctx.failed.has(target) || ctx.inFlight.has(target)) {
+      continue;
+    }
+    ctx.inFlight.add(target);
+    void load(target)
+      .then((objectUrl) => {
+        ctx.cache.set(target, objectUrl);
+      })
+      .catch(() => {
+        ctx.failed.add(target);
+      })
+      .finally(() => {
+        ctx.inFlight.delete(target);
+        ctx.onSettled();
+      });
+  }
+}
 
 function safeDecode(value: string): string {
   try {
@@ -117,6 +186,7 @@ export function MarkdownPreview({
   onNavigate,
   onOpenWorkItem,
   onResolveImageSrc,
+  onLoadImage,
   anchor,
   buildHeadingUrl,
   onHeadingLinkActivated
@@ -128,6 +198,10 @@ export function MarkdownPreview({
   const workItemCacheRef = useRef(new Map<number, WorkItemBadgeDetails>());
   const workItemInFlightRef = useRef(new Set<number>());
   const workItemFailedRef = useRef(new Set<number>());
+  // Attachment image object URLs, keyed by resolved URL (see enrichImages).
+  const imageCacheRef = useRef(new Map<string, string>());
+  const imageInFlightRef = useRef(new Set<string>());
+  const imageFailedRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
   // Tracks the base HTML currently written into the container so enrichment
   // re-runs (an async result arriving, a subpage list changing, a theme change)
@@ -202,11 +276,29 @@ export function MarkdownPreview({
       onLoadWorkItemBadge,
       onSettled: bumpEnrichment,
     });
+    enrichImages(container, {
+      cache: imageCacheRef.current,
+      inFlight: imageInFlightRef.current,
+      failed: imageFailedRef.current,
+      onLoadImage,
+      onSettled: bumpEnrichment,
+    });
     addCopyButtons(container);
     rewriteHeadingLinks(container, buildHeadingUrl);
     void highlightCodeBlocks(container);
     void renderMath(container);
-  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onLoadImage, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+
+  // Release the attachment object URLs this preview created when it unmounts.
+  useEffect(() => {
+    const cache = imageCacheRef.current;
+    return () => {
+      for (const objectUrl of cache.values()) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      cache.clear();
+    };
+  }, []);
 
   // Once the page content (and its heavy enrichment) is in the DOM, scroll the
   // requested heading into view. Deferred so mermaid/query layout settles first.
@@ -710,7 +802,11 @@ function resolveImageSources(
 
     const resolvedSrc = resolveImageSrc(src, currentPath);
     if (resolvedSrc) {
-      image.setAttribute("src", resolvedSrc);
+      // Stash the resolved (authenticated) URL and drop src so no failing
+      // cross-origin request fires; enrichImages fetches it with credentials
+      // and swaps in an object URL once the bytes arrive.
+      image.setAttribute(ATTACHMENT_IMAGE_ATTR, resolvedSrc);
+      image.removeAttribute("src");
     }
   }
 
