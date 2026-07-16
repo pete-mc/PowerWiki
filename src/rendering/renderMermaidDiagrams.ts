@@ -78,6 +78,12 @@ function ensureMermaidInitialized(mermaid: MermaidApi, theme: string): void {
     logLevel: "error",
     securityLevel: "strict",
     startOnLoad: false,
+    // While a diagram is being edited its source is briefly invalid on almost
+    // every keystroke. Left to its own devices Mermaid renders a big "Syntax
+    // error" bomb graphic into a temporary node on document.body (which it then
+    // fails to clean up, so it lands below the editor and shoves the layout).
+    // Suppress it and let renderMermaidNode show a small inline message instead.
+    suppressErrorRendering: true,
     theme: theme as Parameters<typeof mermaid.initialize>[0]["theme"],
   });
   currentTheme = theme;
@@ -107,8 +113,25 @@ async function renderMermaidNode(mermaid: MermaidApi, node: HTMLElement): Promis
 
   node.setAttribute("data-processed", "true");
 
+  // Validate the source before rendering. While a diagram is edited it is
+  // briefly invalid on almost every keystroke; mermaid.render() would throw and
+  // leave orphaned temp nodes on document.body (which shove the page/editor and
+  // dump stray markup below the editor). mermaid.parse() with suppressErrors
+  // returns false for bad input without touching the DOM, so we can show a small
+  // inline message and skip render entirely.
+  let parsed: unknown = false;
   try {
-    const id = `powerwiki-mermaid-${++diagramId}`;
+    parsed = await mermaid.parse(source, { suppressErrors: true });
+  } catch {
+    parsed = false;
+  }
+  if (!parsed) {
+    renderMermaidError(node, new Error("The diagram source is not valid yet."));
+    return;
+  }
+
+  const id = `powerwiki-mermaid-${++diagramId}`;
+  try {
     const { svg, bindFunctions } = await mermaid.render(id, source);
     node.classList.remove("mermaid");
     node.classList.add("mermaid-rendered");
@@ -116,6 +139,12 @@ async function renderMermaidNode(mermaid: MermaidApi, node: HTMLElement): Promis
     bindFunctions?.(node);
   } catch (error: unknown) {
     renderMermaidError(node, error);
+  } finally {
+    // mermaid.render renders into a temporary <div id="d{id}"> on document.body
+    // that isn't always cleaned up, so nodes accumulate as the user edits.
+    // Remove only that temp div — the rendered SVG has id="{id}" (no "d"
+    // prefix) and lives inside our node, so it is never matched here.
+    document.getElementById(`d${id}`)?.remove();
   }
 }
 

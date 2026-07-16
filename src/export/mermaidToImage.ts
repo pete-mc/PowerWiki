@@ -19,6 +19,9 @@ async function loadMermaid() {
       theme: "neutral",
       securityLevel: "strict",
       flowchart: { htmlLabels: false },
+      // Don't inject Mermaid's "Syntax error" bomb graphic into the DOM on a
+      // bad diagram; mermaidToPng catches the throw and skips the diagram.
+      suppressErrorRendering: true,
     });
     initialized = true;
   }

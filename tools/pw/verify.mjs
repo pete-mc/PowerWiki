@@ -115,6 +115,33 @@ try {
   check(!!(await frame.$(".powerwiki-work-item-badge-rich")), "work item badge still enriched after navigation");
   check(!!(await frame.$(".powerwiki-query-table table")), "query table still rendered after navigation");
 
+  // Scroll resets to the top on in-app navigation. The content area persists
+  // across pages (it lives outside the per-page boundary), so a scrolled page
+  // would otherwise carry its scroll to the next. Uses a real in-app tree click,
+  // not openWikiPage (a full reload would reset scroll on its own).
+  try {
+    frame = await openWikiPage(page, "#/PowerWiki%20Showcase");
+    await frame.waitForSelector(".mermaid-rendered svg", { timeout: 60000 });
+    await sleep(1000);
+    const scrolledTo = await frame.evaluate(() => {
+      const c = document.querySelector(".powerwiki-content");
+      if (!c) return 0;
+      c.scrollTop = c.scrollHeight;
+      return c.scrollTop;
+    });
+    await sleep(300);
+    await frame.locator(".wiki-page-tree-link", { hasText: "Home" }).first().click();
+    await frame.waitForSelector(".powerwiki-query-table table", { timeout: 60000 });
+    await sleep(800);
+    const afterNav = await frame.evaluate(() => document.querySelector(".powerwiki-content")?.scrollTop ?? -1);
+    check(
+      scrolledTo > 0 && afterNav === 0,
+      `content scroll resets to top on navigation (was ${scrolledTo}, now ${afterNav})`
+    );
+  } catch (error) {
+    check(false, `scroll-reset check failed: ${error.message}`);
+  }
+
   // 3. Image upload renders (validates the attachments base64 body).
   try {
     await frame.click(".powerwiki-header-menu-button");
@@ -284,6 +311,27 @@ try {
     });
     check(zoomScale > 1, `mermaid zoom opens fit-to-stage (scale=${zoomScale})`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-mermaid.png") });
+
+    // Close the zoom overlay, then make the diagram source invalid (as happens
+    // mid-edit) and confirm Mermaid's "Syntax error" bomb graphic is NOT leaked
+    // into the document — it used to be orphaned on document.body below the
+    // editor and shove the layout.
+    await page.keyboard.press("Escape").catch(() => {});
+    await frame.evaluate(() => {
+      const models = window.monaco && window.monaco.editor ? window.monaco.editor.getModels() : [];
+      if (models[0]) {
+        models[0].setValue("```mermaid\nflowchart TD\n  A --> ((( bad\n```\n");
+      }
+    });
+    await sleep(1500);
+    const bomb = await frame.evaluate(() =>
+      // The bomb's text, or mermaid's temporary "d{id}" render node left on the
+      // page. (A rendered diagram's SVG has id "powerwiki-mermaid-N" with no "d"
+      // prefix and is legitimate, so it must not be matched here.)
+      document.body.innerText.includes("Syntax error in text") ||
+      !!document.querySelector('[id^="dpowerwiki-mermaid"]')
+    );
+    check(!bomb, "invalid mermaid does not leak the Syntax-error graphic into the page");
   } catch (error) {
     check(false, `mermaid features failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-mermaid-error.png") });

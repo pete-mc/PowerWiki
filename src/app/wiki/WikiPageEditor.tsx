@@ -39,6 +39,12 @@ export function WikiPageEditor({ disabled, onChange, onListAttachments, onUpload
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<MonacoApi | undefined>(undefined);
   const onChangeRef = useRef(onChange);
+  // Recent values the editor itself emitted. The parent feeds `value` back as a
+  // controlled prop, but under load (e.g. a heavy Mermaid preview re-render on
+  // every keystroke) that round trip lags the live model by a keystroke or two.
+  // Tracking our own recent emissions lets the value effect tell a genuine
+  // external change from such a stale echo, which it must not re-apply.
+  const emittedValuesRef = useRef<string[]>([]);
   const mermaidRef = useRef<HTMLDivElement>(null);
   const linkPickerRef = useRef<HTMLDivElement>(null);
   const linkSearchRef = useRef<HTMLInputElement>(null);
@@ -99,7 +105,15 @@ export function WikiPageEditor({ disabled, onChange, onListAttachments, onUpload
         editorRef.current = editor;
 
         const modelDisposable = editor.onDidChangeModelContent(() => {
-          onChangeRef.current(editor.getValue());
+          const next = editor.getValue();
+          // Remember what we emit (bounded) so the value effect can recognise a
+          // lagging echo of our own edits and skip it.
+          const emitted = emittedValuesRef.current;
+          emitted.push(next);
+          if (emitted.length > 30) {
+            emitted.shift();
+          }
+          onChangeRef.current(next);
         });
         const resizeObserver = new ResizeObserver(() => {
           editor.layout();
@@ -139,9 +153,18 @@ export function WikiPageEditor({ disabled, onChange, onListAttachments, onUpload
 
   useEffect(() => {
     const editor = editorRef.current;
-    if (editor && editor.getValue() !== value) {
-      editor.setValue(value);
+    if (!editor || editor.getValue() === value) {
+      return;
     }
+    // Only apply genuinely external changes (page switch, draft restore/discard,
+    // save). A `value` that the editor recently emitted is a stale echo lagging
+    // the live model; re-applying it via setValue would revert the last few
+    // keystrokes and snap the caret to the top. The next render reconciles the
+    // state, so skipping is safe.
+    if (emittedValuesRef.current.includes(value)) {
+      return;
+    }
+    editor.setValue(value);
   }, [value]);
 
   useEffect(() => {

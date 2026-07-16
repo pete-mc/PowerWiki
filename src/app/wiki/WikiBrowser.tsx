@@ -362,6 +362,7 @@ export function WikiBrowser({
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
   const navigationServiceRef = useRef<IHostNavigationService | undefined>(undefined);
+  const contentRef = useRef<HTMLElement>(null);
   const splitShellRef = useRef<HTMLDivElement>(null);
   // When set, the page with this path should switch into edit mode as soon as it
   // finishes loading. Used by the tree's "Edit" action and new-page creation so
@@ -937,6 +938,16 @@ export function WikiBrowser({
       // Non-fatal: leave the host-managed title unchanged.
     }
   }, [navigationReady, activePage]);
+
+  // The content area scrolls and persists across navigation (it lives outside
+  // the per-page ErrorBoundary), so reset it to the top when moving to a
+  // different page. Keyed on the path, so saving the same page keeps the scroll;
+  // a deep-link anchor scroll runs afterward and takes precedence.
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [activePage?.path]);
 
   useEffect(() => {
     if (!navigationReady) {
@@ -1623,7 +1634,7 @@ export function WikiBrowser({
         )}
       </aside>
 
-      <article className="powerwiki-content">
+      <article className="powerwiki-content" ref={contentRef}>
         <ErrorBoundary key={activePage?.path ?? "no-page"} label="page">
         {activePage && isEditing ? (
           <section className="wiki-editor-shell" aria-label={`Editing ${pageTitle(activePage.path)}`}>
