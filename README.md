@@ -128,6 +128,9 @@ The current implementation provides a working Power Wiki experience:
 - Inbound-link updates on page rename/move, with a preview/confirm dialog.
 - Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML.
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
+- Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki.
+- Supports the Azure DevOps image-size suffix, `![alt](image.png =500x250)`.
+- Resizable page tree rail (drag its edge, double-click to reset), and an editor that fills the available height.
 
 ## Theming
 
@@ -148,6 +151,25 @@ The query table syntax runs the saved query by ID in the current project and ren
 Inline work item references like `#1234` render as clickable badges in PowerWiki. Clicking a badge opens the native Azure DevOps work item form through the Work Item Tracking extension service.
 
 In the built-in Azure DevOps Wiki, these remain readable as plain Markdown text rather than requiring a proprietary stored page format.
+
+### Identity mentions
+
+Azure DevOps stores a mention as `@<identity-guid>` and resolves the name when it renders the page. PowerWiki does the same, so mentions read as `@Ada Lovelace` instead of a raw GUID, and group mentions drop the `[project]\` scope prefix the platform adds.
+
+The lookup goes through the host's identity service contribution (`ms.vss-features.identity-service`, the service behind the Azure DevOps people picker) rather than the Identities or Graph REST APIs. The host performs it in the parent frame under the signed-in user's own session, so **PowerWiki does not request the `vso.identity` or `vso.graph` scope**. That matters operationally: adding a scope parks every installed copy of the extension at "Pending review" until an organization admin re-approves it.
+
+An identity that cannot be resolved (a deleted user, or a host that does not expose the service) renders as a neutral `@unknown user` chip with the GUID on hover, never as the raw tag. The stored Markdown is never rewritten.
+
+### Image size
+
+PowerWiki supports the Azure DevOps [image-size syntax](https://learn.microsoft.com/en-us/azure/devops/project/wiki/markdown-guidance?view=azure-devops#image-size):
+
+```markdown
+![Image alt text](./image.png =500x250)
+![Image alt text](./image.png =500x)
+```
+
+CommonMark expects a quoted title in that position, so stock markdown-it rejects the whole image and renders the author's Markdown as literal text. PowerWiki parses the suffix into `width`/`height` attributes ahead of the built-in image rule, using markdown-it's own link helpers so bracket nesting and `<...>` destinations keep working. Sizes survive the rich-text round trip and are honored by the Word export; images are capped at the column width so an oversized value cannot break the layout.
 
 ## Project Structure
 

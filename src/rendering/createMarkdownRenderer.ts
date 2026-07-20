@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import markdownItAnchor from "markdown-it-anchor";
 
+import { adoImageSizePlugin } from "./adoImageSizePlugin";
 import { adoMentionsPlugin } from "./adoMentionsPlugin";
 import { adoPlaceholdersPlugin } from "./adoPlaceholdersPlugin";
 import { adoWorkItemsPlugin } from "./adoWorkItemsPlugin";
@@ -91,6 +92,7 @@ export function createMarkdownRenderer(): MarkdownIt {
     .use(mathPlugin)
     .use(adoWorkItemsPlugin)
     .use(adoMentionsPlugin)
+    .use(adoImageSizePlugin)
     .use(adoPlaceholdersPlugin);
 
   // Override the fence renderer so that ```mermaid``` (and our ":::mermaid"

@@ -1214,6 +1214,17 @@ body {
   max-width: none;
 }
 
+/*
+ * Images render at their natural size, or at the size the author set with the
+ * Azure DevOps `![alt](image.png =500x250)` suffix (which lands on the img as
+ * width/height attributes). The cap keeps either from overflowing the column on
+ * a narrow window; browsers derive an aspect ratio from the two attributes, so a
+ * capped image scales instead of squashing.
+ */
+.markdown-preview img {
+  max-width: 100%;
+}
+
 /* KaTeX renders a visually-hidden MathML copy for screen readers alongside the
    visual HTML. Its own clip rule doesn't reliably apply inside the preview, so
    pin the hide here to avoid a duplicated, unstyled copy of every equation. */

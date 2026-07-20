@@ -42,6 +42,15 @@ interface HostIdentityService {
   ): Promise<HostIdentity[]>;
 }
 
+/**
+ * Trims the scope Azure DevOps prefixes onto group names — a team comes back as
+ * `[project]\Team Name`. People have no prefix, so this only affects groups, and
+ * "@Team Name" is what a reader expects to see in a sentence.
+ */
+export function normalizeIdentityName(displayName: string | undefined): string {
+  return (displayName ?? "").replace(/^\[[^\]]*\]\\/, "").trim();
+}
+
 export class AzureDevOpsIdentityClient {
   private servicePromise: Promise<HostIdentityService | undefined> | undefined;
 
@@ -67,7 +76,7 @@ export class AzureDevOpsIdentityClient {
     // identities. Groups are included so team mentions resolve too.
     const matches = await service.searchIdentitiesAsync(id, ["user", "group"], ["ims", "source"], "uid");
     const match = matches?.[0];
-    const displayName = match?.displayName?.trim();
+    const displayName = normalizeIdentityName(match?.displayName);
     if (!displayName) {
       throw new Error(`No identity found for ${id}.`);
     }

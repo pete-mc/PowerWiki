@@ -831,6 +831,154 @@ try {
     check(false, `follow toggle failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "20-follow-error.png") });
   }
+
+  // Rendering: `@<guid>` identity mentions resolve to display names through the
+  // host identity service. The team group below is deliberately NOT the signed-in
+  // user, so a pass proves the host-service lookup works on the extension's
+  // existing scopes (no vso.identity / vso.graph) rather than just hitting the
+  // current-user shortcut in AzureDevOpsIdentityClient.
+  const TEAM_IDENTITY = "a502d9c7-0cbd-45de-a091-3acdd89183af";
+  // The host returns a group as "[project]\Team Name"; PowerWiki strips the
+  // scope so the chip reads naturally in a sentence.
+  const TEAM_NAME = "dataversepowertools Team";
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "Edit page" }).click();
+    await frame.waitForSelector(".wiki-page-editor .monaco-editor", { timeout: 30000 });
+    await frame.locator(".wiki-editor-mode-select").evaluate((sel) => {
+      sel.value = "splitCode";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await frame.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 60000 });
+    await frame.evaluate((id) => {
+      const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+      if (models[0]) {
+        models[0].setValue(
+          `Owned by @<${id}> and @<00000000-0000-0000-0000-000000000000>.\n\n` +
+            "![sized](/.attachments/pw-size-probe.png =320x180)\n\n" +
+            "![wide](/.attachments/pw-size-probe.png =240x)\n"
+        );
+      }
+    }, TEAM_IDENTITY);
+    // The lookup round-trips to the host frame, so give it room to settle.
+    await frame.waitForFunction(
+      () => {
+        const el = document.querySelector(".markdown-preview .powerwiki-mention");
+        return el && !el.textContent.includes("…");
+      },
+      { timeout: 30000 }
+    );
+    const mentions = await frame.$$eval(".markdown-preview .powerwiki-mention", (els) =>
+      els.map((el) => ({ text: el.textContent, unresolved: el.classList.contains("powerwiki-mention-unresolved") }))
+    );
+    const raw = await frame.$eval(".markdown-preview", (el) => el.textContent);
+    check(mentions.length === 2, `both mentions become chips (${mentions.length})`);
+    check(!/@</.test(raw), "the raw @<guid> tag is gone from the rendered page");
+    check(
+      mentions[0]?.text === `@${TEAM_NAME}`,
+      `mention resolves to a display name (${JSON.stringify(mentions[0]?.text)})`
+    );
+    check(
+      mentions[1]?.unresolved === true,
+      `an unknown identity falls back cleanly (${JSON.stringify(mentions[1]?.text)})`
+    );
+
+    // Rendering: the Azure DevOps `=WxH` image-size suffix. Before this was
+    // supported markdown-it rejected the whole image and the author's Markdown
+    // showed up as literal text, so assert the <img> exists with the size on it.
+    const sized = await frame.$$eval(".markdown-preview img", (els) =>
+      els.map((el) => ({ w: el.getAttribute("width"), h: el.getAttribute("height") }))
+    );
+    const previewText = await frame.$eval(".markdown-preview", (el) => el.textContent);
+    check(sized.length === 2, `sized images render as <img> (${sized.length})`);
+    check(
+      sized[0]?.w === "320" && sized[0]?.h === "180",
+      `=320x180 sets both dimensions (${JSON.stringify(sized[0])})`
+    );
+    check(
+      sized[1]?.w === "240" && !sized[1]?.h,
+      `=240x sets width only (${JSON.stringify(sized[1])})`
+    );
+    check(!previewText.includes("=320x180"), "the size suffix is not left as literal text");
+
+    // Editing: the editor should fill the content area rather than stopping at a
+    // fixed viewport fraction. In split mode the code pane and the preview pane
+    // should end up the same height, with the editor consuming what's left of the
+    // shell under the format toolbar.
+    const layout = await frame.evaluate(() => {
+      const h = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? Math.round(el.getBoundingClientRect().height) : 0;
+      };
+      return {
+        content: h(".powerwiki-content"),
+        shell: h(".wiki-editor-split-shell"),
+        code: h(".wiki-editor-split-pane-code"),
+        preview: h(".wiki-editor-split-pane-preview"),
+        monaco: h(".wiki-editor-split-pane-code .monaco-editor"),
+        toolbar: h(".wiki-editor-split-pane-code .wiki-format-toolbar"),
+      };
+    });
+    check(
+      Math.abs(layout.code - layout.preview) <= 2,
+      `split panes are the same height (code=${layout.code}, preview=${layout.preview})`
+    );
+    check(
+      layout.monaco >= layout.code - layout.toolbar - 4,
+      `Monaco fills the code pane (monaco=${layout.monaco}, pane=${layout.code}, toolbar=${layout.toolbar})`
+    );
+    // The old fixed min(72vh, 820px) left the shell well short of the content
+    // area; now it should claim essentially all of it.
+    check(
+      layout.shell >= layout.content * 0.8,
+      `editor fills the content area (shell=${layout.shell}, content=${layout.content})`
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "21-mentions-and-height.png") });
+    await frame.getByRole("button", { name: "Cancel" }).click();
+    await sleep(500);
+  } catch (error) {
+    check(false, `mention rendering / editor height failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "21-mentions-and-height-error.png") });
+    await leaveEditor(page, frame);
+  }
+
+  // Navigation: the page-tree rail can be dragged wider and snaps back on a
+  // double-click.
+  try {
+    frame = await openWikiPage(page, "#/Home");
+    await frame.waitForSelector(".powerwiki-nav-resizer", { timeout: 30000 });
+    const navBox = await frame.locator(".powerwiki-nav").boundingBox();
+    const handle = await frame.locator(".powerwiki-nav-resizer").boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + 150, handle.y + handle.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await sleep(300);
+    const widened = await frame.locator(".powerwiki-nav").boundingBox();
+    check(
+      widened.width > navBox.width + 100,
+      `page tree drags wider (${Math.round(navBox.width)} -> ${Math.round(widened.width)})`
+    );
+    // The width is a personal preference, so it must survive a reload.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    frame = await powerWikiFrame(page);
+    await frame.waitForSelector(".powerwiki-nav-resizer", { timeout: 30000 });
+    const restored = await frame.locator(".powerwiki-nav").boundingBox();
+    check(
+      Math.abs(restored.width - widened.width) <= 2,
+      `the dragged width persists across a reload (${Math.round(restored.width)})`
+    );
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "22-nav-resize.png") });
+    // Reset so the profile doesn't carry a widened rail into later runs.
+    await frame.dblclick(".powerwiki-nav-resizer");
+    await sleep(300);
+    const reset = await frame.locator(".powerwiki-nav").boundingBox();
+    check(Math.abs(reset.width - 240) <= 2, `double-click resets the rail (${Math.round(reset.width)})`);
+  } catch (error) {
+    check(false, `page tree resize failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "22-nav-resize-error.png") });
+  }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
 } finally {

@@ -101,7 +101,7 @@ async function blocksFromNode(parent: Node, ctx: HtmlToDocxContext, opts: IParag
     } else if (tag === "img") {
       const image = await loadImageElement(node, ctx);
       if (image) {
-        blocks.push(new Paragraph({ children: [imageRun(image)] }));
+        blocks.push(new Paragraph({ children: [imageRun(image, authoredSize(node))] }));
       }
     } else if (tag === "svg") {
       const png = await rasterizeSvgElement(node as unknown as SVGElement);
@@ -265,7 +265,7 @@ async function inlineRunsFromNodes(
       case "img": {
         const image = await loadImageElement(node, ctx);
         if (image) {
-          out.push(imageRun(image));
+          out.push(imageRun(image, authoredSize(node)));
         } else {
           const alt = node.getAttribute("alt");
           if (alt) {
@@ -352,9 +352,47 @@ function hrParagraph(): Paragraph {
   });
 }
 
-function imageRun(image: ExportImage): ImageRun {
-  let width = image.width || MAX_IMAGE_WIDTH;
-  let height = image.height || Math.round(width * 0.6);
+/**
+ * The size the author asked for with the `=WxH` Markdown suffix, if any. Only
+ * one dimension may be given, in which case the other is derived from the
+ * image's own aspect ratio.
+ */
+export interface AuthoredImageSize {
+  readonly width?: number;
+  readonly height?: number;
+}
+
+function authoredSize(img: HTMLElement): AuthoredImageSize {
+  const dimension = (name: string): number | undefined => {
+    const value = Number(img.getAttribute(name));
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  };
+  return { width: dimension("width"), height: dimension("height") };
+}
+
+export function imageRun(image: ExportImage, authored: AuthoredImageSize = {}): ImageRun {
+  const naturalWidth = image.width || MAX_IMAGE_WIDTH;
+  const naturalHeight = image.height || Math.round(naturalWidth * 0.6);
+  const ratio = naturalHeight / naturalWidth;
+
+  let width: number;
+  let height: number;
+  if (authored.width && authored.height) {
+    width = authored.width;
+    height = authored.height;
+  } else if (authored.width) {
+    width = authored.width;
+    height = Math.round(authored.width * ratio);
+  } else if (authored.height) {
+    height = authored.height;
+    width = Math.round(authored.height / ratio);
+  } else {
+    width = naturalWidth;
+    height = naturalHeight;
+  }
+
+  // The page still wins: an authored width wider than the text column would run
+  // off the edge of the document.
   if (width > MAX_IMAGE_WIDTH) {
     height = Math.round((height * MAX_IMAGE_WIDTH) / width);
     width = MAX_IMAGE_WIDTH;

@@ -1,6 +1,6 @@
 {
   "name": "powerwiki",
-  "version": "1.2.12",
+  "version": "1.2.15",
   "description": "PowerWiki is an Azure DevOps extension that adds a Power Wiki menu experience while continuing to use the standard Azure DevOps Wiki repositories as the source of truth.",
   "private": true,
   "main": "dist/powerwiki.js",
@@ -62,3 +62,4 @@
     "webpack-cli": "^7.1.0"
   }
 }
+

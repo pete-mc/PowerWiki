@@ -24,6 +24,16 @@ describe("adoMentionsPlugin", () => {
     expect(html).toContain(" after");
   });
 
+  // Regression: with html: true, markdown-it reads `<a502d9c7-0cbd-...>` as an
+  // HTML open tag, because a letter followed by alphanumerics and hyphens is a
+  // valid tag name. Roughly half of all GUIDs start with a-f, and those mentions
+  // used to be parsed as HTML and dropped by the sanitizer, leaving a bare "@".
+  it("handles a GUID that starts with a letter", () => {
+    const html = md.render("Owned by @<a502d9c7-0cbd-45de-a091-3acdd89183af>.");
+    expect(html).toContain('data-powerwiki-mention-id="a502d9c7-0cbd-45de-a091-3acdd89183af"');
+    expect(sanitizeRenderedHtml(html)).toContain("a502d9c7-0cbd-45de-a091-3acdd89183af");
+  });
+
   it("handles several mentions in one paragraph", () => {
     const other = "@<0f0c2f97-1c2a-4d3e-9a8b-1c2d3e4f5a6b>";
     const html = md.render(`${MENTION} and ${other}`);
