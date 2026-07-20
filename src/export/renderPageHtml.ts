@@ -3,13 +3,16 @@
 // badges, embedded HTML, Mermaid (as inline SVG), math, and highlighted code.
 // Used by both the PDF (print) and Word (html -> docx) export paths.
 
+import { MENTION_ATTR, MENTION_SELECTOR } from "../rendering/adoMentionsPlugin";
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "../rendering/adoWorkItemsPlugin";
 import { createMarkdownRenderer } from "../rendering/createMarkdownRenderer";
 import { highlightCodeBlocks } from "../rendering/enhancePreview";
 import {
+  renderMention,
   renderQueryMessage,
   renderQueryResult,
   renderWorkItemBadge,
+  type MentionIdentity,
   type QueryTableResult,
   type WorkItemBadgeDetails,
 } from "../rendering/MarkdownPreview";
@@ -24,6 +27,7 @@ export interface RenderPageOptions {
   readonly resolveImageSrc?: (src: string, currentPath: string) => string | undefined;
   readonly loadQueryTable?: (queryId: string) => Promise<QueryTableResult>;
   readonly loadWorkItemBadge?: (id: number) => Promise<WorkItemBadgeDetails>;
+  readonly loadMention?: (id: string) => Promise<MentionIdentity>;
 }
 
 /** Render options without the per-page path (supplied per page by the exporter). */
@@ -52,6 +56,7 @@ export async function renderPageToElement(markdown: string, options: RenderPageO
 
   await enrichQueryTables(container, options.loadQueryTable);
   await enrichWorkItemBadges(container, options.loadWorkItemBadge);
+  await enrichMentions(container, options.loadMention);
   await renderMermaidDiagrams(container, options.themeMode);
   await renderMath(container);
   await highlightCodeBlocks(container);
@@ -107,6 +112,32 @@ async function enrichWorkItemBadges(
     } catch {
       // Keep the basic badge if details can't be loaded.
     }
+  }
+}
+
+async function enrichMentions(
+  container: HTMLElement,
+  load: RenderPageOptions["loadMention"]
+): Promise<void> {
+  // One lookup per distinct identity, so a page that mentions the same person
+  // repeatedly doesn't re-query the host for each occurrence.
+  const resolved = new Map<string, MentionIdentity | undefined>();
+
+  for (const element of Array.from(container.querySelectorAll<HTMLElement>(MENTION_SELECTOR))) {
+    const id = element.getAttribute(MENTION_ATTR);
+    if (!id) {
+      continue;
+    }
+
+    if (!resolved.has(id)) {
+      try {
+        resolved.set(id, load ? await load(id) : undefined);
+      } catch {
+        resolved.set(id, undefined);
+      }
+    }
+
+    renderMention(element, resolved.get(id));
   }
 }
 

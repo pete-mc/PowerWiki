@@ -8,6 +8,7 @@ export function sanitizeRenderedHtml(html: string): string {
     ADD_ATTR: [
       "class",
       "data-powerwiki-math",
+      "data-powerwiki-mention-id",
       "data-powerwiki-placeholder",
       "data-powerwiki-query-id",
       "data-powerwiki-work-item-id",

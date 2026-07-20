@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useThemeMode } from "../app/themeMode";
+import { MENTION_ATTR, MENTION_SELECTOR } from "./adoMentionsPlugin";
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
 import { copyToClipboard } from "./clipboard";
@@ -42,6 +43,13 @@ export interface WorkItemBadgeDetails {
   readonly type?: string;
 }
 
+/** A resolved `@<guid>` mention. */
+export interface MentionIdentity {
+  readonly id: string;
+  readonly displayName: string;
+  readonly uniqueName?: string;
+}
+
 interface MarkdownPreviewProps {
   readonly markdown: string;
   /** Wiki path of the page being rendered; used to resolve relative links. */
@@ -66,6 +74,8 @@ interface MarkdownPreviewProps {
   readonly onOpenWorkItem?: (id: number) => void;
   /** Loads details used to enrich inline work item badges. */
   readonly onLoadWorkItemBadge?: (id: number) => Promise<WorkItemBadgeDetails>;
+  /** Resolves an `@<guid>` mention to the person's display name. */
+  readonly onLoadMention?: (id: string) => Promise<MentionIdentity>;
   /** Heading slug to scroll into view once the page has rendered, if any. */
   readonly anchor?: string;
   /**
@@ -181,6 +191,7 @@ export function MarkdownPreview({
   markdown,
   currentPath,
   subPages,
+  onLoadMention,
   onLoadQueryTable,
   onLoadWorkItemBadge,
   onNavigate,
@@ -198,6 +209,9 @@ export function MarkdownPreview({
   const workItemCacheRef = useRef(new Map<number, WorkItemBadgeDetails>());
   const workItemInFlightRef = useRef(new Set<number>());
   const workItemFailedRef = useRef(new Set<number>());
+  const mentionCacheRef = useRef(new Map<string, MentionIdentity>());
+  const mentionInFlightRef = useRef(new Set<string>());
+  const mentionFailedRef = useRef(new Set<string>());
   // Attachment image object URLs, keyed by resolved URL (see enrichImages).
   const imageCacheRef = useRef(new Map<string, string>());
   const imageInFlightRef = useRef(new Set<string>());
@@ -276,6 +290,13 @@ export function MarkdownPreview({
       onLoadWorkItemBadge,
       onSettled: bumpEnrichment,
     });
+    enrichMentions(container, {
+      cache: mentionCacheRef.current,
+      failed: mentionFailedRef.current,
+      inFlight: mentionInFlightRef.current,
+      onLoadMention,
+      onSettled: bumpEnrichment,
+    });
     enrichImages(container, {
       cache: imageCacheRef.current,
       inFlight: imageInFlightRef.current,
@@ -287,7 +308,7 @@ export function MarkdownPreview({
     rewriteHeadingLinks(container, buildHeadingUrl);
     void highlightCodeBlocks(container);
     void renderMath(container);
-  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onLoadImage, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onLoadImage, onLoadMention, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
 
   // Release the attachment object URLs this preview created when it unmounts.
   useEffect(() => {
@@ -479,6 +500,14 @@ interface WorkItemEnrichmentContext {
   readonly onSettled: () => void;
 }
 
+interface MentionEnrichmentContext {
+  readonly cache: Map<string, MentionIdentity>;
+  readonly failed: Set<string>;
+  readonly inFlight: Set<string>;
+  readonly onLoadMention?: (id: string) => Promise<MentionIdentity>;
+  readonly onSettled: () => void;
+}
+
 /** Fills every [[_TOSP_]] table-of-subpages placeholder in the container. */
 function fillSubPagePlaceholders(container: HTMLElement, subPages: readonly WikiSubPage[] | undefined): void {
   const placeholders = Array.from(container.querySelectorAll(TOSP_PLACEHOLDER_SELECTOR));
@@ -607,6 +636,57 @@ function enrichWorkItemBadges(container: HTMLElement, ctx: WorkItemEnrichmentCon
         ctx.onSettled();
       });
   }
+}
+
+/**
+ * Replaces every `@<guid>` mention placeholder with the person's display name,
+ * resolving each id once. A mention whose identity can't be resolved keeps a
+ * neutral label (with the id on hover) rather than exposing the raw GUID, and is
+ * not retried.
+ */
+function enrichMentions(container: HTMLElement, ctx: MentionEnrichmentContext): void {
+  for (const mention of Array.from(container.querySelectorAll<HTMLElement>(MENTION_SELECTOR))) {
+    const id = mention.getAttribute(MENTION_ATTR);
+    if (!id) {
+      continue;
+    }
+
+    const cached = ctx.cache.get(id);
+    if (cached) {
+      renderMention(mention, cached);
+      continue;
+    }
+
+    const load = ctx.onLoadMention;
+    if (!load || ctx.failed.has(id)) {
+      renderMention(mention, undefined);
+      continue;
+    }
+
+    if (ctx.inFlight.has(id)) {
+      continue;
+    }
+    ctx.inFlight.add(id);
+    void load(id)
+      .then((identity) => {
+        ctx.cache.set(id, identity);
+      })
+      .catch(() => {
+        ctx.failed.add(id);
+      })
+      .finally(() => {
+        ctx.inFlight.delete(id);
+        ctx.onSettled();
+      });
+  }
+}
+
+/** Paints a mention chip. Pass no identity for the unresolved fallback. */
+export function renderMention(element: HTMLElement, identity: MentionIdentity | undefined): void {
+  const id = element.getAttribute(MENTION_ATTR) ?? "";
+  element.textContent = identity ? `@${identity.displayName}` : "@unknown user";
+  element.title = identity?.uniqueName ?? id;
+  element.classList.toggle("powerwiki-mention-unresolved", !identity);
 }
 
 function renderQueryLoading(container: HTMLElement, queryId: string): void {

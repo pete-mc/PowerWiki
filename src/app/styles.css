@@ -188,8 +188,29 @@ body {
   grid-column: 1;
   grid-row: 1 / 3;
   overflow: hidden;
-  /* Thinner than the built-in Azure DevOps wiki rail. */
+  /* Anchors the drag handle pinned to the rail's right edge. */
+  position: relative;
+  /* Thinner than the built-in Azure DevOps wiki rail. The width is a starting
+     point only — WikiBrowser overrides it with the user's dragged width. */
   width: 240px;
+}
+
+/* Sits over the rail's right edge; widening the rail gives long page names more
+   room without permanently spending horizontal space. */
+.powerwiki-nav-resizer {
+  bottom: 0;
+  cursor: col-resize;
+  position: absolute;
+  right: 0;
+  top: 0;
+  touch-action: none;
+  width: 5px;
+}
+
+.powerwiki-nav-resizer:hover,
+.powerwiki-nav-resizer:active {
+  background: var(--pw-accent);
+  opacity: 0.5;
 }
 
 .powerwiki-nav.collapsed {
@@ -218,9 +239,11 @@ body {
 
 .powerwiki-nav-tree {
   flex: 1;
+  /* Keeps the tree's scrollbar clear of the drag handle on the rail's edge. */
+  margin-right: 6px;
   min-height: 0;
   overflow: auto;
-  padding: 0 8px 8px;
+  padding: 0 2px 8px 8px;
 }
 
 .powerwiki-nav-footer {
@@ -315,6 +338,62 @@ body {
   min-width: 0;
   overflow: auto;
   padding: 24px;
+}
+
+/*
+ * Editing mode. The content area is a grid row of definite height, so switching
+ * it to a flex column lets the editor shell claim every remaining pixel: the
+ * editor sizes itself to the hub instead of to a fixed `vh` fraction that left
+ * dead space below it (most visible in split mode, where the preview pane was
+ * taller than the code pane). Each level in the chain needs min-height: 0 or the
+ * flex default of min-content would keep the editor from shrinking.
+ */
+.powerwiki-content.editing {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.powerwiki-content.editing .wiki-editor-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.powerwiki-content.editing .wiki-page-editor-wrap,
+.powerwiki-content.editing .wiki-richtext-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.powerwiki-content.editing .wiki-page-editor {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.powerwiki-content.editing .wiki-editor-split-shell {
+  flex: 1;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+/* The code pane hosts the editor wrap, which needs a flex parent to stretch. */
+.powerwiki-content.editing .wiki-editor-split-pane-code {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Rich text scrolls its own body rather than the (now fixed-height) shell. */
+.powerwiki-content.editing .wiki-richtext-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .wiki-byline {
@@ -1867,6 +1946,23 @@ button.wiki-move-option:hover {
   text-decoration: none;
 }
 
+/* An @<guid> identity mention, resolved to the person's display name. */
+.markdown-preview .powerwiki-mention {
+  background: var(--pw-selected);
+  border-radius: 3px;
+  color: var(--pw-accent);
+  font-weight: 600;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+/* The identity could not be resolved — stay neutral rather than shouting. */
+.markdown-preview .powerwiki-mention-unresolved {
+  background: var(--pw-subtle);
+  color: var(--pw-text-secondary);
+  font-weight: 400;
+}
+
 .markdown-preview .powerwiki-work-item-badge-rich {
   color: var(--pw-text);
 }
@@ -2032,8 +2128,14 @@ button.wiki-move-option:hover {
     align-items: flex-end;
   }
 
+  /* max-width, not width, so it also caps the user's dragged inline width. */
   .powerwiki-nav:not(.collapsed) {
+    max-width: 200px;
     width: 200px;
+  }
+
+  .powerwiki-nav-resizer {
+    display: none;
   }
 
   .powerwiki-comments {
@@ -2042,6 +2144,30 @@ button.wiki-move-option:hover {
 
   .powerwiki-content {
     padding: 16px;
+  }
+
+  /* Narrow layouts stack the split panes and let the page scroll, so the
+     fill-the-height editing rules above would squash everything. */
+  .powerwiki-content.editing {
+    display: block;
+    overflow: auto;
+  }
+
+  .powerwiki-content.editing .wiki-editor-split-pane-code,
+  .powerwiki-content.editing .wiki-editor-shell,
+  .powerwiki-content.editing .wiki-page-editor-wrap,
+  .powerwiki-content.editing .wiki-richtext-shell {
+    display: block;
+  }
+
+  .powerwiki-content.editing .wiki-page-editor {
+    height: 68vh;
+    min-height: 360px;
+  }
+
+  .powerwiki-content.editing .wiki-richtext-editor {
+    min-height: 72vh;
+    overflow: visible;
   }
 
   .wiki-editor-toolbar {

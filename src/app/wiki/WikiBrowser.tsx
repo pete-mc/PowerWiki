@@ -11,6 +11,7 @@ import { useThemeMode } from "../themeMode";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
 import { buildAttachmentName, fileToBase64, isImageFile } from "../../wiki/attachmentUpload";
 import { fetchAttachmentObjectUrl } from "../../wiki/attachmentImage";
+import { AzureDevOpsIdentityClient } from "../../identity/AzureDevOpsIdentityClient";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
@@ -47,6 +48,27 @@ interface WikiBrowserProps {
   readonly projectId?: string;
   readonly projectName?: string;
   readonly userId?: string;
+}
+
+// The page-tree rail is user-resizable so long page names stay readable. The
+// chosen width persists locally (it is a per-person display preference, not
+// wiki content, so it does not belong in the repository).
+const NAV_WIDTH_KEY = "powerwiki:navWidth";
+const NAV_WIDTH_DEFAULT = 240;
+const NAV_WIDTH_MIN = 180;
+const NAV_WIDTH_MAX = 640;
+
+function clampNavWidth(width: number): number {
+  return Math.round(Math.max(NAV_WIDTH_MIN, Math.min(NAV_WIDTH_MAX, width)));
+}
+
+function readStoredNavWidth(): number {
+  try {
+    const stored = Number(window.localStorage.getItem(NAV_WIDTH_KEY));
+    return Number.isFinite(stored) && stored > 0 ? clampNavWidth(stored) : NAV_WIDTH_DEFAULT;
+  } catch {
+    return NAV_WIDTH_DEFAULT;
+  }
 }
 
 type LoadState = "failed" | "loading" | "ready";
@@ -340,6 +362,7 @@ export function WikiBrowser({
   const [editMode, setEditMode] = useState<EditMode>("code");
   const [isEditing, setIsEditing] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navWidth, setNavWidth] = useState(readStoredNavWidth);
   const [moveDialogPath, setMoveDialogPath] = useState<string | undefined>(undefined);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadedPaths, setLoadedPaths] = useState<ReadonlySet<string>>(new Set());
@@ -363,6 +386,7 @@ export function WikiBrowser({
   const savedNavigation = useRef<NavigationTarget | null>(null);
   const navigationServiceRef = useRef<IHostNavigationService | undefined>(undefined);
   const contentRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
   const splitShellRef = useRef<HTMLDivElement>(null);
   // When set, the page with this path should switch into edit mode as soon as it
   // finishes loading. Used by the tree's "Edit" action and new-page creation so
@@ -379,6 +403,9 @@ export function WikiBrowser({
   const workItemClient = useMemo(() => {
     return projectName ? new AzureDevOpsWorkItemClient(projectName) : undefined;
   }, [projectName]);
+  // Mentions resolve through a host service rather than a REST client, so this
+  // works in any project context.
+  const identityClient = useMemo(() => new AzureDevOpsIdentityClient(), []);
   const activeWiki = useMemo(
     () => wikis.find((wiki) => wiki.id === activeWikiId),
     [activeWikiId, wikis]
@@ -718,6 +745,35 @@ export function WikiBrowser({
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", stopPointerTracking);
   }, [applySplitRatioFromPointer]);
+
+  // Drag the rail's right edge to widen it; double-click the handle to reset.
+  const startNavResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const left = navRef.current?.getBoundingClientRect().left;
+      if (left === undefined) {
+        return;
+      }
+      setNavWidth(clampNavWidth(moveEvent.clientX - left));
+    };
+
+    const stopPointerTracking = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopPointerTracking);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopPointerTracking);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NAV_WIDTH_KEY, String(navWidth));
+    } catch {
+      // Storage may be unavailable — the width simply resets next session.
+    }
+  }, [navWidth]);
 
   useEffect(() => {
     if (!activePage) {
@@ -1547,6 +1603,10 @@ export function WikiBrowser({
     },
     [workItemClient]
   );
+  const loadMention = useCallback(
+    (id: string) => identityClient.getMentionIdentity(id),
+    [identityClient]
+  );
   const openWorkItem = useCallback(
     async (id: number) => {
       try {
@@ -1578,6 +1638,8 @@ export function WikiBrowser({
       <aside
         aria-label="Wiki pages"
         className={navCollapsed ? "powerwiki-nav collapsed" : "powerwiki-nav"}
+        ref={navRef}
+        style={navCollapsed ? undefined : { width: `${navWidth}px` }}
       >
         {navCollapsed ? (
           <button
@@ -1630,11 +1692,26 @@ export function WikiBrowser({
                 <CollapsePanelIcon />
               </button>
             </div>
+            <div
+              aria-label="Resize the page tree"
+              aria-orientation="vertical"
+              className="powerwiki-nav-resizer"
+              onDoubleClick={() => setNavWidth(NAV_WIDTH_DEFAULT)}
+              onPointerDown={startNavResize}
+              role="separator"
+              title="Drag to resize (double-click to reset)"
+            />
           </>
         )}
       </aside>
 
-      <article className="powerwiki-content" ref={contentRef}>
+      {/* While editing the content area stops scrolling and becomes a flex
+          column, so the editor (and the split preview beside it) fill the whole
+          height the hub gives us instead of a fixed viewport fraction. */}
+      <article
+        className={activePage && isEditing ? "powerwiki-content editing" : "powerwiki-content"}
+        ref={contentRef}
+      >
         <ErrorBoundary key={activePage?.path ?? "no-page"} label="page">
         {activePage && isEditing ? (
           <section className="wiki-editor-shell" aria-label={`Editing ${pageTitle(activePage.path)}`}>
@@ -1723,6 +1800,7 @@ export function WikiBrowser({
                     onHeadingLinkActivated={handleHeadingLinkActivated}
                     onLoadQueryTable={loadQueryTable}
                     onLoadWorkItemBadge={loadWorkItemBadge}
+                    onLoadMention={loadMention}
                     onNavigate={(path) => {
                       if (confirmDiscardEdits()) {
                         void loadPageByPath(path, true);
@@ -1762,6 +1840,7 @@ export function WikiBrowser({
               onHeadingLinkActivated={handleHeadingLinkActivated}
               onLoadQueryTable={loadQueryTable}
               onLoadWorkItemBadge={loadWorkItemBadge}
+              onLoadMention={loadMention}
               onNavigate={(path) => {
                 if (confirmDiscardEdits()) {
                   void loadPageByPath(path, true);
@@ -1846,6 +1925,7 @@ export function WikiBrowser({
             resolveImageSrc,
             loadQueryTable,
             loadWorkItemBadge,
+            loadMention,
           }}
           treeNodes={pageTree}
         />
