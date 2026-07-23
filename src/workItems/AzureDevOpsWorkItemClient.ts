@@ -204,7 +204,7 @@ export class AzureDevOpsWorkItemClient {
     if (!svg) {
       svg = this.client
         .getWorkItemIconSvg(icon, color)
-        .then((value: unknown) => (typeof value === "string" ? value : undefined))
+        .then((value: unknown) => decodeSvg(value))
         .catch(() => undefined);
       this.iconSvgCache.set(key, svg);
     }
@@ -367,6 +367,23 @@ function toQueryTableRow(workItem: WorkItem, columns: readonly QueryTableColumn[
 /** Azure DevOps returns colors as "RRGGBB" or "#RRGGBB"; the icon API wants no "#". */
 function normalizeIconColor(color: string | undefined): string {
   return (color ?? "").replace(/^#/, "");
+}
+
+/**
+ * The icon endpoint is served as image/svg+xml, which the REST client returns as
+ * an ArrayBuffer; decode it (or pass through a string) to the raw SVG markup.
+ */
+function decodeSvg(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    return new TextDecoder().decode(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return new TextDecoder().decode(value as ArrayBufferView);
+  }
+  return undefined;
 }
 
 function fieldValue(workItem: WorkItem, referenceName: string): string | undefined {
