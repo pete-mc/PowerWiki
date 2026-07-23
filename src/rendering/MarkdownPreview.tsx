@@ -38,11 +38,13 @@ export interface QueryTableResult {
   readonly rows: readonly QueryTableRow[];
   /**
    * Reference names of columns whose values are rich HTML (e.g. Description,
-   * Acceptance Criteria, History) and should be rendered as markup, not text.
+   * Acceptance Criteria, History). Their markup is flattened to plain text.
    */
   readonly htmlColumns?: ReadonlySet<string>;
   /** True when `rows` is a hierarchy of parent/child work items to render as a tree. */
   readonly isTree?: boolean;
+  /** Inline SVG markup for each work item type name, shown before the title. */
+  readonly icons?: ReadonlyMap<string, string>;
 }
 
 export interface WorkItemBadgeDetails {
@@ -609,10 +611,12 @@ function enrichQueryTables(container: HTMLElement, ctx: QueryEnrichmentContext):
  * badge in place and is not retried.
  */
 function enrichWorkItemBadges(container: HTMLElement, ctx: WorkItemEnrichmentContext): void {
-  // Query-table id links carry the work-item id (so a click opens the item) but
-  // are intentionally rendered as plain links, so they are excluded here.
+  // Query-table id and title links carry the work-item id (so a click opens the
+  // item) but are intentionally rendered as plain links, so they are excluded here.
   const badges = Array.from(
-    container.querySelectorAll<HTMLElement>(`${WORK_ITEM_SELECTOR}:not(.powerwiki-query-id-link)`)
+    container.querySelectorAll<HTMLElement>(
+      `${WORK_ITEM_SELECTOR}:not(.powerwiki-query-id-link):not(.powerwiki-query-title-link)`
+    )
   );
   for (const badge of badges) {
     const id = Number(badge.getAttribute(WORK_ITEM_ATTR));
@@ -718,7 +722,16 @@ export function renderQueryMessage(container: HTMLElement, message: string): voi
   container.appendChild(paragraph);
 }
 
-export function renderQueryResult(container: HTMLElement, result: QueryTableResult): void {
+export interface RenderQueryOptions {
+  /** Start tree rows collapsed to their roots. Defaults to true. */
+  readonly initiallyCollapsed?: boolean;
+}
+
+export function renderQueryResult(
+  container: HTMLElement,
+  result: QueryTableResult,
+  options: RenderQueryOptions = {}
+): void {
   container.replaceChildren();
   container.classList.remove("powerwiki-query-table-error");
 
@@ -729,8 +742,9 @@ export function renderQueryResult(container: HTMLElement, result: QueryTableResu
   title.textContent = result.name ?? "Azure Boards query";
   header.appendChild(title);
 
+  const itemCount = result.isTree ? countTreeRows(result.rows) : result.rows.length;
   const count = document.createElement("span");
-  count.textContent = `${result.rows.length} item${result.rows.length === 1 ? "" : "s"}`;
+  count.textContent = `${itemCount} item${itemCount === 1 ? "" : "s"}`;
   header.appendChild(count);
 
   if (result.nativeUrl) {
@@ -769,14 +783,23 @@ export function renderQueryResult(container: HTMLElement, result: QueryTableResu
   table.appendChild(head);
 
   const body = document.createElement("tbody");
-  appendQueryRows(body, result.rows, result, 0);
+  const initiallyCollapsed = options.initiallyCollapsed ?? true;
+  appendQueryRows(body, result.rows, result, 0, initiallyCollapsed);
+  if (result.isTree && initiallyCollapsed) {
+    refreshTreeVisibility(body);
+  }
   table.appendChild(body);
   scroller.appendChild(table);
   container.appendChild(scroller);
 }
 
 /** Longest plain-text value shown inline before it is clipped with an ellipsis. */
-const MAX_QUERY_CELL_TEXT = 200;
+const MAX_QUERY_CELL_TEXT = 500;
+
+/** Total number of work items across a tree's roots and their descendants. */
+function countTreeRows(rows: readonly QueryTableRow[]): number {
+  return rows.reduce((total, row) => total + 1 + countTreeRows(row.children ?? []), 0);
+}
 
 /**
  * Appends a set of query rows to the table body. For tree results the first
@@ -788,12 +811,16 @@ function appendQueryRows(
   body: HTMLElement,
   rows: readonly QueryTableRow[],
   result: QueryTableResult,
-  depth: number
+  depth: number,
+  initiallyCollapsed: boolean
 ): void {
   for (const row of rows) {
     const hasChildren = (row.children?.length ?? 0) > 0;
     const tableRow = document.createElement("tr");
     tableRow.dataset.depth = String(depth);
+    if (hasChildren && initiallyCollapsed) {
+      tableRow.classList.add("powerwiki-query-collapsed");
+    }
 
     result.columns.forEach((column, index) => {
       const cell = document.createElement("td");
@@ -804,10 +831,10 @@ function appendQueryRows(
         cell.appendChild(hasChildren ? createTreeToggle(tableRow, body) : createTreeSpacer());
         const content = document.createElement("span");
         content.className = "powerwiki-query-tree-content";
-        fillQueryCell(content, row, column, result.htmlColumns);
+        fillQueryCell(content, row, column, result);
         cell.appendChild(content);
       } else {
-        fillQueryCell(cell, row, column, result.htmlColumns);
+        fillQueryCell(cell, row, column, result);
       }
 
       tableRow.appendChild(cell);
@@ -816,17 +843,20 @@ function appendQueryRows(
     body.appendChild(tableRow);
 
     if (hasChildren) {
-      appendQueryRows(body, row.children ?? [], result, depth + 1);
+      appendQueryRows(body, row.children ?? [], result, depth + 1, initiallyCollapsed);
     }
   }
 }
 
-/** Renders one cell's value: an id link, sanitized HTML, or clipped plain text. */
+/**
+ * Renders one cell's value: the id link, the type-icon + title link, an HTML
+ * field flattened to clipped plain text, or plain text.
+ */
 function fillQueryCell(
   cell: HTMLElement,
   row: QueryTableRow,
   column: QueryTableColumn,
-  htmlColumns: ReadonlySet<string> | undefined
+  result: QueryTableResult
 ): void {
   const value = row.values.get(column.referenceName) ?? "";
 
@@ -845,36 +875,88 @@ function fillQueryCell(
     return;
   }
 
-  if (value && htmlColumns?.has(column.referenceName)) {
-    // HTML fields (Description, Acceptance Criteria, History, …) are rendered as
-    // sanitized markup, clamped to a fixed height so a long field can't dominate
-    // the table.
-    const html = document.createElement("div");
-    html.className = "powerwiki-query-html";
-    html.innerHTML = sanitizeRenderedHtml(value);
-    cell.appendChild(html);
+  if (column.referenceName === "System.Title") {
+    fillTitleCell(cell, row, value, result.icons);
     return;
   }
 
-  if (value.length > MAX_QUERY_CELL_TEXT) {
-    cell.textContent = `${value.slice(0, MAX_QUERY_CELL_TEXT).trimEnd()}…`;
-    cell.title = value;
+  // HTML fields (Description, Acceptance Criteria, History, …) are flattened to
+  // plain text so the table stays dense and free of stray markup.
+  const text = value && result.htmlColumns?.has(column.referenceName) ? htmlToPlainText(value) : value;
+  setClippedText(cell, text);
+}
+
+/** Renders the title cell: the work item type icon followed by a link that opens it. */
+function fillTitleCell(
+  cell: HTMLElement,
+  row: QueryTableRow,
+  title: string,
+  icons: ReadonlyMap<string, string> | undefined
+): void {
+  cell.classList.add("powerwiki-query-title-cell");
+
+  const type = row.values.get("System.WorkItemType");
+  const svg = type ? icons?.get(type) : undefined;
+  if (svg) {
+    const icon = document.createElement("span");
+    icon.className = "powerwiki-query-wit-icon";
+    icon.setAttribute("aria-hidden", "true");
+    appendInlineSvg(icon, svg);
+    cell.appendChild(icon);
+  }
+
+  // The title opens the work item in the same modal as inline id/badge links: it
+  // carries the work-item id and the query-title-link class opts it out of badge
+  // enrichment while the shared click handler intercepts it.
+  const link = document.createElement("a");
+  link.href = "#";
+  link.className = "powerwiki-query-title-link";
+  link.setAttribute(WORK_ITEM_ATTR, String(row.id));
+  link.title = `Open ${title || `work item ${row.id}`}`;
+  link.textContent = title || String(row.id);
+  cell.appendChild(link);
+}
+
+/** Sets a cell's text, clipping over-long values and preserving the full text on hover. */
+function setClippedText(cell: HTMLElement, text: string): void {
+  if (text.length > MAX_QUERY_CELL_TEXT) {
+    cell.textContent = `${text.slice(0, MAX_QUERY_CELL_TEXT).trimEnd()}…`;
+    cell.title = text;
   } else {
-    cell.textContent = value;
+    cell.textContent = text;
+  }
+}
+
+/** Flattens HTML field markup to a single line of plain text. */
+function htmlToPlainText(html: string): string {
+  // A DOMParser document is inert: no scripts run and no resources (images) load.
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  // textContent would otherwise include the source of these elements.
+  doc.querySelectorAll("script, style, noscript").forEach((element) => element.remove());
+  return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+/** Parses trusted first-party SVG icon markup and appends it, ignoring anything invalid. */
+function appendInlineSvg(host: HTMLElement, svg: string): void {
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const element = doc.documentElement;
+  if (element && element.nodeName.toLowerCase() === "svg" && !doc.querySelector("parsererror")) {
+    host.appendChild(document.importNode(element, true));
   }
 }
 
 /** An expand/collapse toggle for a tree row; collapsing hides its descendants. */
 function createTreeToggle(tableRow: HTMLElement, body: HTMLElement): HTMLButtonElement {
+  const collapsed = tableRow.classList.contains("powerwiki-query-collapsed");
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "powerwiki-query-tree-toggle";
-  toggle.setAttribute("aria-expanded", "true");
-  toggle.setAttribute("aria-label", "Collapse");
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  toggle.setAttribute("aria-label", collapsed ? "Expand" : "Collapse");
   toggle.addEventListener("click", () => {
-    const collapsed = tableRow.classList.toggle("powerwiki-query-collapsed");
-    toggle.setAttribute("aria-expanded", String(!collapsed));
-    toggle.setAttribute("aria-label", collapsed ? "Expand" : "Collapse");
+    const nowCollapsed = tableRow.classList.toggle("powerwiki-query-collapsed");
+    toggle.setAttribute("aria-expanded", String(!nowCollapsed));
+    toggle.setAttribute("aria-label", nowCollapsed ? "Expand" : "Collapse");
     refreshTreeVisibility(body);
   });
   return toggle;

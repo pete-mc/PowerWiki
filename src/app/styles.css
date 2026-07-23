@@ -2098,25 +2098,29 @@ button.wiki-move-option:hover {
   border-bottom: 0;
 }
 
-/* Rich HTML fields (Description, Acceptance Criteria, History) render as markup
-   but are clamped so a long field can't blow out the row height; the cell
-   scrolls when its content overflows. */
-.markdown-preview .powerwiki-query-html {
-  max-height: 9rem;
-  overflow: auto;
+/* Title cell: the work item type icon sits before a link that opens the item. */
+.markdown-preview .powerwiki-query-title-cell {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
 }
 
-.markdown-preview .powerwiki-query-html > :first-child {
-  margin-top: 0;
+.markdown-preview .powerwiki-query-wit-icon {
+  align-self: center;
+  flex: none;
+  height: 14px;
+  line-height: 0;
+  width: 14px;
 }
 
-.markdown-preview .powerwiki-query-html > :last-child {
-  margin-bottom: 0;
+.markdown-preview .powerwiki-query-wit-icon svg {
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
-.markdown-preview .powerwiki-query-html img {
-  max-width: 100%;
-  height: auto;
+.markdown-preview .powerwiki-query-title-link:hover {
+  text-decoration: underline;
 }
 
 /* Tree (hierarchy) query rows: the first column is indented by depth and led by

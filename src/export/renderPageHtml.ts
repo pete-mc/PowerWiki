@@ -83,7 +83,8 @@ async function enrichQueryTables(
       continue;
     }
     try {
-      renderQueryResult(element, await load(queryId));
+      // Export is static: render the full tree expanded so nothing is hidden.
+      renderQueryResult(element, await load(queryId), { initiallyCollapsed: false });
     } catch {
       renderQueryMessage(element, "Unable to load query.");
     }
@@ -94,9 +95,11 @@ async function enrichWorkItemBadges(
   container: HTMLElement,
   load: RenderPageOptions["loadWorkItemBadge"]
 ): Promise<void> {
-  // Query-table id links carry the work-item id but stay plain; skip them.
+  // Query-table id and title links carry the work-item id but stay plain; skip them.
   const badges = Array.from(
-    container.querySelectorAll<HTMLElement>(`${WORK_ITEM_SELECTOR}:not(.powerwiki-query-id-link)`)
+    container.querySelectorAll<HTMLElement>(
+      `${WORK_ITEM_SELECTOR}:not(.powerwiki-query-id-link):not(.powerwiki-query-title-link)`
+    )
   );
   for (const badge of badges) {
     const id = Number(badge.getAttribute(WORK_ITEM_ATTR));

@@ -28,11 +28,13 @@ export interface QueryTableResult {
   readonly rows: readonly QueryTableRow[];
   /**
    * Reference names of columns whose values are rich HTML (e.g. Description,
-   * Acceptance Criteria, History) and should be rendered as markup, not text.
+   * Acceptance Criteria, History). Their markup is flattened to plain text.
    */
   readonly htmlColumns?: ReadonlySet<string>;
   /** True when `rows` is a hierarchy of parent/child work items to render as a tree. */
   readonly isTree?: boolean;
+  /** Inline SVG markup for each work item type name, shown before the title. */
+  readonly icons?: ReadonlyMap<string, string>;
 }
 
 interface MutableTreeRow {
@@ -67,6 +69,8 @@ const QUERY_TOP = 200;
 export class AzureDevOpsWorkItemClient {
   private readonly client = getClient(WorkItemTrackingRestClient);
   private fieldTypesPromise?: Promise<ReadonlyMap<string, FieldType>>;
+  private typeIconsPromise?: Promise<ReadonlyMap<string, { icon: string; color: string }>>;
+  private readonly iconSvgCache = new Map<string, Promise<string | undefined>>();
 
   public constructor(private readonly projectName: string) {}
 
@@ -109,10 +113,13 @@ export class AzureDevOpsWorkItemClient {
       };
     }
 
+    // Always fetch the work item type so the title can show its icon, even when
+    // the type isn't one of the query's visible columns.
+    const fields = [...new Set([...columns.map((column) => column.referenceName), "System.WorkItemType"])];
     const workItems = await this.client.getWorkItems(
       ids,
       this.projectName,
-      columns.map((column) => column.referenceName),
+      fields,
       undefined,
       undefined,
       WorkItemErrorPolicy.Omit
@@ -128,13 +135,80 @@ export class AzureDevOpsWorkItemClient {
           .map((id) => rowsById.get(id))
           .filter((row): row is QueryTableRow => Boolean(row));
 
+    const typeNames = new Set(
+      workItems
+        .map((workItem) => fieldValue(workItem, "System.WorkItemType"))
+        .filter((type): type is string => Boolean(type))
+    );
+    const icons = await this.resolveTypeIcons(typeNames);
+
     return {
       columns,
       htmlColumns,
+      icons,
       isTree,
       name: queryDefinition?.name,
       rows
     };
+  }
+
+  /** Inline SVG icon markup keyed by work item type name, best-effort. */
+  private async resolveTypeIcons(typeNames: ReadonlySet<string>): Promise<ReadonlyMap<string, string>> {
+    if (typeNames.size === 0) {
+      return new Map();
+    }
+
+    const definitions = await this.getTypeIconDefinitions();
+    const icons = new Map<string, string>();
+
+    await Promise.all(
+      [...typeNames].map(async (typeName) => {
+        const definition = definitions.get(typeName);
+        if (!definition) {
+          return;
+        }
+        const svg = await this.getIconSvg(definition.icon, definition.color);
+        if (svg) {
+          icons.set(typeName, svg);
+        }
+      })
+    );
+
+    return icons;
+  }
+
+  /** Loads (once) each work item type's icon id and color. */
+  private getTypeIconDefinitions(): Promise<ReadonlyMap<string, { icon: string; color: string }>> {
+    if (!this.typeIconsPromise) {
+      this.typeIconsPromise = this.client
+        .getWorkItemTypes(this.projectName)
+        .then(
+          (types) =>
+            new Map(
+              types
+                .filter((type) => type.icon?.id)
+                .map((type) => [type.name, { icon: type.icon.id, color: normalizeIconColor(type.color) }])
+            )
+        )
+        // Icons are decorative: without type metadata the title just has no icon.
+        .catch(() => new Map<string, { icon: string; color: string }>());
+    }
+
+    return this.typeIconsPromise;
+  }
+
+  /** Fetches (once per icon+color) the inline SVG for a work item type icon. */
+  private getIconSvg(icon: string, color: string): Promise<string | undefined> {
+    const key = `${icon}|${color}`;
+    let svg = this.iconSvgCache.get(key);
+    if (!svg) {
+      svg = this.client
+        .getWorkItemIconSvg(icon, color)
+        .then((value: unknown) => (typeof value === "string" ? value : undefined))
+        .catch(() => undefined);
+      this.iconSvgCache.set(key, svg);
+    }
+    return svg;
   }
 
   /** Reference names of the query's columns that hold rich HTML content. */
@@ -279,7 +353,20 @@ function toQueryTableRow(workItem: WorkItem, columns: readonly QueryTableColumn[
     values.set(column.referenceName, fieldValue(workItem, column.referenceName) ?? "");
   }
 
+  // Keep the type available for the title icon even when it isn't a column.
+  if (!values.has("System.WorkItemType")) {
+    const type = fieldValue(workItem, "System.WorkItemType");
+    if (type) {
+      values.set("System.WorkItemType", type);
+    }
+  }
+
   return { id: workItem.id, values };
+}
+
+/** Azure DevOps returns colors as "RRGGBB" or "#RRGGBB"; the icon API wants no "#". */
+function normalizeIconColor(color: string | undefined): string {
+  return (color ?? "").replace(/^#/, "");
 }
 
 function fieldValue(workItem: WorkItem, referenceName: string): string | undefined {
