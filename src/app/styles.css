@@ -2098,6 +2098,78 @@ button.wiki-move-option:hover {
   border-bottom: 0;
 }
 
+/* Rich HTML fields (Description, Acceptance Criteria, History) render as markup
+   but are clamped so a long field can't blow out the row height; the cell
+   scrolls when its content overflows. */
+.markdown-preview .powerwiki-query-html {
+  max-height: 9rem;
+  overflow: auto;
+}
+
+.markdown-preview .powerwiki-query-html > :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview .powerwiki-query-html > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-preview .powerwiki-query-html img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Tree (hierarchy) query rows: the first column is indented by depth and led by
+   an expand/collapse toggle aligned with a spacer on leaf rows. */
+.markdown-preview .powerwiki-query-tree-cell {
+  white-space: nowrap;
+}
+
+.markdown-preview .powerwiki-query-tree-content {
+  white-space: normal;
+}
+
+.markdown-preview .powerwiki-query-tree-toggle,
+.markdown-preview .powerwiki-query-tree-spacer {
+  display: inline-block;
+  flex: none;
+  height: 1rem;
+  margin-right: 4px;
+  vertical-align: text-bottom;
+  width: 1rem;
+}
+
+.markdown-preview .powerwiki-query-tree-toggle {
+  background: none;
+  border: 0;
+  color: var(--pw-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+}
+
+/* A CSS triangle that points down when expanded and right when collapsed, so no
+   icon font or glyph is needed. */
+.markdown-preview .powerwiki-query-tree-toggle::before {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  content: "";
+  height: 0;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 0;
+}
+
+.markdown-preview .powerwiki-query-collapsed .powerwiki-query-tree-toggle::before {
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  border-right: 0;
+  border-top: 4px solid transparent;
+}
+
 .markdown-preview .powerwiki-query-table-status {
   color: var(--pw-text-secondary);
   margin: 0;

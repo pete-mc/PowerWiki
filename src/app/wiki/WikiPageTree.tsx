@@ -22,6 +22,7 @@ export interface WikiPageTreeActions {
   readonly onMovePage: (path: string) => void;
   readonly onNodeExpand: (path: string) => void;
   readonly onPageSelected: (path: string) => void;
+  readonly onRenamePage: (path: string) => void;
   /**
    * Absolute, shareable URL for a page, used to open it in a new browser tab.
    * Returns undefined when a host URL can't be built (e.g. on-prem contexts),
@@ -273,6 +274,7 @@ function WikiPageTreeItem({ initialExpanded, node }: WikiPageTreeItemProps) {
 function buildMenuItems(path: string, actions: WikiPageTreeActions): WikiPageMenuItem[] {
   const items: WikiPageMenuItem[] = [
     { id: "add-sub-page", label: "Add sub-page", onSelect: () => actions.onAddSubPage(path) },
+    { id: "rename", label: "Rename", onSelect: () => actions.onRenamePage(path) },
     { id: "move", label: "Move page", onSelect: () => actions.onMovePage(path) },
     { id: "edit", label: "Edit", onSelect: () => actions.onEditPage(path) },
   ];

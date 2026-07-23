@@ -392,6 +392,9 @@ export function WikiBrowser({
   // finishes loading. Used by the tree's "Edit" action and new-page creation so
   // the editor opens without a second click.
   const pendingEditPathRef = useRef<string | undefined>(undefined);
+  // Always points at the current handleRenamePage so the header menu (built
+  // earlier in this component) can dispatch a rename without a forward reference.
+  const renamePageRef = useRef<(path: string) => void>(() => {});
   // The last page path we navigated to. Used to ignore onHashChanged events that
   // are echoes of our own setHash() calls, preventing navigation loops.
   const lastNavigatedPathRef = useRef<string | undefined>(undefined);
@@ -786,6 +789,12 @@ export function WikiBrowser({
         id: isEditing ? "cancel-edit" : "edit-page",
         label: isEditing ? "Cancel edit" : "Edit page",
         onClick: isEditing ? cancelEditing : startEditing,
+      },
+      {
+        id: "rename",
+        label: "Rename page",
+        disabled: isEditing,
+        onClick: () => renamePageRef.current(activePage.path),
       },
       {
         id: "history",
@@ -1465,6 +1474,41 @@ export function WikiBrowser({
     [confirmDiscardEdits]
   );
 
+  // Renaming a page is a same-parent move that changes only its last path
+  // segment; performMove keeps the caches, active page, and inbound links in
+  // sync just like a drag move does.
+  const handleRenamePage = useCallback(
+    async (path: string) => {
+      if (!confirmDiscardEdits()) {
+        return;
+      }
+
+      const currentName = path.split("/").filter(Boolean).at(-1) ?? path;
+      const nextName = window.prompt("Rename page", currentName)?.trim();
+      if (!nextName || nextName === currentName) {
+        return;
+      }
+
+      if (nextName.includes("/")) {
+        window.alert('A page name cannot contain "/".');
+        return;
+      }
+
+      const parent = parentOfPath(path);
+      const newPath = parent === "/" ? `/${nextName}` : `${parent}/${nextName}`;
+      // Keep the page in its current slot; fall back to the end of the parent if
+      // its order isn't known yet.
+      const order =
+        pageList.find((page) => page.path === path)?.order ??
+        pageList.filter((page) => parentOfPath(page.path) === parent).length;
+      await performMove(path, newPath, order);
+    },
+    [confirmDiscardEdits, pageList, performMove]
+  );
+  // The header menu is built (via effect) before this handler is defined, so it
+  // dispatches through a ref that always points at the current handler.
+  renamePageRef.current = handleRenamePage;
+
   const handleConfirmMove = useCallback(
     async (destinationParent: string) => {
       const sourcePath = moveDialogPath;
@@ -1495,13 +1539,14 @@ export function WikiBrowser({
       onMovePage: handleOpenMoveDialog,
       onNodeExpand: (path) => void handleNodeExpand(path),
       onPageSelected: (path) => void handlePageSelected(path),
+      onRenamePage: (path) => void handleRenamePage(path),
       getPageUrl: (path) =>
         buildHubPageUrl(
           { organizationName, projectName, organizationIsHosted, contributionId },
           buildNavigationHash(activeWiki, path, wikis)
         ),
     }),
-    [activeWiki, contributionId, handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, organizationIsHosted, organizationName, performMove, projectName, wikis]
+    [activeWiki, contributionId, handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, handleRenamePage, organizationIsHosted, organizationName, performMove, projectName, wikis]
   );
 
   async function handleSavePage() {
