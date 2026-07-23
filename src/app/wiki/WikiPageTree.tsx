@@ -22,6 +22,12 @@ export interface WikiPageTreeActions {
   readonly onMovePage: (path: string) => void;
   readonly onNodeExpand: (path: string) => void;
   readonly onPageSelected: (path: string) => void;
+  /**
+   * Absolute, shareable URL for a page, used to open it in a new browser tab.
+   * Returns undefined when a host URL can't be built (e.g. on-prem contexts),
+   * in which case the "open in new window" affordances are hidden.
+   */
+  readonly getPageUrl: (path: string) => string | undefined;
 }
 
 interface DropTarget {
@@ -231,6 +237,20 @@ function WikiPageTreeItem({ initialExpanded, node }: WikiPageTreeItemProps) {
           aria-current={isActive ? "page" : undefined}
           className="wiki-page-tree-link"
           onClick={() => actions.onPageSelected(node.path)}
+          // Middle-click (auxclick button 1) opens the page in a new browser tab,
+          // matching the "Open in new window" menu action.
+          onAuxClick={(event) => {
+            if (event.button === 1) {
+              event.preventDefault();
+              openPageInNewWindow(node.path, actions);
+            }
+          }}
+          // Suppress the middle-button autoscroll cursor so the auxclick opens cleanly.
+          onMouseDown={(event) => {
+            if (event.button === 1) {
+              event.preventDefault();
+            }
+          }}
           title={node.name}
           type="button"
         >
@@ -251,12 +271,36 @@ function WikiPageTreeItem({ initialExpanded, node }: WikiPageTreeItemProps) {
 }
 
 function buildMenuItems(path: string, actions: WikiPageTreeActions): WikiPageMenuItem[] {
-  return [
+  const items: WikiPageMenuItem[] = [
     { id: "add-sub-page", label: "Add sub-page", onSelect: () => actions.onAddSubPage(path) },
     { id: "move", label: "Move page", onSelect: () => actions.onMovePage(path) },
     { id: "edit", label: "Edit", onSelect: () => actions.onEditPage(path) },
-    { id: "delete", label: "Delete", destructive: true, onSelect: () => actions.onDeletePage(path) },
   ];
+
+  // Only offer "Open in new window" when a shareable host URL can be built.
+  if (actions.getPageUrl(path)) {
+    items.push({
+      id: "open-new-window",
+      label: "Open in new window",
+      onSelect: () => openPageInNewWindow(path, actions),
+    });
+  }
+
+  items.push({
+    id: "delete",
+    label: "Delete",
+    destructive: true,
+    onSelect: () => actions.onDeletePage(path),
+  });
+  return items;
+}
+
+/** Opens a page's shareable URL in a new browser tab, if one can be built. */
+function openPageInNewWindow(path: string, actions: WikiPageTreeActions): void {
+  const url = actions.getPageUrl(path);
+  if (url) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
 
 /**

@@ -1495,8 +1495,13 @@ export function WikiBrowser({
       onMovePage: handleOpenMoveDialog,
       onNodeExpand: (path) => void handleNodeExpand(path),
       onPageSelected: (path) => void handlePageSelected(path),
+      getPageUrl: (path) =>
+        buildHubPageUrl(
+          { organizationName, projectName, organizationIsHosted, contributionId },
+          buildNavigationHash(activeWiki, path, wikis)
+        ),
     }),
-    [handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, performMove]
+    [activeWiki, contributionId, handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, organizationIsHosted, organizationName, performMove, projectName, wikis]
   );
 
   async function handleSavePage() {
