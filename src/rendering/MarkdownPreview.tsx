@@ -8,7 +8,7 @@ import { copyToClipboard } from "./clipboard";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
 import { addCopyButtons, highlightCodeBlocks } from "./enhancePreview";
 import { renderMath } from "./mathRender";
-import { MermaidZoomOverlay } from "./MermaidZoomOverlay";
+import { ZoomPanOverlay } from "./ZoomPanOverlay";
 import { addMermaidToolbars, downloadMermaidSvg } from "./mermaidTools";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
@@ -347,21 +347,6 @@ export function MarkdownPreview({
     return () => window.clearTimeout(timer);
   }, [anchor, html]);
 
-  // Close the image lightbox on Escape.
-  useEffect(() => {
-    if (!lightboxSrc) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setLightboxSrc(undefined);
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [lightboxSrc]);
-
   // Mermaid runs in its own layout effect (after the one above, by declaration
   // order) so a host theme change re-renders diagrams without disturbing the
   // query/work-item enrichment.
@@ -479,17 +464,22 @@ export function MarkdownPreview({
         ref={previewRef}
       />
       {lightboxSrc ? (
-        <div
-          aria-modal="true"
-          className="powerwiki-lightbox"
-          onClick={() => setLightboxSrc(undefined)}
-          role="dialog"
+        <ZoomPanOverlay
+          contentClassName="powerwiki-image-zoom-content"
+          maxInitialScale={1}
+          onClose={() => setLightboxSrc(undefined)}
         >
           <img alt="" src={lightboxSrc} />
-        </div>
+        </ZoomPanOverlay>
       ) : null}
       {mermaidZoom ? (
-        <MermaidZoomOverlay onClose={() => setMermaidZoom(undefined)} svgHtml={mermaidZoom} />
+        <ZoomPanOverlay
+          contentClassName="powerwiki-mermaid-zoom-content"
+          onClose={() => setMermaidZoom(undefined)}
+          rootClassName="powerwiki-mermaid-zoom"
+        >
+          <div dangerouslySetInnerHTML={{ __html: mermaidZoom }} />
+        </ZoomPanOverlay>
       ) : null}
     </>
   );

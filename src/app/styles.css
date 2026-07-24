@@ -1097,28 +1097,6 @@ body {
 .markdown-preview.pw-dark .hljs-attribute { color: #7ee787; }
 
 /* Image lightbox */
-.powerwiki-lightbox {
-  align-items: center;
-  background: rgba(0, 0, 0, 0.75);
-  bottom: 0;
-  cursor: zoom-out;
-  display: flex;
-  justify-content: center;
-  left: 0;
-  padding: 32px;
-  position: fixed;
-  right: 0;
-  top: 0;
-  z-index: 1000;
-}
-
-.powerwiki-lightbox img {
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.5);
-  max-height: 100%;
-  max-width: 100%;
-  object-fit: contain;
-}
-
 /* Mermaid diagram toolbar + pan/zoom overlay */
 .markdown-preview pre.mermaid-rendered {
   position: relative;
@@ -1155,7 +1133,8 @@ body {
   border-color: var(--pw-accent);
 }
 
-.powerwiki-mermaid-zoom {
+/* Fullscreen pan/zoom overlay, shared by Mermaid diagrams and images. */
+.powerwiki-zoom {
   background: rgba(0, 0, 0, 0.75);
   bottom: 0;
   display: flex;
@@ -1167,14 +1146,14 @@ body {
   z-index: 1000;
 }
 
-.powerwiki-mermaid-zoom-bar {
+.powerwiki-zoom-bar {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
   padding: 10px;
 }
 
-.powerwiki-mermaid-zoom-bar button {
+.powerwiki-zoom-bar button {
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 4px;
@@ -1185,11 +1164,11 @@ body {
   padding: 4px 10px;
 }
 
-.powerwiki-mermaid-zoom-bar button:hover {
+.powerwiki-zoom-bar button:hover {
   background: rgba(255, 255, 255, 0.25);
 }
 
-.powerwiki-mermaid-zoom-stage {
+.powerwiki-zoom-stage {
   align-items: center;
   cursor: grab;
   display: flex;
@@ -1199,18 +1178,29 @@ body {
   touch-action: none;
 }
 
-.powerwiki-mermaid-zoom-stage:active {
+.powerwiki-zoom-stage:active {
   cursor: grabbing;
 }
 
+.powerwiki-zoom-content {
+  transform-origin: center center;
+}
+
+/* Mermaid renders on a white card so dark diagram strokes stay legible. */
 .powerwiki-mermaid-zoom-content {
   background: #fff;
   border-radius: 4px;
   padding: 16px;
-  transform-origin: center center;
 }
 
 .powerwiki-mermaid-zoom-content svg {
+  max-width: none;
+}
+
+/* Images show at natural size (unclamped) so panning/zooming reveals detail. */
+.powerwiki-image-zoom-content img {
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.5);
+  display: block;
   max-width: none;
 }
 
