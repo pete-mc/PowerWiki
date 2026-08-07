@@ -127,6 +127,7 @@ The current implementation provides a working Power Wiki experience:
 - Attachment management: browse and insert existing attachments with image previews.
 - Inbound-link updates on page rename/move, with a preview/confirm dialog.
 - Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML. The Word path rasterizes each diagram through a canvas, so it renders Mermaid with plain SVG text labels — an SVG containing a `<foreignObject>` (Mermaid's default HTML labels) taints the canvas and cannot be turned into an image. PDF/print embeds the SVG directly and keeps the HTML labels.
+- draw.io diagrams: draw one with the editor's **Diagram** button (or `/Diagram`), and reopen any stored diagram from the **Edit diagram** button that appears on hover in the preview. See [draw.io diagrams](#drawio-diagrams).
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
 - Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki.
 - Supports the Azure DevOps image-size suffix, `![alt](image.png =500x250)`.
@@ -137,6 +138,62 @@ The current implementation provides a working Power Wiki experience:
 PowerWiki follows the active Azure DevOps theme. The extension styles the UI through `--pw-*` tokens in `src/app/styles.css`, which map to host variables such as `--background-color`, `--text-primary-color`, and `--communication-foreground`.
 
 For components that need a binary theme decision, `src/app/themeMode.ts` infers light or dark mode from the luminance of the host CSS variables instead of matching specific theme names. That keeps built-in and custom Azure DevOps themes working. Monaco switches between `vs` and `vs-dark`, and Markdown preview re-renders Mermaid diagrams with the matching Mermaid light or dark theme when Azure DevOps raises theme change events.
+
+## draw.io diagrams
+
+PowerWiki can draw and edit [draw.io](https://www.drawio.com/) diagrams without
+leaving the wiki. Create one with the **Diagram** button in the editor toolbar
+(or the `/Diagram` slash command); reopen an existing one from the **Edit
+diagram** button that appears when you hover it in the preview.
+
+### How diagrams are stored
+
+A diagram is saved to the wiki's `.attachments` folder as
+`<name>-<revision>.drawio.png` and referenced with ordinary Markdown:
+
+```markdown
+![System Architecture](/.attachments/System-Architecture-lk9f2abc1234.drawio.png)
+```
+
+That file is a real PNG carrying its own draw.io source in its metadata, which
+is what lets one file serve every purpose: it renders in PowerWiki, in the
+built-in Azure DevOps Wiki, and in Word/PDF exports, while still reopening as a
+fully editable diagram. Nothing about the page is PowerWiki-specific — a wiki
+that stops using PowerWiki keeps working pictures.
+
+### Sharing one diagram across pages
+
+Referencing the same diagram from several pages is supported, and editing it
+from any of them updates all of them.
+
+This works by rewriting references rather than by overwriting the file, because
+the Azure DevOps wiki attachments API is **create-only**: a second PUT to an
+existing name is rejected with "already exists. Please specify a new path", and
+there is no update or delete endpoint. Doing better would need Git write access
+(`vso.code_write`), a scope change that would force every organization to
+re-approve the extension.
+
+So each save writes a new revision and repoints every reference to it:
+
+- The page open in the editor is updated in the draft buffer, so it is included
+  in your own save rather than saved behind your back.
+- Every other page that references the diagram is rewritten and saved through
+  the normal wiki API (the same mechanism as inbound-link updates on rename),
+  and the toolbar confirms how many pages changed.
+
+Two consequences worth knowing:
+
+- Editing a shared diagram commits to the other referencing pages, so it appears
+  in their page history.
+- Superseded revisions stay in `.attachments`. Azure DevOps never garbage-
+  collects wiki attachments, and with no delete endpoint PowerWiki cannot either.
+
+### Privacy and network
+
+The editor runs in an iframe on `embed.diagrams.net` and exchanges the diagram
+over `postMessage`; diagram content is not uploaded to diagrams.net. The iframe
+loads only while the editor dialog is open — viewing a page with diagrams on it
+never contacts diagrams.net, because the stored diagram is just a PNG.
 
 ## Azure Boards Markdown Enhancements
 
@@ -183,6 +240,7 @@ The one exception is a hash run followed immediately by a digit: `#1234` stays a
 - `src/extension/` contains Azure DevOps extension host initialization and entry points.
 - `src/app/` contains the PowerWiki screen shell, page tree, editor, comments panel, and theme mode helper.
 - `src/rendering/` contains Markdown, Mermaid, and sanitization boundaries.
+- `src/drawio/` contains the draw.io embed protocol client, editor dialog, and diagram naming/reference rules.
 - `src/wiki/` contains wiki repository/page/comment abstractions and Azure DevOps API access.
 - `src/workItems/` contains Azure Boards work item and query access used by Markdown enhancements.
 - `vss-extension.json` defines the Azure DevOps extension metadata and contributions.

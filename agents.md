@@ -81,6 +81,16 @@ When the scaffold is added, keep these boundaries clear:
 
 Renderer dependencies should be easy to upgrade independently from the Azure DevOps integration. Any renderer-specific behavior should be covered by fixtures so future Markdown or Mermaid upgrades are deliberate. Those fixtures live in `src/rendering/*.test.ts` (Vitest); run `npm test` (TypeScript check + unit tests) before publishing, and `npm run pw:verify` for end-to-end checks.
 
+The wiki **attachments API is create-only**. `PUT .../attachments?name=` returns
+201 the first time and then fails with HTTP 500 `"The path '/.attachments/…'
+specified in the add operation already exists. Please specify a new path."` for
+that name — `If-Match` makes no difference, and there is no update or delete
+endpoint. The pages API *can* update in place but always writes `<path>.md`, so
+it cannot store a binary. Anything needing mutable binary content therefore has
+to write a new file and repoint its references (see `src/drawio/`), unless the
+extension takes `vso.code_write` to push to the wiki repository directly — which
+would force every organization to re-approve the extension, so don't.
+
 Mermaid is loaded as a lazily-imported async chunk (`import("mermaid")` in `renderMermaidDiagrams`) to keep the initial hub bundle small, and webpack uses `output.publicPath: "auto"` so those chunks load from the extension's own CDN `dist/` path. Do not reintroduce a single-chunk limit (`LimitChunkCountPlugin`); if you change the webpack config, confirm Mermaid still renders in the iframe with `npm run pw:verify`.
 
 ## Documentation Expectations

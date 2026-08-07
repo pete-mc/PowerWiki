@@ -9,8 +9,15 @@ import type { HeaderMenuAction } from "../HeaderMenuAction";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { useThemeMode } from "../themeMode";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
-import { buildAttachmentName, fileToBase64, isImageFile } from "../../wiki/attachmentUpload";
-import { fetchAttachmentObjectUrl } from "../../wiki/attachmentImage";
+import { buildAttachmentName, fileToBase64, isImageFile, type AttachmentUploadResult } from "../../wiki/attachmentUpload";
+import { fetchAttachmentDataUrl, fetchAttachmentObjectUrl } from "../../wiki/attachmentImage";
+import { DrawioEditorDialog, type DrawioEditorTarget } from "../../drawio/DrawioEditorDialog";
+import {
+  countDiagramReferences,
+  dataUrlToBase64,
+  newDiagramName,
+  nextDiagramName,
+} from "../../drawio/drawioDiagram";
 import { AzureDevOpsIdentityClient } from "../../identity/AzureDevOpsIdentityClient";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
@@ -350,6 +357,15 @@ export function WikiBrowser({
     { oldPath: string; newPath: string; updates: readonly InboundLinkUpdate[] } | undefined
   >(undefined);
   const [linkUpdateBusy, setLinkUpdateBusy] = useState(false);
+  // The draw.io editor dialog: the diagram being edited (or {} for a new one),
+  // plus its save/error state. Absent when the editor is closed.
+  const [diagramTarget, setDiagramTarget] = useState<DrawioEditorTarget | undefined>(undefined);
+  const [diagramBusy, setDiagramBusy] = useState(false);
+  const [diagramError, setDiagramError] = useState<string | undefined>(undefined);
+  const [diagramStatus, setDiagramStatus] = useState<string | undefined>(undefined);
+  // Set while the editor toolbar is waiting for a new diagram: resolved with the
+  // uploaded attachment so the Markdown editor can insert it at the cursor.
+  const pendingDiagramRef = useRef<((result: AttachmentUploadResult | undefined) => void) | undefined>(undefined);
   // Session cache of every page's content, for the rename inbound-link scan
   // (rebuilt when stale).
   const contentIndexRef = useRef<{ wikiId: string; pages: readonly IndexedWikiPage[]; builtAt: number } | undefined>(
@@ -1629,6 +1645,192 @@ export function WikiBrowser({
     },
     [activeWiki, projectName]
   );
+  /**
+   * Repoints every reference to a diagram at its new revision.
+   *
+   * This is what keeps one diagram shared by several pages in sync. It is not
+   * optional bookkeeping: the wiki attachments API is create-only (a second PUT
+   * to the same name is rejected, and there is no update or delete endpoint), so
+   * a saved edit lands under a new filename and the old references would
+   * otherwise keep showing the old picture.
+   *
+   * The page open in the editor is rewritten in the draft buffer rather than on
+   * the server — saving it here would be clobbered by the user's own save.
+   */
+  const replaceDiagramReferences = useCallback(
+    async (oldPath: string, newPath: string): Promise<readonly string[]> => {
+      if (!wikiClient || !activeWikiId) {
+        return [];
+      }
+
+      const updated: string[] = [];
+      const editingPath = isEditing ? activePage?.path : undefined;
+      if (editingPath) {
+        const rewritten = rewriteWikiLinks(draftContent, oldPath, newPath);
+        if (rewritten.count > 0) {
+          setDraftContent(rewritten.content);
+          updated.push(editingPath);
+        }
+      }
+
+      const rewritePage = async (path: string): Promise<void> => {
+        const page = await wikiClient.getPage(activeWikiId, path);
+        const rewritten = rewriteWikiLinks(page.content, oldPath, newPath);
+        if (rewritten.count > 0) {
+          await wikiClient.savePage(activeWikiId, { ...page, content: rewritten.content });
+          updated.push(path);
+        }
+      };
+
+      const failures: string[] = [];
+
+      // The active page is handled explicitly rather than through the index, so
+      // the common case (a diagram on the page you are looking at) updates even
+      // if the index is cold or slightly stale.
+      if (activePage && !editingPath) {
+        try {
+          await rewritePage(activePage.path);
+        } catch {
+          failures.push(activePage.path);
+        }
+      }
+
+      // Other pages come from the wiki-wide content index (also used by the
+      // rename link scan). Each candidate is re-read before rewriting so a stale
+      // index never overwrites newer content.
+      for (const indexed of await ensureContentIndex()) {
+        if (
+          indexed.path === editingPath ||
+          indexed.path === activePage?.path ||
+          countDiagramReferences(indexed.content, oldPath) === 0
+        ) {
+          continue;
+        }
+        try {
+          await rewritePage(indexed.path);
+        } catch {
+          failures.push(indexed.path);
+        }
+      }
+
+      invalidateContentIndex();
+      if (activePage && !editingPath && updated.includes(activePage.path)) {
+        await loadPageByPath(activePage.path, false);
+      }
+      if (failures.length > 0) {
+        throw new Error(`The diagram was saved, but these pages could not be updated: ${failures.join(", ")}`);
+      }
+      return updated;
+    },
+    [
+      activePage,
+      activeWikiId,
+      draftContent,
+      ensureContentIndex,
+      invalidateContentIndex,
+      isEditing,
+      loadPageByPath,
+      wikiClient,
+    ]
+  );
+
+  /** Opens the draw.io editor on an existing diagram, loading its current bytes first. */
+  const handleEditDiagram = useCallback(
+    (src: string) => {
+      const resolved = resolveImageSrc(src, activePage?.path ?? "/");
+      if (!resolved) {
+        setDiagramStatus("That diagram could not be located in this wiki.");
+        return;
+      }
+
+      setDiagramError(undefined);
+      setDiagramStatus("Opening diagram…");
+      fetchAttachmentDataUrl(resolved)
+        .then((dataUrl) => {
+          setDiagramStatus(undefined);
+          // Opened only once the bytes are in hand: the editor loads its content
+          // when it starts, so it must not open on an empty canvas first.
+          setDiagramTarget({ path: src, dataUrl });
+        })
+        .catch((loadFailure: unknown) => {
+          setDiagramStatus(undefined);
+          setError(formatError(loadFailure));
+        });
+    },
+    [activePage?.path, resolveImageSrc]
+  );
+
+  /**
+   * Opens the editor for a brand new diagram and resolves with the stored
+   * attachment once it is saved (or undefined if the user closes without
+   * saving), so the Markdown editor can insert the reference at the cursor.
+   */
+  const handleCreateDiagram = useCallback((): Promise<AttachmentUploadResult | undefined> => {
+    setDiagramError(undefined);
+    setDiagramStatus(undefined);
+    setDiagramTarget({});
+    return new Promise<AttachmentUploadResult | undefined>((resolve) => {
+      pendingDiagramRef.current = resolve;
+    });
+  }, []);
+
+  const closeDiagramEditor = useCallback(() => {
+    pendingDiagramRef.current?.(undefined);
+    pendingDiagramRef.current = undefined;
+    setDiagramTarget(undefined);
+    setDiagramError(undefined);
+  }, []);
+
+  const handleSaveDiagram = useCallback(
+    async (pngDataUrl: string, title: string) => {
+      if (!wikiClient || !activeWikiId) {
+        setDiagramError("PowerWiki needs an Azure DevOps project context to save diagrams.");
+        return;
+      }
+
+      const oldPath = diagramTarget?.path;
+      setDiagramBusy(true);
+      setDiagramError(undefined);
+      try {
+        // Every save writes a new revision; the attachments API cannot overwrite.
+        const name = oldPath ? nextDiagramName(oldPath) : newDiagramName(title);
+        const attachment = await wikiClient.createAttachment(
+          activeWikiId,
+          name,
+          dataUrlToBase64(pngDataUrl)
+        );
+
+        if (oldPath) {
+          const updated = await replaceDiagramReferences(oldPath, attachment.path);
+          setDiagramStatus(
+            updated.length > 1
+              ? `Diagram updated on ${updated.length} pages.`
+              : "Diagram updated."
+          );
+        } else {
+          pendingDiagramRef.current?.({ name: attachment.name, path: attachment.path, isImage: true });
+          pendingDiagramRef.current = undefined;
+          setDiagramStatus("Diagram inserted.");
+        }
+        setDiagramTarget(undefined);
+      } catch (saveFailure: unknown) {
+        setDiagramError(formatError(saveFailure));
+      } finally {
+        setDiagramBusy(false);
+      }
+    },
+    [activeWikiId, diagramTarget?.path, replaceDiagramReferences, wikiClient]
+  );
+
+  // Diagram status is a transient confirmation, so it clears itself.
+  useEffect(() => {
+    if (!diagramStatus) {
+      return;
+    }
+    const timer = window.setTimeout(() => setDiagramStatus(undefined), 4000);
+    return () => window.clearTimeout(timer);
+  }, [diagramStatus]);
+
   const loadQueryTable = useCallback(
     async (queryId: string) => {
       if (!workItemClient) {
@@ -1816,6 +2018,7 @@ export function WikiBrowser({
               <WikiPageEditor
                 disabled={saveState === "saving"}
                 onChange={setDraftContent}
+                onCreateDiagram={handleCreateDiagram}
                 onListAttachments={listWikiAttachments}
                 onUploadAttachment={uploadAttachment}
                 pages={pageLinks}
@@ -1828,6 +2031,7 @@ export function WikiBrowser({
                   <WikiPageEditor
                     disabled={saveState === "saving"}
                     onChange={setDraftContent}
+                    onCreateDiagram={handleCreateDiagram}
                     onListAttachments={listWikiAttachments}
                     onUploadAttachment={uploadAttachment}
                     pages={pageLinks}
@@ -1859,6 +2063,7 @@ export function WikiBrowser({
                     onOpenWorkItem={(id) => void openWorkItem(id)}
                     onResolveImageSrc={resolveImageSrc}
                     onLoadImage={fetchAttachmentObjectUrl}
+                    onEditDiagram={handleEditDiagram}
                   />
                 </div>
               </div>
@@ -1899,6 +2104,7 @@ export function WikiBrowser({
               onOpenWorkItem={(id) => void openWorkItem(id)}
               onResolveImageSrc={resolveImageSrc}
               onLoadImage={fetchAttachmentObjectUrl}
+              onEditDiagram={handleEditDiagram}
             />
           </>
         ) : (
@@ -1939,6 +2145,22 @@ export function WikiBrowser({
           resolveImageSrc={resolveImageSrc}
           onLoadImage={fetchAttachmentObjectUrl}
         />
+      ) : null}
+
+      {diagramTarget ? (
+        <DrawioEditorDialog
+          busy={diagramBusy}
+          error={diagramError}
+          onClose={closeDiagramEditor}
+          onSave={(pngDataUrl, title) => void handleSaveDiagram(pngDataUrl, title)}
+          target={diagramTarget}
+        />
+      ) : null}
+
+      {diagramStatus ? (
+        <div className="powerwiki-diagram-toast" role="status">
+          {diagramStatus}
+        </div>
       ) : null}
 
       {linkUpdatePlan ? (

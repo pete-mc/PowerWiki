@@ -6,6 +6,7 @@ import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholders
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
 import { copyToClipboard } from "./clipboard";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
+import { addDiagramTools, DIAGRAM_EDIT_SELECTOR, DIAGRAM_SOURCE_ATTR } from "./diagramTools";
 import { addCopyButtons, highlightCodeBlocks } from "./enhancePreview";
 import { renderMath } from "./mathRender";
 import { ZoomPanOverlay } from "./ZoomPanOverlay";
@@ -97,6 +98,11 @@ interface MarkdownPreviewProps {
   readonly buildHeadingUrl?: (slug: string) => string | undefined;
   /** Called when a heading permalink is clicked (to reflect it in the route). */
   readonly onHeadingLinkActivated?: (slug: string) => void;
+  /**
+   * Opens the draw.io editor for a stored diagram, given its wiki path exactly
+   * as written in the Markdown. When omitted, no edit affordance is shown.
+   */
+  readonly onEditDiagram?: (src: string) => void;
 }
 
 const TOSP_PLACEHOLDER_SELECTOR = `[${TOSP_PLACEHOLDER_ATTR}="${TOSP_PLACEHOLDER_VALUE}"]`;
@@ -109,6 +115,11 @@ const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 // Holds an attachment image's resolved (authenticated) URL until enrichImages
 // fetches it with credentials and swaps in a displayable object URL.
 const ATTACHMENT_IMAGE_ATTR = "data-powerwiki-image";
+
+// The image's original Markdown destination, kept alongside the resolved URL.
+// Diagram editing needs the path as the author wrote it, because that is the
+// string it has to find and rewrite when a new revision is saved.
+const ATTACHMENT_SOURCE_ATTR = "data-powerwiki-image-src";
 
 interface ImageEnrichmentContext {
   /** Resolved URL -> object URL for images already fetched this session. */
@@ -211,7 +222,8 @@ export function MarkdownPreview({
   onLoadImage,
   anchor,
   buildHeadingUrl,
-  onHeadingLinkActivated
+  onHeadingLinkActivated,
+  onEditDiagram
 }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const queryCacheRef = useRef(new Map<string, QueryTableResult>());
@@ -316,10 +328,13 @@ export function MarkdownPreview({
       onSettled: bumpEnrichment,
     });
     addCopyButtons(container);
+    if (onEditDiagram) {
+      addDiagramTools(container, ATTACHMENT_SOURCE_ATTR);
+    }
     rewriteHeadingLinks(container, buildHeadingUrl);
     void highlightCodeBlocks(container);
     void renderMath(container);
-  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onLoadImage, onLoadMention, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onEditDiagram, onLoadImage, onLoadMention, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
 
   // Release the attachment object URLs this preview created when it unmounts.
   useEffect(() => {
@@ -378,6 +393,18 @@ export function MarkdownPreview({
         } else if (action === "svg") {
           downloadMermaidSvg(svg);
         }
+      }
+      return;
+    }
+
+    // Checked before the image handler below, so clicking "Edit diagram" opens
+    // the editor rather than the zoom lightbox.
+    const diagramButton = (event.target as HTMLElement).closest<HTMLElement>(DIAGRAM_EDIT_SELECTOR);
+    if (diagramButton && onEditDiagram) {
+      event.preventDefault();
+      const source = diagramButton.getAttribute(DIAGRAM_SOURCE_ATTR);
+      if (source) {
+        onEditDiagram(source);
       }
       return;
     }
@@ -1075,6 +1102,7 @@ function resolveImageSources(
       // cross-origin request fires; enrichImages fetches it with credentials
       // and swaps in an object URL once the bytes arrive.
       image.setAttribute(ATTACHMENT_IMAGE_ATTR, resolvedSrc);
+      image.setAttribute(ATTACHMENT_SOURCE_ATTR, safeDecode(src));
       image.removeAttribute("src");
     }
   }

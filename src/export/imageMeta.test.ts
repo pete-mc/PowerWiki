@@ -15,6 +15,12 @@ describe("imageTypeFromPath", () => {
     expect(imageTypeFromPath("/x/a.png?download=true")).toBe("png");
   });
 
+  it("treats a draw.io diagram as the PNG it is", () => {
+    // Diagrams are stored as .drawio.png (a real PNG carrying its own source),
+    // which is what lets them embed in Word exports like any other image.
+    expect(imageTypeFromPath("/.attachments/architecture-lk9f2abc1234.drawio.png")).toBe("png");
+  });
+
   it("returns null for unsupported types", () => {
     expect(imageTypeFromPath("diagram.svg")).toBeNull();
     expect(imageTypeFromPath("/no/extension")).toBeNull();

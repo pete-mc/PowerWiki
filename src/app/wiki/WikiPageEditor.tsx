@@ -9,12 +9,14 @@ import {
   filesFromDataTransfer,
   isImageFile,
   isImagePath,
+  type AttachmentUploadResult,
   type UploadAttachment,
 } from "../../wiki/attachmentUpload";
+import { diagramMarkdown } from "../../drawio/drawioDiagram";
 import type { WikiAttachment } from "../../wiki/WikiPage";
 import { MERMAID_SNIPPETS } from "./mermaidSnippets";
 import { formatEditorLoadError, loadMonaco, type MonacoApi } from "./monacoLoader";
-import { registerSlashCommands } from "./slashCommands";
+import { registerSlashCommands, setDiagramCommandHandler } from "./slashCommands";
 
 /** A wiki page offered by the page-link picker. */
 export interface WikiPageLink {
@@ -29,12 +31,17 @@ interface WikiPageEditorProps {
   readonly onListAttachments?: () => Promise<readonly WikiAttachment[]>;
   /** Uploads a pasted/dropped/picked file and returns its wiki reference. */
   readonly onUploadAttachment?: UploadAttachment;
+  /**
+   * Opens the draw.io editor for a new diagram, resolving with the stored
+   * attachment once saved (or undefined if the user closes without saving).
+   */
+  readonly onCreateDiagram?: () => Promise<AttachmentUploadResult | undefined>;
   /** Wiki pages the page-link picker can insert links to. */
   readonly pages?: readonly WikiPageLink[];
   readonly value: string;
 }
 
-export function WikiPageEditor({ disabled, onChange, onListAttachments, onUploadAttachment, pages, value }: WikiPageEditorProps) {
+export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAttachments, onUploadAttachment, pages, value }: WikiPageEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<MonacoApi | undefined>(undefined);
@@ -61,6 +68,7 @@ export function WikiPageEditor({ disabled, onChange, onListAttachments, onUpload
   const [editorReady, setEditorReady] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
   const [uploadError, setUploadError] = useState<string>();
+  const [diagramPending, setDiagramPending] = useState(false);
   const themeMode = useThemeMode();
 
   const formattingDisabled = Boolean(disabled) || isLoading || Boolean(loadError);
@@ -539,6 +547,41 @@ export function WikiPageEditor({ disabled, onChange, onListAttachments, onUpload
     [insertAtCursor, onUploadAttachment]
   );
 
+  // Opens the draw.io editor and inserts a reference to the saved diagram at the
+  // cursor. The dialog is owned by the parent (it needs the wiki client), so the
+  // editor just awaits the stored attachment — the same shape as an upload.
+  const createDiagram = useCallback(async () => {
+    if (!onCreateDiagram) {
+      return;
+    }
+
+    setUploadError(undefined);
+    setDiagramPending(true);
+    try {
+      const diagram = await onCreateDiagram();
+      if (diagram) {
+        // The alt text comes from the diagram's slug, so it stays readable
+        // ("System Architecture") rather than echoing the revision suffix.
+        insertAtCursor(diagramMarkdown(diagram.path));
+      }
+    } catch (error: unknown) {
+      setUploadError(error instanceof Error ? error.message : "Could not insert the diagram.");
+    } finally {
+      setDiagramPending(false);
+    }
+  }, [insertAtCursor, onCreateDiagram]);
+
+  // Point the "/Diagram" palette entry at this editor while it is mounted. In
+  // split mode two editors exist; the last mounted wins, which is also the one
+  // the user is typing in.
+  useEffect(() => {
+    if (!onCreateDiagram) {
+      return;
+    }
+    setDiagramCommandHandler(() => void createDiagram());
+    return () => setDiagramCommandHandler(undefined);
+  }, [createDiagram, onCreateDiagram]);
+
   // Handles paste (images only, so plain text paste is untouched) and drop of
   // files onto the editor. Registered in the capture phase so it runs before
   // Monaco's own clipboard handling.
@@ -758,6 +801,16 @@ export function WikiPageEditor({ disabled, onChange, onListAttachments, onUpload
         {uploadCount > 0 ? <span className="wiki-format-status" role="status">Uploading…</span> : null}
         {uploadError ? <span className="wiki-format-status wiki-format-status-error" role="alert">{uploadError}</span> : null}
         <span className="wiki-format-hint" aria-hidden="true">Type <kbd>/</kbd> for commands</span>
+        <button
+          className="wiki-format-button"
+          disabled={formattingDisabled || !onCreateDiagram || diagramPending}
+          onMouseDown={keepEditorFocus}
+          onClick={() => void createDiagram()}
+          title="Draw a new diagram with draw.io"
+          type="button"
+        >
+          {diagramPending ? "Diagram…" : "Diagram"}
+        </button>
         <div className="wiki-format-mermaid" ref={mermaidRef}>
           <button
             aria-expanded={mermaidOpen}

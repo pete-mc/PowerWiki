@@ -1133,6 +1133,108 @@ body {
   border-color: var(--pw-accent);
 }
 
+/* draw.io diagrams: hover "Edit" affordance on a stored .drawio.png image. */
+.markdown-preview .powerwiki-diagram {
+  display: inline-block;
+  position: relative;
+}
+
+.powerwiki-diagram-edit {
+  background: var(--pw-surface, rgba(128, 128, 128, 0.15));
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  opacity: 0;
+  padding: 2px 8px;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  transition: opacity 0.1s ease;
+}
+
+.markdown-preview .powerwiki-diagram:hover .powerwiki-diagram-edit,
+.powerwiki-diagram-edit:focus {
+  opacity: 1;
+}
+
+.powerwiki-diagram-edit:hover {
+  background: var(--pw-hover);
+  border-color: var(--pw-accent);
+}
+
+/* The draw.io editor dialog: near-fullscreen, since diagramming needs room. */
+.powerwiki-drawio-dialog {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 8px;
+  box-shadow: var(--pw-menu-shadow);
+  color: var(--pw-text);
+  display: flex;
+  flex-direction: column;
+  height: 92vh;
+  padding: 16px;
+  width: min(1500px, 96vw);
+}
+
+.powerwiki-drawio-bar {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.powerwiki-drawio-bar label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.powerwiki-drawio-bar input {
+  background: var(--pw-input-bg, var(--pw-surface));
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  font: inherit;
+  padding: 4px 8px;
+  width: 280px;
+}
+
+.powerwiki-drawio-hint {
+  color: var(--pw-text-secondary);
+  font-size: 12px;
+}
+
+.powerwiki-drawio-frame-host {
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.powerwiki-drawio-frame {
+  border: 0;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.powerwiki-diagram-toast {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 6px;
+  bottom: 24px;
+  box-shadow: var(--pw-menu-shadow);
+  color: var(--pw-text);
+  left: 50%;
+  padding: 8px 16px;
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 120;
+}
+
 /* Fullscreen pan/zoom overlay, shared by Mermaid diagrams and images. */
 .powerwiki-zoom {
   background: rgba(0, 0, 0, 0.75);

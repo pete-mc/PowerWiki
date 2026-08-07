@@ -382,6 +382,50 @@ try {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-mermaid-error.png") });
   }
 
+  // draw.io diagrams: a stored .drawio.png gets an "Edit diagram" affordance in
+  // the preview, and the editor toolbar offers a way to create one. Guards the
+  // plumbing that makes editing possible — the authored path surviving image
+  // resolution, and the tools being injected onto diagram images only.
+  try {
+    const diagramMd = [
+      "![Architecture](/.attachments/Architecture-lk9f2abc1234.drawio.png)",
+      "",
+      "![Screenshot](/.attachments/plain-screenshot.png)",
+      "",
+    ].join("\n");
+    await frame.evaluate((value) => {
+      const models = window.monaco && window.monaco.editor ? window.monaco.editor.getModels() : [];
+      if (models[0]) {
+        models[0].setValue(value);
+      }
+    }, diagramMd);
+
+    const preview = ".wiki-editor-split-pane-preview .markdown-preview";
+    await frame.waitForSelector(`${preview} .powerwiki-diagram-edit`, { timeout: 30000 });
+    const diagrams = await frame.evaluate((sel) => {
+      const root = document.querySelector(sel);
+      const buttons = Array.from(root?.querySelectorAll(".powerwiki-diagram-edit") ?? []);
+      return {
+        count: buttons.length,
+        src: buttons[0]?.getAttribute("data-powerwiki-diagram-src") ?? "",
+        images: root?.querySelectorAll("img").length ?? 0,
+      };
+    }, preview);
+    check(diagrams.count === 1, `only the .drawio.png gets an edit button (buttons=${diagrams.count})`);
+    check(diagrams.images === 2, `both images still render (images=${diagrams.images})`);
+    check(
+      diagrams.src === "/.attachments/Architecture-lk9f2abc1234.drawio.png",
+      `edit button carries the authored diagram path (got "${diagrams.src}")`
+    );
+    check(
+      !!(await frame.$('.wiki-format-toolbar button[title*="draw.io"]')),
+      "editor toolbar offers a New diagram button"
+    );
+  } catch (error) {
+    check(false, `draw.io diagram affordances failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06b-drawio-error.png") });
+  }
+
   // Release C: KaTeX math renders (loads the katex chunk + CSS).
   try {
     const mathMd = "Inline $E = mc^2$ and a block:\n\n$$\\int_0^1 x^2\\,dx = \\frac{1}{3}$$\n";

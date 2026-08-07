@@ -22,6 +22,21 @@ export interface SlashCommand {
   readonly insertText: string;
   /** Whether insertText uses Monaco snippet syntax (${1:...} tab stops). */
   readonly asSnippet: boolean;
+  /** Command run after insertion, for entries that open UI instead of typing. */
+  readonly commandId?: string;
+}
+
+/** Opens the draw.io dialog; the handler is supplied by the active editor. */
+export const DIAGRAM_COMMAND_ID = "powerwiki.insertDiagram";
+
+// The completion provider is registered once for the Markdown language, but the
+// action a palette entry triggers belongs to whichever editor is mounted. The
+// live handler is kept here and swapped by that editor.
+let diagramHandler: (() => void) | undefined;
+
+/** Sets (or clears) the handler the "/Diagram" palette entry invokes. */
+export function setDiagramCommandHandler(handler: (() => void) | undefined): void {
+  diagramHandler = handler;
 }
 
 const BASE_COMMANDS: readonly SlashCommand[] = [
@@ -49,6 +64,16 @@ const BASE_COMMANDS: readonly SlashCommand[] = [
     keywords: "issue bug task board",
     insertText: "#${1:1234}",
     asSnippet: true,
+  },
+  {
+    label: "Diagram",
+    detail: "Draw a new diagram with draw.io",
+    keywords: "drawio draw.io flowchart sketch",
+    // Inserts nothing itself: picking it opens the draw.io dialog, which
+    // inserts the reference once the diagram is saved (see DIAGRAM_COMMAND_ID).
+    insertText: "",
+    asSnippet: false,
+    commandId: DIAGRAM_COMMAND_ID,
   },
   {
     label: "Query table",
@@ -96,6 +121,8 @@ export function registerSlashCommands(monaco: MonacoApi): void {
   }
   registered = true;
 
+  monaco.editor.registerCommand(DIAGRAM_COMMAND_ID, () => diagramHandler?.());
+
   monaco.languages.registerCompletionItemProvider("markdown", {
     triggerCharacters: ["/"],
     provideCompletionItems(model, position) {
@@ -129,6 +156,9 @@ export function registerSlashCommands(monaco: MonacoApi): void {
         filterText: `/${command.label} ${command.keywords ?? ""}`,
         sortText: String(index).padStart(3, "0"),
         range,
+        command: command.commandId
+          ? { id: command.commandId, title: command.label }
+          : undefined,
       }));
 
       return { suggestions };
