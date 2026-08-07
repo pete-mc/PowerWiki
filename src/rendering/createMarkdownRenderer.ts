@@ -6,6 +6,7 @@ import { adoMentionsPlugin } from "./adoMentionsPlugin";
 import { adoPlaceholdersPlugin } from "./adoPlaceholdersPlugin";
 import { adoWorkItemsPlugin } from "./adoWorkItemsPlugin";
 import { calloutsPlugin } from "./calloutsPlugin";
+import { looseHeadingsPlugin } from "./looseHeadingsPlugin";
 import { mathPlugin } from "./mathPlugin";
 
 /**
@@ -88,6 +89,7 @@ export function createMarkdownRenderer(): MarkdownIt {
       }),
     })
     .use(mermaidContainerPlugin)
+    .use(looseHeadingsPlugin)
     .use(calloutsPlugin)
     .use(mathPlugin)
     .use(adoWorkItemsPlugin)

@@ -171,6 +171,12 @@ PowerWiki supports the Azure DevOps [image-size syntax](https://learn.microsoft.
 
 CommonMark expects a quoted title in that position, so stock markdown-it rejects the whole image and renders the author's Markdown as literal text. PowerWiki parses the suffix into `width`/`height` attributes ahead of the built-in image rule, using markdown-it's own link helpers so bracket nesting and `<...>` destinations keep working. Sizes survive the rich-text round trip and are honored by the Word export; images are capped at the column width so an oversized value cannot break the layout.
 
+### Headings without a space
+
+CommonMark requires a space after the hashes, so `#Overview` renders as a literal paragraph in the built-in Azure DevOps Wiki. PowerWiki also accepts the spaceless form (`#Overview`, `###Release notes`, levels one through six) and renders it as the matching heading, complete with anchor id and permalink.
+
+The one exception is a hash run followed immediately by a digit: `#1234` stays an Azure Boards work item reference, because that shorthand is far more common in wiki text than a heading whose title starts with a number. Write `# 2024 roadmap` with the space when a heading really does begin with digits. This is an intentional difference from the built-in wiki — the stored Markdown is untouched, but a spaceless heading renders as a paragraph there.
+
 ## Project Structure
 
 - `public/` contains static hub HTML copied into `dist/`.

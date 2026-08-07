@@ -5,6 +5,7 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 
 import { adoImageSizePlugin } from "../../rendering/adoImageSizePlugin";
+import { looseHeadingsPlugin } from "../../rendering/looseHeadingsPlugin";
 import {
   filesFromDataTransfer,
   isImageFile,
@@ -103,8 +104,12 @@ export function WikiRichTextEditor({
     // markdown-it rejects `![alt](x.png =500x250)` outright, and Turndown would
     // then escape the leftover literal text on the way back out, corrupting the
     // stored Markdown.
+    // looseHeadingsPlugin keeps the visual editor in step with the preview, so a
+    // spaceless `#Title` shows as a heading here too (Turndown then writes it
+    // back out in the canonical `# Title` form).
     const md = new MarkdownIt({ breaks: false, html: false, linkify: true, typographer: true })
-      .use(adoImageSizePlugin);
+      .use(adoImageSizePlugin)
+      .use(looseHeadingsPlugin);
     // Resolve stored image paths (e.g. "/.attachments/x.png") to a displayable
     // URL for the editable surface, keeping the original path in data-wiki-src
     // so the Turndown rule below can emit portable Markdown on the way out.
