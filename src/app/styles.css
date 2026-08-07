@@ -1139,6 +1139,16 @@ body {
   position: relative;
 }
 
+/*
+ * A diagram is a document, not a decoration, so it renders on its own white
+ * canvas rather than compositing onto the page. New diagrams bake this in at
+ * export (see EXPORT_BACKGROUND); this also covers ones saved before that, and
+ * any .drawio.png produced by another tool with a transparent background.
+ */
+.markdown-preview .powerwiki-diagram img {
+  background: #fff;
+}
+
 .powerwiki-diagram-edit {
   background: var(--pw-surface, rgba(128, 128, 128, 0.15));
   border: 1px solid var(--pw-border);
@@ -1299,8 +1309,13 @@ body {
   max-width: none;
 }
 
-/* Images show at natural size (unclamped) so panning/zooming reveals detail. */
+/*
+ * Images show at natural size (unclamped) so panning/zooming reveals detail.
+ * The white backing matters for partially transparent PNGs: without it the
+ * overlay's dark backdrop shows through and dark content becomes invisible.
+ */
 .powerwiki-image-zoom-content img {
+  background: var(--pw-surface);
   box-shadow: 0 6px 30px rgba(0, 0, 0, 0.5);
   display: block;
   max-width: none;
@@ -1313,7 +1328,15 @@ body {
  * a narrow window; browsers derive an aspect ratio from the two attributes, so a
  * capped image scales instead of squashing.
  */
+/*
+ * Images sit on the themed surface rather than compositing onto whatever is
+ * behind them. A partially transparent PNG otherwise shows the page (and, in
+ * the zoom overlay, the dark backdrop and its shadow) straight through, which
+ * reads as a rendering glitch. The backing follows the active theme so it stays
+ * invisible against normal page content in both light and dark.
+ */
 .markdown-preview img {
+  background: var(--pw-surface);
   max-width: 100%;
 }
 

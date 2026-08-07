@@ -961,10 +961,13 @@ try {
       }
     }, TEAM_IDENTITY);
     // The lookup round-trips to the host frame, so give it room to settle.
+    // Every mention has to be waited on, not just the first: an identity that
+    // fails to resolve only gets its fallback text on the enrichment pass after
+    // its lookup rejects, so sampling early catches it still showing "@…".
     await frame.waitForFunction(
       () => {
-        const el = document.querySelector(".markdown-preview .powerwiki-mention");
-        return el && !el.textContent.includes("…");
+        const els = Array.from(document.querySelectorAll(".markdown-preview .powerwiki-mention"));
+        return els.length > 0 && els.every((el) => !el.textContent.includes("…"));
       },
       { timeout: 30000 }
     );

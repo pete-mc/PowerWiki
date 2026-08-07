@@ -376,6 +376,22 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
     editor.focus();
   }, []);
 
+  // Inserts a block element at the cursor, starting it on its own line (as the
+  // Mermaid insert does) so a diagram never lands mid-sentence.
+  const insertBlockAtCursor = useCallback((text: string) => {
+    const editor = editorRef.current;
+    const selection = editor?.getSelection();
+    if (!editor || !selection) {
+      return;
+    }
+
+    const leadingNewline = selection.startColumn === 1 ? "" : "\n\n";
+    editor.executeEdits("wiki-format", [
+      { range: selection, text: `${leadingNewline}${text}\n`, forceMoveMarkers: true },
+    ]);
+    editor.focus();
+  }, []);
+
   // Inserts a Markdown link to another wiki page. Any current selection becomes
   // the link text; otherwise the page title is used.
   const insertPageLink = useCallback((page: WikiPageLink) => {
@@ -562,14 +578,14 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
       if (diagram) {
         // The alt text comes from the diagram's slug, so it stays readable
         // ("System Architecture") rather than echoing the revision suffix.
-        insertAtCursor(diagramMarkdown(diagram.path));
+        insertBlockAtCursor(diagramMarkdown(diagram.path));
       }
     } catch (error: unknown) {
       setUploadError(error instanceof Error ? error.message : "Could not insert the diagram.");
     } finally {
       setDiagramPending(false);
     }
-  }, [insertAtCursor, onCreateDiagram]);
+  }, [insertBlockAtCursor, onCreateDiagram]);
 
   // Point the "/Diagram" palette entry at this editor while it is mounted. In
   // split mode two editors exist; the last mounted wins, which is also the one

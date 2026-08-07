@@ -22,6 +22,19 @@ const EMBED_ORIGIN = "https://embed.diagrams.net";
 /** Exported at 2x so diagrams stay crisp on high-DPI screens and in exports. */
 const EXPORT_SCALE = 2;
 
+/**
+ * draw.io exports a transparent background by default, which lets whatever is
+ * behind the image bleed through — illegible for dark strokes on a dark theme,
+ * and in the zoom overlay's dark backdrop. Baking an opaque background makes the
+ * stored file self-contained, so it looks the same in both themes, in Word/PDF
+ * exports, and in the built-in Azure DevOps Wiki. White (not the current theme
+ * colour) because one file is shared by every reader.
+ *
+ * The option is `background`. A `bg` key is silently ignored and the export
+ * comes back fully transparent, which is easy to mistake for it having worked.
+ */
+const EXPORT_BACKGROUND = "#ffffff";
+
 /** How long to wait for the editor to load before giving up. */
 const INIT_TIMEOUT_MS = 30000;
 
@@ -118,7 +131,12 @@ export function startDrawioSession(options: DrawioSessionOptions): DrawioSession
             options.onError("Timed out exporting the diagram.");
           }
         }, EXPORT_TIMEOUT_MS);
-        post({ action: "export", format: "xmlpng", scale: EXPORT_SCALE });
+        post({
+          action: "export",
+          format: "xmlpng",
+          scale: EXPORT_SCALE,
+          background: EXPORT_BACKGROUND,
+        });
         break;
 
       case "export":

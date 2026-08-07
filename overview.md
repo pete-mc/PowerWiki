@@ -27,13 +27,21 @@
 ## Writing, without friction
 
 - **Monaco Markdown editor** with live split preview, word wrap, and Azure DevOps theming.
-- **Type `/` for anything**: headings, tables, code blocks, every Mermaid diagram type, work-item references, query tables, links.
+- **Type `/` for anything**: headings, tables, code blocks, every Mermaid diagram type, draw.io diagrams, work-item references, query tables, links.
 - **Ctrl+B / Ctrl+I / Ctrl+K**, a searchable page-link picker, and an attachment picker for files you've already uploaded.
 - **Paste or drop images** into any editor — they upload to `.attachments` and the reference is inserted for you.
 - **Rich text mode** with a floating table toolbar: insert, delete, and reorder rows and columns right at the table.
 - **Never lose work**: unsaved-changes protection on refresh/close and local draft autosave with one-click recovery.
 
 ![PowerWiki split editor with Monaco Markdown source, live preview, and the slash command palette](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-editing.png)
+
+## Diagrams you can actually edit
+
+- **Draw with draw.io, without leaving the wiki.** Hit **Diagram** in the editor toolbar (or type `/diagram`) for a full draw.io canvas — shapes, connectors, the whole shape library.
+- **Edit any diagram in place.** Hover a diagram on a page and click **Edit diagram**. It reopens exactly as you drew it, not as a flat picture.
+- **Reuse one diagram across many pages.** Reference the same diagram wherever it's relevant; edit it from any of those pages and every page updates. No more six stale copies of the same architecture diagram.
+- **Stored as a normal image.** Each diagram is saved to `.attachments` as a `.drawio.png` — a real PNG that happens to carry its own source. It renders in the built-in Azure DevOps Wiki, drops into Word and PDF exports like any other image, and keeps working if you ever stop using PowerWiki.
+- **Nothing leaves your browser.** The editor loads only while you have it open, and diagram content is exchanged in-page rather than uploaded to a third party. Pages with diagrams on them never contact diagrams.net at all.
 
 ## History and stewardship
 
