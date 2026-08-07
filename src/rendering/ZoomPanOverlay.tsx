@@ -21,6 +21,12 @@ interface ZoomPanOverlayProps {
    * than their natural size.
    */
   readonly maxInitialScale?: number;
+  /**
+   * Adds a leading action button to the toolbar (e.g. "Edit diagram" when the
+   * image being viewed is an editable draw.io diagram). Omitted for content that
+   * has no action available.
+   */
+  readonly action?: { readonly label: string; readonly onActivate: () => void };
 }
 
 const clampScale = (value: number) => Math.min(8, Math.max(0.25, value));
@@ -31,7 +37,8 @@ export function ZoomPanOverlay({
   onClose,
   rootClassName,
   contentClassName,
-  maxInitialScale
+  maxInitialScale,
+  action
 }: ZoomPanOverlayProps) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -94,6 +101,11 @@ export function ZoomPanOverlay({
       aria-modal="true"
     >
       <div className="powerwiki-zoom-bar">
+        {action ? (
+          <button className="powerwiki-zoom-action" onClick={action.onActivate} type="button">
+            {action.label}
+          </button>
+        ) : null}
         <button aria-label="Zoom in" onClick={() => setScale((s) => clampScale(s * 1.2))} type="button">+</button>
         <button aria-label="Zoom out" onClick={() => setScale((s) => clampScale(s / 1.2))} type="button">&minus;</button>
         <button

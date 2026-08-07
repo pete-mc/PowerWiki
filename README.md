@@ -127,7 +127,7 @@ The current implementation provides a working Power Wiki experience:
 - Attachment management: browse and insert existing attachments with image previews.
 - Inbound-link updates on page rename/move, with a preview/confirm dialog.
 - Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML. The Word path rasterizes each diagram through a canvas, so it renders Mermaid with plain SVG text labels — an SVG containing a `<foreignObject>` (Mermaid's default HTML labels) taints the canvas and cannot be turned into an image. PDF/print embeds the SVG directly and keeps the HTML labels.
-- draw.io diagrams: draw one with the editor's **Diagram** button (or `/Diagram`), and reopen any stored diagram from the **Edit diagram** button that appears on hover in the preview. See [draw.io diagrams](#drawio-diagrams).
+- draw.io diagrams: draw one with the editor's **Diagram** button (or `/Diagram`), and reopen any stored diagram from the **Edit diagram** button — on hover in the preview, or in the zoom overlay's toolbar. See [draw.io diagrams](#drawio-diagrams).
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
 - Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki.
 - Supports the Azure DevOps image-size suffix, `![alt](image.png =500x250)`.
@@ -187,6 +187,20 @@ Two consequences worth knowing:
   in their page history.
 - Superseded revisions stay in `.attachments`. Azure DevOps never garbage-
   collects wiki attachments, and with no delete endpoint PowerWiki cannot either.
+
+### Keeping revisions down
+
+Since a superseded revision can never be removed, PowerWiki avoids writing one
+it doesn't need: **saving a diagram you haven't changed writes nothing at all**
+(re-exporting an untouched diagram reproduces the stored bytes exactly, so the
+no-op is detected and the save is skipped). Only a real edit creates a file.
+
+To prune superseded revisions you need Git write access, which the extension
+deliberately does not request. Clone the wiki repository and delete them there:
+
+```bash
+git clone https://dev.azure.com/<org>/<project>/_git/<project>.wiki
+```
 
 ### Privacy and network
 

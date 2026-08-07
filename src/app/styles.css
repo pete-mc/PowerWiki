@@ -1280,6 +1280,12 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* The action button (e.g. "Edit diagram") sits apart from the zoom controls so
+   it does not read as one of them. */
+.powerwiki-zoom-bar .powerwiki-zoom-action {
+  margin-right: auto;
+}
+
 .powerwiki-zoom-stage {
   align-items: center;
   cursor: grab;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useThemeMode } from "../app/themeMode";
+import { isDrawioPath } from "../drawio/drawioDiagram";
 import { MENTION_ATTR, MENTION_SELECTOR } from "./adoMentionsPlugin";
 import { TOSP_PLACEHOLDER_ATTR, TOSP_PLACEHOLDER_VALUE } from "./adoPlaceholdersPlugin";
 import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELECTOR } from "./adoWorkItemsPlugin";
@@ -247,8 +248,10 @@ export function MarkdownPreview({
   // Bumped whenever an async enrichment result arrives so the enrichment effect
   // re-runs and re-applies the now-cached result to the current DOM nodes.
   const [enrichmentVersion, setEnrichmentVersion] = useState(0);
-  // The image currently shown in the click-to-zoom lightbox, if any.
+  // The image currently shown in the click-to-zoom lightbox, if any, along with
+  // its authored wiki path when that image is an editable draw.io diagram.
   const [lightboxSrc, setLightboxSrc] = useState<string | undefined>(undefined);
+  const [lightboxDiagram, setLightboxDiagram] = useState<string | undefined>(undefined);
   // Serialized SVG of the Mermaid diagram open in the pan/zoom overlay, if any.
   const [mermaidZoom, setMermaidZoom] = useState<string | undefined>(undefined);
   const themeMode = useThemeMode();
@@ -424,11 +427,14 @@ export function MarkdownPreview({
       return;
     }
 
-    // Click a content image (not one that is itself a link) to zoom it.
+    // Click a content image (not one that is itself a link) to zoom it. A
+    // diagram carries its authored path so the overlay can offer to edit it.
     const image = (event.target as HTMLElement).closest<HTMLImageElement>("img");
     if (image && !image.closest("a")) {
       event.preventDefault();
       setLightboxSrc(image.currentSrc || image.src);
+      const source = image.getAttribute(ATTACHMENT_SOURCE_ATTR) ?? "";
+      setLightboxDiagram(onEditDiagram && isDrawioPath(source) ? source : undefined);
       return;
     }
 
@@ -492,9 +498,25 @@ export function MarkdownPreview({
       />
       {lightboxSrc ? (
         <ZoomPanOverlay
+          action={
+            lightboxDiagram && onEditDiagram
+              ? {
+                  label: "Edit diagram",
+                  onActivate: () => {
+                    const source = lightboxDiagram;
+                    setLightboxSrc(undefined);
+                    setLightboxDiagram(undefined);
+                    onEditDiagram(source);
+                  },
+                }
+              : undefined
+          }
           contentClassName="powerwiki-image-zoom-content"
           maxInitialScale={1}
-          onClose={() => setLightboxSrc(undefined)}
+          onClose={() => {
+            setLightboxSrc(undefined);
+            setLightboxDiagram(undefined);
+          }}
         >
           <img alt="" src={lightboxSrc} />
         </ZoomPanOverlay>

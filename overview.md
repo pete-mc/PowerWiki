@@ -43,6 +43,8 @@
 - **Stored as a normal image.** Each diagram is saved to `.attachments` as a `.drawio.png` — a real PNG that happens to carry its own source. It renders in the built-in Azure DevOps Wiki, drops into Word and PDF exports like any other image, and keeps working if you ever stop using PowerWiki.
 - **Nothing leaves your browser.** The editor loads only while you have it open, and diagram content is exchanged in-page rather than uploaded to a third party. Pages with diagrams on them never contact diagrams.net at all.
 
+![The draw.io editor open inside PowerWiki with a deployment topology diagram, shape library, and the diagram name field](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.3.1/1786109673786/media/screenshots/powerwiki-drawio.png)
+
 ## History and stewardship
 
 - **Page history** from Git: browse revisions, compare side by side (changes per revision or against current), and restore any version through the normal save path.

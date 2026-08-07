@@ -88,6 +88,45 @@ try {
   await sleep(400);
   await shot("powerwiki-export.png");
   console.log("captured export");
+  await frame.click(".wiki-export-close");
+  await sleep(300);
+
+  // 7. draw.io editor: opened on a diagram with real content on the canvas.
+  //    The content is loaded through the same parent -> iframe channel the app
+  //    uses, so the shot shows the genuine editor rather than a blank canvas.
+  frame = await openWikiPage(page, "#/Home");
+  await frame.click(".powerwiki-header-menu-button");
+  await frame.getByRole("menuitem", { name: "Edit page" }).click();
+  await frame.waitForSelector(".wiki-format-toolbar", { timeout: 60000 });
+  await frame.click('.wiki-format-toolbar button[title*="draw.io"]');
+  await frame.waitForSelector(".powerwiki-drawio-frame", { timeout: 60000 });
+  await frame.fill("#powerwiki-drawio-title", "Deployment Topology");
+  await sleep(6000); // let the editor boot before it will accept a load
+  await frame.evaluate(() => {
+    const xml =
+      '<mxGraphModel dx="900" dy="640" grid="1" gridSize="10"><root>' +
+      '<mxCell id="0"/><mxCell id="1" parent="0"/>' +
+      '<mxCell id="u" value="Users" style="ellipse;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="40" y="140" width="120" height="60" as="geometry"/></mxCell>' +
+      '<mxCell id="fd" value="Front Door" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="220" y="140" width="130" height="60" as="geometry"/></mxCell>' +
+      '<mxCell id="api" value="API" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="410" y="60" width="130" height="60" as="geometry"/></mxCell>' +
+      '<mxCell id="web" value="Web App" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="410" y="220" width="130" height="60" as="geometry"/></mxCell>' +
+      '<mxCell id="db" value="Azure SQL" style="shape=cylinder3;whiteSpace=wrap;boundedLbl=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="610" y="130" width="120" height="80" as="geometry"/></mxCell>' +
+      '<mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="u" target="fd"><mxGeometry relative="1" as="geometry"/></mxCell>' +
+      '<mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="fd" target="api"><mxGeometry relative="1" as="geometry"/></mxCell>' +
+      '<mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="fd" target="web"><mxGeometry relative="1" as="geometry"/></mxCell>' +
+      '<mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="api" target="db"><mxGeometry relative="1" as="geometry"/></mxCell>' +
+      '<mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="web" target="db"><mxGeometry relative="1" as="geometry"/></mxCell>' +
+      "</root></mxGraphModel>";
+    document
+      .querySelector(".powerwiki-drawio-frame")
+      ?.contentWindow?.postMessage(
+        JSON.stringify({ action: "load", autosave: 0, xml }),
+        "https://embed.diagrams.net"
+      );
+  });
+  await sleep(5000);
+  await shot("powerwiki-drawio.png");
+  console.log("captured drawio");
 } catch (error) {
   console.error("capture failed:", error.message);
   process.exitCode = 1;

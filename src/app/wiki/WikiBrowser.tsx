@@ -1789,6 +1789,18 @@ export function WikiBrowser({
       }
 
       const oldPath = diagramTarget?.path;
+
+      // Saving without having changed anything must not leave a duplicate file
+      // behind. The attachments API is create-only, so an unnecessary upload can
+      // never be undone — and re-exporting an untouched diagram reproduces the
+      // stored bytes exactly, which makes the no-op case reliably detectable.
+      const loaded = diagramTarget?.dataUrl;
+      if (oldPath && loaded && dataUrlToBase64(loaded) === dataUrlToBase64(pngDataUrl)) {
+        setDiagramTarget(undefined);
+        setDiagramStatus("No changes to save.");
+        return;
+      }
+
       setDiagramBusy(true);
       setDiagramError(undefined);
       try {

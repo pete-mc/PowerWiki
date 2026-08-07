@@ -85,7 +85,11 @@ The wiki **attachments API is create-only**. `PUT .../attachments?name=` returns
 201 the first time and then fails with HTTP 500 `"The path '/.attachments/…'
 specified in the add operation already exists. Please specify a new path."` for
 that name — `If-Match` makes no difference, and there is no update or delete
-endpoint. The pages API *can* update in place but always writes `<path>.md`, so
+endpoint. This was probed exhaustively: every other method (DELETE, POST, PATCH,
+HEAD, GET) returns 405 with `allow: PUT`, on every api-version from 4.1 to
+7.2-preview, and deleting a page does not cascade to its attachments. Don't
+re-litigate it — a stored attachment cannot be replaced or removed without
+`vso.code_write`. The pages API *can* update in place but always writes `<path>.md`, so
 it cannot store a binary. Anything needing mutable binary content therefore has
 to write a new file and repoint its references (see `src/drawio/`), unless the
 extension takes `vso.code_write` to push to the wiki repository directly — which
