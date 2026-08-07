@@ -22,7 +22,8 @@ import {
 } from "docx";
 import { mml2omml } from "mathml2omml";
 
-import { rasterizeSvgElement } from "./mermaidToImage";
+import { MERMAID_SOURCE_ATTR } from "../rendering/renderMermaidDiagrams";
+import { rasterizeSvgElement } from "./svgToImage";
 import { ORDERED_NUMBERING_REFERENCE, type DocxBlock, type ExportImage, type LoadExportImage } from "./types";
 
 export interface HtmlToDocxContext {
@@ -130,6 +131,13 @@ async function preBlocks(pre: HTMLElement): Promise<DocxBlock[]> {
     const png = await rasterizeSvgElement(svg);
     if (png) {
       return [new Paragraph({ children: [diagramImageRun({ ...png, type: "png" })] })];
+    }
+    // Rasterization failed (a tainted canvas, or a diagram too large for one).
+    // Carry the diagram source across rather than dropping the content: a
+    // readable code block beats an empty "[diagram]" marker.
+    const source = pre.getAttribute(MERMAID_SOURCE_ATTR);
+    if (source) {
+      return codeParagraphs(source);
     }
     return [new Paragraph({ children: [new TextRun({ text: "[diagram]", italics: true })] })];
   }

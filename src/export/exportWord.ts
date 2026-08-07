@@ -51,7 +51,13 @@ export async function exportPagesToWord(
       children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(page.title)] }));
     }
 
-    const element = await renderPageToElement(page.content, { ...renderOptions, currentPath: page.path });
+    // plainDiagramLabels keeps Mermaid out of <foreignObject>, which is what
+    // lets htmlToDocx rasterize each diagram into the document.
+    const element = await renderPageToElement(page.content, {
+      ...renderOptions,
+      currentPath: page.path,
+      plainDiagramLabels: true,
+    });
     try {
       children.push(...(await htmlElementToDocxBlocks(element, { loadImage, pagePath: page.path })));
     } finally {

@@ -5,8 +5,24 @@
 type MermaidApi = (typeof import("mermaid"))["default"];
 
 let mermaidPromise: Promise<MermaidApi> | undefined;
-let currentTheme: string | null = null;
+// Mermaid is a singleton with global config, and both the live preview and the
+// exporters drive it. Key the last applied config by signature (not just theme)
+// so a render never inherits another caller's settings.
+let currentSignature: string | null = null;
 let diagramId = 0;
+
+export interface MermaidRenderOptions {
+  /**
+   * Render node/edge labels as HTML in a <foreignObject> (the default) or as
+   * plain SVG <text>. The Word export needs <text>: rasterizing an SVG that
+   * contains a <foreignObject> taints the canvas, so those diagrams cannot be
+   * turned into an image and would export as a placeholder instead.
+   */
+  readonly htmlLabels?: boolean;
+}
+
+/** Kept on each rendered node so exporters can fall back to the source. */
+export const MERMAID_SOURCE_ATTR = "data-mermaid-source";
 
 function loadMermaid(): Promise<MermaidApi> {
   mermaidPromise ??= import("mermaid").then((module) => module.default);
@@ -30,7 +46,8 @@ function loadMermaid(): Promise<MermaidApi> {
  */
 export async function renderMermaidDiagrams(
   container: HTMLElement,
-  mode?: "dark" | "light"
+  mode?: "dark" | "light",
+  options?: MermaidRenderOptions
 ): Promise<void> {
   normalizeMermaidCodeBlocks(container);
 
@@ -45,7 +62,7 @@ export async function renderMermaidDiagrams(
   try {
     const mermaid = await loadMermaid();
     const theme = resolveTheme(mode);
-    ensureMermaidInitialized(mermaid, theme);
+    ensureMermaidInitialized(mermaid, theme, options?.htmlLabels ?? true);
 
     for (const node of nodes) {
       await renderMermaidNode(mermaid, node);
@@ -69,12 +86,16 @@ function resolveTheme(mode?: "dark" | "light"): string {
     : "default";
 }
 
-function ensureMermaidInitialized(mermaid: MermaidApi, theme: string): void {
-  if (currentTheme === theme) {
+function ensureMermaidInitialized(mermaid: MermaidApi, theme: string, htmlLabels: boolean): void {
+  const signature = `${theme}|${htmlLabels}`;
+  if (currentSignature === signature) {
     return;
   }
 
   mermaid.initialize({
+    // Root-level htmlLabels wins over the deprecated per-diagram settings, so
+    // one flag covers flowcharts, class, state, and ER diagrams alike.
+    htmlLabels,
     logLevel: "error",
     securityLevel: "strict",
     startOnLoad: false,
@@ -86,7 +107,7 @@ function ensureMermaidInitialized(mermaid: MermaidApi, theme: string): void {
     suppressErrorRendering: true,
     theme: theme as Parameters<typeof mermaid.initialize>[0]["theme"],
   });
-  currentTheme = theme;
+  currentSignature = signature;
 }
 
 function normalizeMermaidCodeBlocks(container: HTMLElement): void {
@@ -112,6 +133,9 @@ async function renderMermaidNode(mermaid: MermaidApi, node: HTMLElement): Promis
   }
 
   node.setAttribute("data-processed", "true");
+  // innerHTML is about to be replaced by the SVG, so stash the source: the Word
+  // export falls back to it when a diagram can't be rasterized.
+  node.setAttribute(MERMAID_SOURCE_ATTR, source);
 
   // Validate the source before rendering. While a diagram is edited it is
   // briefly invalid on almost every keystroke; mermaid.render() would throw and

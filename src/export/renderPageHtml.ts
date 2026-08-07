@@ -24,6 +24,14 @@ import type { ThemeMode } from "../app/themeMode";
 export interface RenderPageOptions {
   readonly currentPath: string;
   readonly themeMode: ThemeMode;
+  /**
+   * Render Mermaid labels as SVG <text> instead of HTML in a <foreignObject>.
+   * The Word export sets this: an SVG containing a <foreignObject> taints the
+   * canvas it is rasterized through, so those diagrams cannot become images and
+   * would land in the document as a placeholder. Print/PDF keeps the richer HTML
+   * labels because it embeds the SVG directly.
+   */
+  readonly plainDiagramLabels?: boolean;
   readonly resolveImageSrc?: (src: string, currentPath: string) => string | undefined;
   readonly loadQueryTable?: (queryId: string) => Promise<QueryTableResult>;
   readonly loadWorkItemBadge?: (id: number) => Promise<WorkItemBadgeDetails>;
@@ -57,7 +65,9 @@ export async function renderPageToElement(markdown: string, options: RenderPageO
   await enrichQueryTables(container, options.loadQueryTable);
   await enrichWorkItemBadges(container, options.loadWorkItemBadge);
   await enrichMentions(container, options.loadMention);
-  await renderMermaidDiagrams(container, options.themeMode);
+  await renderMermaidDiagrams(container, options.themeMode, {
+    htmlLabels: !options.plainDiagramLabels,
+  });
   await renderMath(container);
   await highlightCodeBlocks(container);
 

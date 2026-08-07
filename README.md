@@ -126,7 +126,7 @@ The current implementation provides a working Power Wiki experience:
 - Follow/unfollow pages via Azure DevOps notification subscriptions (same contract as the built-in wiki).
 - Attachment management: browse and insert existing attachments with image previews.
 - Inbound-link updates on page rename/move, with a preview/confirm dialog.
-- Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML.
+- Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML. The Word path rasterizes each diagram through a canvas, so it renders Mermaid with plain SVG text labels — an SVG containing a `<foreignObject>` (Mermaid's default HTML labels) taints the canvas and cannot be turned into an image. PDF/print embeds the SVG directly and keeps the HTML labels.
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
 - Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki.
 - Supports the Azure DevOps image-size suffix, `![alt](image.png =500x250)`.

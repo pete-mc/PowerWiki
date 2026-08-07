@@ -1,7 +1,11 @@
-// Renders a Mermaid diagram to a PNG raster for embedding in exported
-// documents (Word/PDF). HTML labels are disabled so labels render as SVG
-// <text> rather than <foreignObject>, which would otherwise taint the canvas
-// and block rasterization.
+// Rasterizes an in-DOM SVG (a rendered Mermaid diagram, or SVG the page author
+// embedded directly) to a PNG for documents that cannot carry vector art, such
+// as the Word export.
+//
+// The SVG must not contain a <foreignObject>: browsers treat drawing one onto a
+// canvas as a cross-origin taint, so reading the pixels back out throws and the
+// diagram cannot be embedded. Callers render Mermaid with `htmlLabels: false`
+// (see renderMermaidDiagrams) to keep labels as SVG <text>.
 
 export interface RasterImage {
   readonly data: Uint8Array;
@@ -9,34 +13,16 @@ export interface RasterImage {
   readonly height: number;
 }
 
-let initialized = false;
+// Diagrams are drawn at 2x for crisp print output, bounded by what a canvas can
+// actually allocate — browsers reject oversized canvases outright, which would
+// otherwise turn a large diagram into a failed rasterization.
+const RASTER_SCALE = 2;
+const MAX_CANVAS_DIMENSION = 8192;
+const MAX_CANVAS_PIXELS = 32_000_000;
 
-async function loadMermaid() {
-  const mermaid = (await import("mermaid")).default;
-  if (!initialized) {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "neutral",
-      securityLevel: "strict",
-      flowchart: { htmlLabels: false },
-      // Don't inject Mermaid's "Syntax error" bomb graphic into the DOM on a
-      // bad diagram; mermaidToPng catches the throw and skips the diagram.
-      suppressErrorRendering: true,
-    });
-    initialized = true;
-  }
-  return mermaid;
-}
-
-/** Renders Mermaid source to a PNG, or null if it can't be rendered/rasterized. */
-export async function mermaidToPng(code: string, index: number): Promise<RasterImage | null> {
-  try {
-    const mermaid = await loadMermaid();
-    const { svg } = await mermaid.render(`pw-export-mermaid-${index}-${Date.now()}`, code);
-    return await svgToPng(svg);
-  } catch {
-    return null;
-  }
+/** Rasterizes an in-DOM SVG element to PNG, or null if it can't be rasterized. */
+export function rasterizeSvgElement(svg: SVGElement): Promise<RasterImage | null> {
+  return svgToPng(new XMLSerializer().serializeToString(svg));
 }
 
 function readSvgSize(svg: string): { width: number; height: number } {
@@ -50,9 +36,17 @@ function readSvgSize(svg: string): { width: number; height: number } {
   return { width: 800, height: 600 };
 }
 
-/** Rasterizes an in-DOM SVG element (e.g. a rendered Mermaid diagram) to PNG. */
-export function rasterizeSvgElement(svg: SVGElement): Promise<RasterImage | null> {
-  return svgToPng(new XMLSerializer().serializeToString(svg));
+/** Largest scale that keeps the canvas inside the browser's allocation limits. */
+export function rasterScale(width: number, height: number): number {
+  if (width <= 0 || height <= 0) {
+    return RASTER_SCALE;
+  }
+  return Math.min(
+    RASTER_SCALE,
+    MAX_CANVAS_DIMENSION / width,
+    MAX_CANVAS_DIMENSION / height,
+    Math.sqrt(MAX_CANVAS_PIXELS / (width * height))
+  );
 }
 
 function svgToPng(svg: string): Promise<RasterImage | null> {
@@ -66,7 +60,7 @@ function svgToPng(svg: string): Promise<RasterImage | null> {
       const width = image.naturalWidth || fallback.width;
       const height = image.naturalHeight || fallback.height;
       try {
-        const scale = 2; // render at 2x for crisp print output
+        const scale = rasterScale(width, height);
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(width * scale));
         canvas.height = Math.max(1, Math.round(height * scale));
