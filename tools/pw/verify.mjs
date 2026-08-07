@@ -248,6 +248,7 @@ try {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "04-create-delete-error.png") });
   }
 
+
   // Rendering features (callouts, heading anchors, copy-code, syntax
   // highlighting) via the split editor's live preview — set the Monaco model
   // directly so bracket auto-closing can't corrupt the [!NOTE] marker.
@@ -1080,6 +1081,53 @@ try {
   } catch (error) {
     check(false, `page tree resize failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "22-nav-resize-error.png") });
+  }
+
+  // History follows renames, as the built-in wiki does. Azure DevOps has no
+  // `git log --follow`, so without the rename-hop walk this would show only the
+  // rename commit and the page's creation would be invisible. Runs last: it
+  // creates, renames, and deletes a page, so a failure mid-flow can't leave the
+  // app in a state that breaks the checks above.
+  try {
+    const original = `PW-Rename-${Date.now()}`;
+    const renamed = `${original}-renamed`;
+    promptResponse = original;
+    await frame.click(".powerwiki-new-page");
+    await frame.waitForSelector(`[aria-label="Actions for ${original}"]`, { timeout: 60000 });
+    await leaveEditor(page, frame);
+
+    promptResponse = renamed;
+    await frame.click(`[aria-label="Actions for ${original}"]`);
+    await frame.getByRole("menuitem", { name: "Rename" }).click();
+    await frame.waitForSelector(`[aria-label="Actions for ${renamed}"]`, { timeout: 60000 });
+
+    // Navigate by hash rather than clicking the tree: deterministic, and it
+    // makes the renamed page the active one whose history we open.
+    frame = await openWikiPage(page, `#/${renamed}`);
+    await frame.click(".powerwiki-header-menu-button");
+    await frame.getByRole("menuitem", { name: "History" }).click();
+    await frame.waitForSelector(".wiki-history-item", { timeout: 90000 });
+    await sleep(2000);
+
+    const comments = await frame.$$eval(".wiki-history-item", (els) =>
+      els.map((el) => (el.textContent || "").replace(/\s+/g, " "))
+    );
+    const joined = comments.join(" | ");
+    check(comments.length >= 2, `history spans the rename (${comments.length} revisions)`);
+    check(/Renamed page/i.test(joined), "the rename commit is listed");
+    check(
+      new RegExp(`Added page '/${original}'`, "i").test(joined),
+      "the pre-rename creation is still listed, under the old name"
+    );
+
+    await frame.click(".wiki-export-close");
+    await sleep(400);
+    await frame.click(`[aria-label="Actions for ${renamed}"]`);
+    await frame.getByRole("menuitem", { name: "Delete" }).click();
+    await frame.waitForSelector(`[aria-label="Actions for ${renamed}"]`, { state: "detached", timeout: 60000 });
+  } catch (error) {
+    check(false, `history-across-rename failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "23-rename-history-error.png") });
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);

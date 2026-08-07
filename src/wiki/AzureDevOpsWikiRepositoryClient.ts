@@ -9,7 +9,9 @@ import {
   GitVersionOptions,
   GitVersionType,
   VersionControlRecursionType,
-  type GitQueryCommitsCriteria
+  type GitCommitRef,
+  type GitQueryCommitsCriteria,
+  type GitVersionDescriptor
 } from "azure-devops-extension-api/Git";
 import {
   WikiRestClient,
@@ -18,8 +20,20 @@ import {
 } from "azure-devops-extension-api/Wiki";
 
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "./WikiComment";
+import {
+  alreadyVisited,
+  findRenameHop,
+  MAX_RENAME_HOPS,
+  type RenameCandidateChange
+} from "./renameHistory";
 import type { WikiAttachment, WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 import type { WikiRepositoryClient } from "./WikiRepositoryClient";
+
+/**
+ * The version descriptor shape the commits criteria accepts. Declared locally
+ * because the criteria itself is cast (the generated type omits itemVersion).
+ */
+type GitVersionDescriptorLike = Pick<GitVersionDescriptor, "version" | "versionOptions" | "versionType">;
 
 interface WikiWithRepositoryFallback {
   readonly repository?: {
@@ -343,8 +357,14 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   }
 
   /**
-   * Lists a page's revisions: the Git commits that touched its file on the wiki
-   * branch, newest first. Tries hyphen/space path variants like the byline does.
+   * Lists a page's revisions: the Git commits that touched its file, newest
+   * first. Tries hyphen/space path variants like the byline does.
+   *
+   * History is followed back through renames, matching the built-in wiki. The
+   * commits API has no `git log --follow`, so once a path's own history runs
+   * out this walks the rename recorded on its oldest commit and continues under
+   * the previous path (see renameHistory). Each revision carries the path that
+   * was valid at its commit, which is what lets restore read the right file.
    */
   public async getPageRevisions(
     repositoryId: string,
@@ -352,7 +372,7 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     branch?: string,
     top = 50
   ): Promise<WikiPageRevision[]> {
-    const itemVersion = branch
+    const branchVersion = branch
       ? {
           version: branch,
           versionOptions: GitVersionOptions.None,
@@ -361,33 +381,128 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       : undefined;
 
     for (const candidatePath of gitItemPathCandidates(gitItemPath)) {
-      try {
-        const criteria = {
-          $skip: 0,
-          $top: top,
-          itemPath: candidatePath,
-          itemVersion,
-        } as unknown as GitQueryCommitsCriteria;
-        const commits = await this.gitClient.getCommitsBatch(criteria, repositoryId, this.projectName, 0, top, false);
-        if (commits.length === 0) {
-          continue;
-        }
-
-        return commits.map((commit) => ({
-          commitId: commit.commitId,
-          authorName: (commit.author ?? commit.committer)?.name,
-          date: (commit.author ?? commit.committer)?.date
-            ? new Date((commit.author ?? commit.committer).date).toISOString()
-            : undefined,
-          comment: commit.comment,
-          gitItemPath: candidatePath,
-        }));
-      } catch {
-        // Try the next candidate path before giving up.
+      const revisions = await this.collectRevisions(repositoryId, candidatePath, branchVersion, top);
+      if (revisions.length > 0) {
+        return revisions;
       }
     }
 
     return [];
+  }
+
+  /**
+   * Walks one path's commits, then hops to the pre-rename path and continues,
+   * until the requested number of revisions is reached or the trail ends.
+   */
+  private async collectRevisions(
+    repositoryId: string,
+    startPath: string,
+    branchVersion: GitVersionDescriptorLike | undefined,
+    top: number
+  ): Promise<WikiPageRevision[]> {
+    const revisions: WikiPageRevision[] = [];
+    const visited: string[] = [];
+    let path = startPath;
+    // Where to look for `path`: the branch tip first, then (after a rename hop)
+    // the commit where that older path still existed.
+    let version = branchVersion;
+
+    for (let hop = 0; hop <= MAX_RENAME_HOPS; hop += 1) {
+      if (alreadyVisited(visited, path)) {
+        break;
+      }
+      visited.push(path);
+
+      const remaining = top - revisions.length;
+      if (remaining <= 0) {
+        break;
+      }
+
+      let commits: GitCommitRef[];
+      try {
+        const criteria = {
+          $skip: 0,
+          $top: remaining,
+          itemPath: path,
+          itemVersion: version,
+        } as unknown as GitQueryCommitsCriteria;
+        commits = await this.gitClient.getCommitsBatch(
+          criteria,
+          repositoryId,
+          this.projectName,
+          0,
+          remaining,
+          false
+        );
+      } catch {
+        break;
+      }
+
+      if (commits.length === 0) {
+        break;
+      }
+
+      const pathAtThisPoint = path;
+      for (const commit of commits) {
+        const change = commit.author ?? commit.committer;
+        revisions.push({
+          commitId: commit.commitId,
+          authorName: change?.name,
+          date: change?.date ? new Date(change.date).toISOString() : undefined,
+          comment: commit.comment,
+          gitItemPath: pathAtThisPoint,
+        });
+      }
+
+      // The oldest commit returned is where this path began — either the page
+      // was created, or it was renamed into place from somewhere else.
+      const oldest = commits[commits.length - 1];
+      const previous = await this.findPreviousPath(repositoryId, oldest.commitId, pathAtThisPoint);
+      if (!previous) {
+        break;
+      }
+
+      path = previous.previousPath;
+      version = {
+        version: previous.parentCommitId,
+        versionOptions: GitVersionOptions.None,
+        versionType: GitVersionType.Commit,
+      };
+    }
+
+    return revisions;
+  }
+
+  /**
+   * If `commitId` renamed `path` into place, returns the path it had before and
+   * the parent commit to search it under (the old path no longer exists at the
+   * branch tip, so it can only be queried as of a commit that predates the
+   * rename). Returns undefined for any commit that isn't such a rename.
+   */
+  private async findPreviousPath(
+    repositoryId: string,
+    commitId: string,
+    path: string
+  ): Promise<{ previousPath: string; parentCommitId: string } | undefined> {
+    try {
+      const changes = await this.gitClient.getChanges(commitId, repositoryId, this.projectName);
+      const hop = findRenameHop((changes.changes ?? []) as RenameCandidateChange[], path);
+      if (!hop) {
+        return undefined;
+      }
+
+      const commit = await this.gitClient.getCommit(commitId, repositoryId, this.projectName);
+      const parentCommitId = commit.parents?.[0];
+      if (!parentCommitId) {
+        // A rename in the very first commit has no earlier history to show.
+        return undefined;
+      }
+
+      return { previousPath: hop.previousPath, parentCommitId };
+    } catch {
+      // History before the rename is a bonus; never fail the whole list for it.
+      return undefined;
+    }
   }
 
   /** Reads a page's Markdown as it was at a specific commit. */

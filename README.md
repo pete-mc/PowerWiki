@@ -122,7 +122,7 @@ The current implementation provides a working Power Wiki experience:
 - Resolves relative wiki images and Azure DevOps-hosted image URLs back to the wiki Git repository item API.
 - Shows the last known page edit author/date from Git history when available.
 - Lists and adds top-level page comments through the Azure DevOps comments APIs.
-- Page history from Git commits with a side-by-side Monaco diff and restore-through-edit.
+- Page history from Git commits with a side-by-side Monaco diff and restore-through-edit. History follows renames, so a page's revisions from before it was renamed stay visible and restorable (see [Page history across renames](#page-history-across-renames)).
 - Follow/unfollow pages via Azure DevOps notification subscriptions (same contract as the built-in wiki).
 - Attachment management: browse and insert existing attachments with image previews.
 - Inbound-link updates on page rename/move, with a preview/confirm dialog.
@@ -208,6 +208,36 @@ The editor runs in an iframe on `embed.diagrams.net` and exchanges the diagram
 over `postMessage`; diagram content is not uploaded to diagrams.net. The iframe
 loads only while the editor dialog is open — viewing a page with diagrams on it
 never contacts diagrams.net, because the stored diagram is just a PNG.
+
+## Page history across renames
+
+Azure DevOps' commits API has no `git log --follow`. Asking for a renamed page's
+history returns only the rename commit and anything after it, and asking for the
+old path returns nothing at all — the path no longer exists at the branch tip. A
+renamed page therefore looked like it had no past, and older revisions could not
+be restored.
+
+PowerWiki reconstructs the full history. The rename commit records both halves
+of the move:
+
+```
+changeType=rename                path=/After.md   sourceServerItem=/Before.md
+changeType=delete, sourceRename  path=/Before.md
+```
+
+So when a path's own history runs out, `getPageRevisions` reads the rename off
+its oldest commit, takes `sourceServerItem`, and continues under that path
+*pinned to the rename commit's parent* — the last commit where the old path
+still existed. It repeats for pages renamed more than once (capped, and
+cycle-guarded).
+
+Each revision carries the path that was valid at its own commit, which is what
+lets restore read the right file: a pre-rename revision is fetched from the
+pre-rename path. The decisions live in `src/wiki/renameHistory.ts` so they are
+testable against fixtures, separate from the fetching.
+
+Cost: pages that were never renamed pay nothing extra. Each rename hop adds two
+requests, and only when the walk reaches the commit that performed it.
 
 ## Azure Boards Markdown Enhancements
 
