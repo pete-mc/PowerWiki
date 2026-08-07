@@ -28,6 +28,17 @@ function check(condition, message) {
   }
 }
 
+// Hash navigation inside the hub is same-document, so the previous page's DOM
+// is still on screen right after openWikiPage returns. Wait for the header to
+// name the page we asked for before asserting on (or exporting) its content.
+async function waitForPageTitle(frame, title, timeout = 60000) {
+  await frame.waitForFunction(
+    (expected) => document.querySelector(".powerwiki-header-title h1")?.textContent?.trim() === expected,
+    title,
+    { timeout }
+  );
+}
+
 // Best-effort return to view mode (and close any dialog) so one failed
 // editor test can't cascade into the next by leaving the app mid-edit.
 async function leaveEditor(page, frame) {
@@ -279,6 +290,40 @@ try {
   } catch (error) {
     check(false, `rendering features failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-rendering-error.png") });
+  }
+
+  // Headings written without a space after the hashes render as headings, with
+  // the one exception that keeps "#1234" an Azure Boards work-item reference.
+  try {
+    const headingMd = "#Loose Heading\n\n###Third Level\n\n#1234 needs a repro\n";
+    await frame.evaluate((value) => {
+      const models = window.monaco && window.monaco.editor ? window.monaco.editor.getModels() : [];
+      if (models[0]) {
+        models[0].setValue(value);
+      }
+    }, headingMd);
+
+    const preview = ".wiki-editor-split-pane-preview .markdown-preview";
+    await frame.waitForSelector(`${preview} h1`, { timeout: 30000 });
+    const headings = await frame.evaluate((sel) => {
+      const root = document.querySelector(sel);
+      const text = (node) => (node?.textContent || "").replace(/#$/, "").trim();
+      return {
+        h1: text(root?.querySelector("h1")),
+        h3: text(root?.querySelector("h3")),
+        badge: text(root?.querySelector(".powerwiki-work-item-badge")),
+        headingCount: root?.querySelectorAll("h1, h2, h3, h4, h5, h6").length ?? 0,
+        raw: (root?.textContent || "").includes("#Loose"),
+      };
+    }, preview);
+    check(headings.h1 === "Loose Heading", `#Heading renders as an h1 (got "${headings.h1}")`);
+    check(headings.h3 === "Third Level", `###Heading renders as an h3 (got "${headings.h3}")`);
+    check(!headings.raw, "the hashes are not left as literal text");
+    check(headings.badge.includes("1234"), `#1234 stays a work-item badge (got "${headings.badge}")`);
+    check(headings.headingCount === 2, `#1234 did not become a heading (headings=${headings.headingCount})`);
+  } catch (error) {
+    check(false, `spaceless headings failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05b-headings-error.png") });
   }
 
   // Release B: a latest-generation Mermaid type renders (validates the diagram
@@ -604,8 +649,9 @@ try {
   // Markdown + Mermaid render pipeline runs end to end without throwing).
   try {
     frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Mermaid%20Gallery");
-    // Wait for the Gallery to actually be the active page (its diagrams render),
-    // not just the previously-loaded page (the hash nav is same-document).
+    // Wait for the Gallery to actually be the active page — the previous page
+    // also has rendered diagrams, so ".mermaid-rendered svg" alone matches it.
+    await waitForPageTitle(frame, "Mermaid Gallery");
     await frame.waitForSelector(".mermaid-rendered svg", { timeout: 60000 });
     await frame.click(".powerwiki-header-menu-button");
     await frame.getByRole("menuitem", { name: "Export…" }).click();
@@ -621,6 +667,14 @@ try {
     const isZip = bytes.length > 1000 && bytes[0] === 0x50 && bytes[1] === 0x4b; // "PK"
     check(isZip, `Word export downloads a valid .docx (${bytes.length} bytes, name=${name})`);
     check(/mermaid/i.test(name), `export used the Mermaid page (name=${name})`);
+    // Diagrams must arrive as images. Mermaid's default HTML labels render into
+    // a <foreignObject>, which taints the canvas the export rasterizes through —
+    // every such diagram then degraded to a "[diagram]" placeholder.
+    const docxZip = await JSZip.loadAsync(bytes);
+    const media = Object.keys(docxZip.files).filter((entry) => entry.startsWith("word/media/"));
+    const exportXml = await docxZip.file("word/document.xml").async("string");
+    check(media.length > 0, `Word export embeds the diagrams as images (${media.length} media parts)`);
+    check(!exportXml.includes("[diagram]"), "no diagram degraded to a [diagram] placeholder");
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-export.png") });
   } catch (error) {
     check(false, `Word export failed: ${error.message}`);
@@ -631,6 +685,7 @@ try {
   // Word export of a math page produces native Word equations (OMML), not TeX.
   try {
     frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Math%20with%20KaTeX");
+    await waitForPageTitle(frame, "Math with KaTeX");
     await frame.waitForSelector(".markdown-preview .katex", { state: "attached", timeout: 60000 });
     await frame.click(".powerwiki-header-menu-button");
     await frame.getByRole("menuitem", { name: "Export…" }).click();
