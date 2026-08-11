@@ -22,6 +22,30 @@ Why a dedicated profile: Chrome blocks remote debugging on the real default
 profile, and App-Bound Encryption blocks copying its cookies — so signing in to
 a separate profile once is the reliable path.
 
+## Point it at your organization
+
+The harness drives the *published* Marketplace build, so it works against any
+Azure DevOps organization that has PowerWiki installed and a wiki to read. It
+defaults to the maintainer's org; override with environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PW_ORG` | `dataversepowertools` | Azure DevOps organization |
+| `PW_PROJECT` | `dataversepowertools` | Project containing the wiki |
+| `PW_HUB` | *(derived)* | Full hub URL, for hosts that aren't `dev.azure.com` (e.g. Azure DevOps Server) |
+
+```powershell
+$env:PW_ORG="myorg"; $env:PW_PROJECT="myproject"; npm run pw:verify
+```
+
+The publisher segment of the hub URL is fixed, because the contribution id comes
+from the published extension rather than from your organization.
+
+Note that `verify.mjs` asserts against specific wiki content (a `Home` page with
+a work-item reference and an embedded query table, and a `PowerWiki Showcase`
+page). Against a different wiki, expect those content-specific checks to fail
+until you adapt them.
+
 ## Verify a build
 
 ```powershell

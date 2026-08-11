@@ -148,10 +148,16 @@ worth guarding, so the harness doubles as a regression smoke test.
 
 ## Backlog and work items
 
-Work is tracked as Issues under the **Power Wiki** epic (#5) in the
-`dataversepowertools` Azure DevOps project. Read and update the board with the
-`azure-devops` MCP server (configured in `.mcp.json`; PAT auth via the
-`ADO_MCP_PAT_B64` environment variable — the token is never stored in the repo).
+Work is tracked as Issues under the **Power Wiki** epic (#5) in the **PowerWiki**
+Azure DevOps project (`dev.azure.com/dataversepowertools/PowerWiki`). Read and
+update the board with the `azure-devops` MCP server (configured in `.mcp.json`;
+PAT auth via the `ADO_MCP_PAT_B64` environment variable — the token is never
+stored in the repo).
+
+The source of truth for code is GitHub: <https://github.com/pete-mc/PowerWiki>.
+Azure Boards remains the planning board — link commits and pull requests to work
+items with `AB#<id>` mentions rather than duplicating the backlog into GitHub
+Issues. GitHub Issues is public intake for bug reports and feature requests.
 
 Group related items with a shared **tag** (`foundation`, `rendering`,
 `authoring`, `parity`, `export`, `quality`, …) so the board slices into coherent,

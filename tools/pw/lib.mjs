@@ -9,8 +9,21 @@ import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
+// Which Azure DevOps organization/project to drive. The harness targets the
+// *published* Marketplace build, so point it at any org that has PowerWiki
+// installed and a wiki to read:
+//
+//   PW_ORG=myorg PW_PROJECT=myproject npm run pw:verify
+//
+// PW_HUB overrides the whole URL for hosts that don't match the dev.azure.com
+// shape (e.g. Azure DevOps Server). The publisher segment is fixed because the
+// contribution id comes from the published extension, not from your org.
+const ORG = process.env.PW_ORG ?? "dataversepowertools";
+const PROJECT = process.env.PW_PROJECT ?? "dataversepowertools";
+
 export const HUB =
-  "https://dev.azure.com/dataversepowertools/dataversepowertools/_apps/hub/dataversepowertools.powerwiki.wiki";
+  process.env.PW_HUB ??
+  `https://dev.azure.com/${ORG}/${PROJECT}/_apps/hub/dataversepowertools.powerwiki.wiki`;
 
 // A dedicated profile OUTSIDE the repo (it holds session cookies — never commit
 // it). Non-default dir is also required: Chrome blocks remote debugging on the
