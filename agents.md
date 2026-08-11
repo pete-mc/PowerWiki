@@ -148,6 +148,20 @@ environment so approval rules can be added to it. Never echo the secret in a
 workflow, and never add it to a workflow that runs on `pull_request` — that
 would expose it to forks.
 
+That PAT must be created with exactly:
+
+- **Scopes: Marketplace → Publish** (`vso.gallery_publish`). Nothing else is
+  needed; "Manage" is broader than publishing requires.
+- **Organization: All accessible organizations.** This is mandatory, not a
+  preference — the Marketplace publishing APIs run outside any organization
+  context, so a PAT scoped to a single organization fails to authenticate even
+  though it is perfectly valid. This is the usual cause of a 401 on publish.
+
+The account owning the PAT must be a member of the `dataversepowertools`
+publisher. PATs expire (one year maximum), and an expired one fails the release
+job — Microsoft now recommends Microsoft Entra service-principal tokens over
+PATs for automation, which also removes the renewal treadmill.
+
 Manual publish remains available as a fallback (unchanged, requires local
 `ado.pat`):
 
