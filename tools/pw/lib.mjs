@@ -19,7 +19,7 @@ import { chromium } from "playwright-core";
 // shape (e.g. Azure DevOps Server). The publisher segment is fixed because the
 // contribution id comes from the published extension, not from your org.
 const ORG = process.env.PW_ORG ?? "dataversepowertools";
-const PROJECT = process.env.PW_PROJECT ?? "dataversepowertools";
+const PROJECT = process.env.PW_PROJECT ?? "PowerWiki";
 
 export const HUB =
   process.env.PW_HUB ??

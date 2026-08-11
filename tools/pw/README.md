@@ -31,8 +31,10 @@ defaults to the maintainer's org; override with environment variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PW_ORG` | `dataversepowertools` | Azure DevOps organization |
-| `PW_PROJECT` | `dataversepowertools` | Project containing the wiki |
+| `PW_PROJECT` | `PowerWiki` | Project containing the wiki |
 | `PW_HUB` | *(derived)* | Full hub URL, for hosts that aren't `dev.azure.com` (e.g. Azure DevOps Server) |
+| `PW_TEAM_ID` | *(PowerWiki Team)* | Identity GUID used by the `@mention` check |
+| `PW_TEAM_NAME` | `PowerWiki Team` | Display name that GUID must resolve to |
 
 ```powershell
 $env:PW_ORG="myorg"; $env:PW_PROJECT="myproject"; npm run pw:verify

@@ -2,6 +2,26 @@
 
 This repository is for PowerWiki, an Azure DevOps extension that adds a Power Wiki menu experience alongside the default Azure DevOps Wiki while continuing to use the standard Azure DevOps Wiki repositories as the backing store.
 
+## Where things live
+
+| Concern | Location |
+| --- | --- |
+| Source code (authoritative) | <https://github.com/pete-mc/PowerWiki> — public, MIT, `origin` |
+| CI | GitHub Actions (`npm test` + build) on push/PR |
+| Backlog / planning | Azure Boards, **PowerWiki** project: `dev.azure.com/dataversepowertools/PowerWiki` |
+| Test & showcase wiki | The **PowerWiki** project's wiki (`PowerWiki.wiki`) |
+| Marketplace listing | Publisher `dataversepowertools`, extension `powerwiki` |
+
+Code is public; the backlog stays on Azure Boards. Link commits and pull requests
+to work items with `AB#<id>` mentions (an Azure Boards ↔ GitHub connection is
+configured on the PowerWiki project) rather than duplicating the backlog into
+GitHub Issues — GitHub Issues is public intake for bug reports and feature
+requests. Contributor-facing build/test instructions live in `CONTRIBUTING.md`.
+
+The old Azure DevOps code repository (in the `dataversepowertools` project) is
+**disabled** — do not push there. The old project's wiki still exists as a
+migration backup but is no longer the one under test.
+
 ## Product Direction
 
 PowerWiki should feel like the normal Azure DevOps Wiki to users, but with an upgraded Markdown and Mermaid experience. It should not remove, hide, or disable the standard Azure DevOps Wiki experience.
@@ -112,6 +132,10 @@ After every set of changes, always publish to the marketplace:
 3. Run: `$pat = (Get-Content C:\Users\peter\sources\repos\PowerWiki\ado.pat -Raw).Trim(); npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat`
 4. Commit the completed change set with a clear, concise commit message.
 5. Create an annotated Git tag for the published patch version (for example, `v1.0.15`).
+6. Push both to GitHub: `git push origin main --follow-tags`.
+
+Publishing is maintainer-only — it needs the `dataversepowertools` publisher
+token, which never leaves the maintainer's machine and must never enter CI.
 
 ## Verifying in the browser (Playwright)
 

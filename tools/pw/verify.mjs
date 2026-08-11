@@ -937,10 +937,12 @@ try {
   // user, so a pass proves the host-service lookup works on the extension's
   // existing scopes (no vso.identity / vso.graph) rather than just hitting the
   // current-user shortcut in AzureDevOpsIdentityClient.
-  const TEAM_IDENTITY = "a502d9c7-0cbd-45de-a091-3acdd89183af";
+  // Default team of the PowerWiki project; override both together when running
+  // against your own organization (see PW_ORG/PW_PROJECT in tools/pw/README.md).
+  const TEAM_IDENTITY = process.env.PW_TEAM_ID ?? "e7be2f2f-d2b8-4332-af96-606b9d7c937e";
   // The host returns a group as "[project]\Team Name"; PowerWiki strips the
   // scope so the chip reads naturally in a sentence.
-  const TEAM_NAME = "dataversepowertools Team";
+  const TEAM_NAME = process.env.PW_TEAM_NAME ?? "PowerWiki Team";
   try {
     frame = await openWikiPage(page, "#/Home");
     await frame.click(".powerwiki-header-menu-button");
