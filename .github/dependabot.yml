@@ -16,6 +16,13 @@ updates:
         update-types:
           - minor
           - patch
+        # For a 0.x package a "minor" bump is where breaking changes live, so
+        # these must not ride in on a routine grouped PR — katex feeds the Word
+        # export's native equations and monaco is the editor itself. Excluding
+        # them means each arrives as its own reviewable PR.
+        exclude-patterns:
+          - katex
+          - monaco-editor
       development:
         dependency-type: development
         update-types:
