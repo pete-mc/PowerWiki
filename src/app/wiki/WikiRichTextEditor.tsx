@@ -118,7 +118,9 @@ export function WikiRichTextEditor({
       const token = tokens[index];
       const srcIndex = token.attrIndex("src");
       if (srcIndex >= 0) {
-        const original = token.attrs![srcIndex][1];
+        // markdown-it 15 widened attribute values to `string | number`; an
+        // image src is always textual, so normalise it here.
+        const original = String(token.attrs![srcIndex][1]);
         const resolved = resolveImageRef.current?.(original, currentPathRef.current ?? "");
         token.attrPush(["data-wiki-src", original]);
         if (resolved) {
