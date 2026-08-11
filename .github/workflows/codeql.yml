@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           # security-extended adds lower-severity security queries; worth it for
@@ -39,6 +39,6 @@ jobs:
       # No build step: CodeQL's JS/TS analysis reads the sources directly, and
       # the webpack bundle would only add generated code to the scan.
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: /language:javascript-typescript
