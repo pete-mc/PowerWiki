@@ -38,7 +38,7 @@
     "azure-devops-extension-api": "^5.273.0",
     "azure-devops-extension-sdk": "^4.2.0",
     "docx": "^9.7.1",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.13",
     "highlight.js": "^11.11.1",
     "katex": "^0.17.0",
     "markdown-it": "^14.2.0",
