@@ -122,7 +122,14 @@ try {
   await page.waitForFunction(() => /Showcase/.test(document.title), { timeout: 15000 }).catch(() => {});
   check(/Showcase/.test(await page.title()), `host tab title updates on navigation (title=${JSON.stringify(await page.title())})`);
   frame = await openWikiPage(page, "#/Home");
-  await sleep(1500);
+  // Wait for the enrichment rather than assuming a fixed delay. The query table
+  // re-runs a saved query on every navigation, which is slower than the work
+  // item badge beside it — a bare sleep here made this assertion flaky as soon
+  // as the query got slower. A generous timeout still catches the regression
+  // this guards against (enrichment never coming back), it just doesn't fail on
+  // a slow round trip.
+  await frame.waitForSelector(".powerwiki-work-item-badge-rich", { timeout: 30000 }).catch(() => {});
+  await frame.waitForSelector(".powerwiki-query-table table", { timeout: 30000 }).catch(() => {});
   check(!!(await frame.$(".powerwiki-work-item-badge-rich")), "work item badge still enriched after navigation");
   check(!!(await frame.$(".powerwiki-query-table table")), "query table still rendered after navigation");
 
