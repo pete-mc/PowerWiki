@@ -6,3 +6,4 @@ ado.pat
 mcps
 tools/pw/artifacts/
 screenshots/
+.claude/settings.local.json

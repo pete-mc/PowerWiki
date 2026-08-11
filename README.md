@@ -1,5 +1,9 @@
 # PowerWiki
 
+[![CI](https://github.com/pete-mc/PowerWiki/actions/workflows/ci.yml/badge.svg)](https://github.com/pete-mc/PowerWiki/actions/workflows/ci.yml)
+[![Marketplace](https://img.shields.io/badge/Marketplace-PowerWiki-0078d4)](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 PowerWiki is an Azure DevOps extension that adds a **Power Wiki** menu experience alongside the default Azure DevOps Wiki while continuing to use the standard Azure DevOps Wiki repositories as the source of truth.
 
 The goal is feature parity with the built-in Azure DevOps Wiki, plus modern Markdown and Mermaid rendering that can track current upstream capabilities instead of being limited to the renderer versions embedded in Azure DevOps. Users should be able to choose either the standard Wiki experience or the Power Wiki experience.
@@ -55,7 +59,7 @@ Prerequisites:
 - Node.js 20.9 or later.
 - npm.
 - An Azure DevOps organization for testing.
-- Access to the `dataversepowertools` publisher before publishing or sharing the extension.
+- Access to the `dataversepowertools` publisher — **only** needed to publish to the Marketplace. Building, testing, and contributing require none of it.
 
 Install dependencies:
 
@@ -292,7 +296,7 @@ The one exception is a hash run followed immediately by a digit: `#1234` stays a
 
 ## Publishing
 
-The repository is configured for the `dataversepowertools` publisher and a public Marketplace listing. Before publishing a change, increment only the patch version in both `package.json` and `vss-extension.json`, then run:
+Publishing is maintainer-only: it needs the `dataversepowertools` publisher token, which is never stored in this repository. The repository is configured for that publisher and a public Marketplace listing. Before publishing a change, increment only the patch version in both `package.json` and `vss-extension.json`, then run:
 
 ```powershell
 npm run build
@@ -302,6 +306,14 @@ npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat
 
 ## Contributing
 
-Contributions should preserve the core principle of PowerWiki: Azure DevOps remains the wiki system of record, while this extension provides a more capable editing and rendering experience.
+Contributions are welcome. Contributions should preserve the core principle of PowerWiki: Azure DevOps remains the wiki system of record, while this extension provides a more capable editing and rendering experience.
 
 Before implementing a feature, compare it with the current Azure DevOps Wiki behavior and document any intentional differences.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and pull request details, and `agents.md` for the fuller architectural guide. You do not need Marketplace publisher access to develop or test PowerWiki — only `npm install` and Node.js 20.9+.
+
+Bugs and feature requests belong in [GitHub Issues](https://github.com/pete-mc/PowerWiki/issues).
+
+## License
+
+PowerWiki is released under the [MIT License](LICENSE).

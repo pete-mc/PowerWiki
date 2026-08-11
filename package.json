@@ -21,8 +21,16 @@
     "markdown",
     "mermaid"
   ],
-  "author": "",
+  "author": "Peter McDonald <peter@mcdonald.xyz>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pete-mc/PowerWiki.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pete-mc/PowerWiki/issues"
+  },
+  "homepage": "https://github.com/pete-mc/PowerWiki#readme",
   "engines": {
     "node": ">=20.9.0"
   },

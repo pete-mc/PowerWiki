@@ -18,7 +18,28 @@
   "content": {
     "details": {
       "path": "overview.md"
+    },
+    "license": {
+      "path": "LICENSE"
     }
+  },
+  "links": {
+    "getstarted": {
+      "uri": "https://github.com/pete-mc/PowerWiki#readme"
+    },
+    "learn": {
+      "uri": "https://github.com/pete-mc/PowerWiki"
+    },
+    "support": {
+      "uri": "https://github.com/pete-mc/PowerWiki/issues"
+    },
+    "license": {
+      "uri": "https://github.com/pete-mc/PowerWiki/blob/main/LICENSE"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "uri": "https://github.com/pete-mc/PowerWiki"
   },
   "contributions": [
     {
