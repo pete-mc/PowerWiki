@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest a capability or an improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        PowerWiki keeps the Azure DevOps Wiki as the system of record and stores
+        pages as portable Markdown. Requests that would need a proprietary page
+        format, a separate backing store, or a backend service are out of scope
+        — see `agents.md` for the full constraints.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation you hit, not just the feature you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: parity
+    attributes:
+      label: Is this parity with the built-in wiki, or new capability?
+      options:
+        - Parity — the built-in Azure DevOps Wiki already does this
+        - New capability — beyond what the built-in wiki does
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: degradation
+    attributes:
+      label: How should it degrade in the built-in wiki?
+      description: >
+        Optional. If this adds Markdown syntax, how should the stored page read
+        for someone viewing it in the built-in wiki or a plain Markdown tool?

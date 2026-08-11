@@ -7,7 +7,8 @@ This repository is for PowerWiki, an Azure DevOps extension that adds a Power Wi
 | Concern | Location |
 | --- | --- |
 | Source code (authoritative) | <https://github.com/pete-mc/PowerWiki> — public, MIT, `origin` |
-| CI | GitHub Actions (`npm test` + build) on push/PR |
+| CI | GitHub Actions: `ci.yml` (test + build), `codeql.yml`, `dependency-review.yml` |
+| Releases | `release.yml` — a `v*` tag publishes to the Marketplace and creates a GitHub Release |
 | Backlog / planning | Azure Boards, **PowerWiki** project: `dev.azure.com/dataversepowertools/PowerWiki` |
 | Test & showcase wiki | The **PowerWiki** project's wiki (`PowerWiki.wiki`) |
 | Marketplace listing | Publisher `dataversepowertools`, extension `powerwiki` |
@@ -125,17 +126,36 @@ When implementing features, document any difference from the built-in Azure DevO
 
 ## Publishing
 
-After every set of changes, always publish to the marketplace:
+After every set of changes, always publish to the marketplace. **Publishing is
+automated: pushing a version tag triggers `.github/workflows/release.yml`, which
+packages the extension, publishes it to the Marketplace, and attaches the `.vsix`
+to a GitHub Release.**
 
 1. Increment only the patch version (the third number) in both `package.json` and `vss-extension.json`. Never change the major or minor version.
-2. Run `npm run build`.
-3. Run: `$pat = (Get-Content C:\Users\peter\sources\repos\PowerWiki\ado.pat -Raw).Trim(); npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat`
-4. Commit the completed change set with a clear, concise commit message.
-5. Create an annotated Git tag for the published patch version (for example, `v1.0.15`).
-6. Push both to GitHub: `git push origin main --follow-tags`.
+2. Run `npm test`.
+3. Commit the completed change set with a clear, concise commit message.
+4. Create an annotated Git tag for the patch version (for example, `v1.0.15`).
+5. Push both: `git push origin main --follow-tags`. The tag starts the release.
 
-Publishing is maintainer-only — it needs the `dataversepowertools` publisher
-token, which never leaves the maintainer's machine and must never enter CI.
+The workflow refuses to publish if the tag does not match *both* manifest
+versions, which is the usual way a release goes wrong. Watch the run — the
+Marketplace rejects a re-published version number, so a failure after upload
+means the next attempt needs another patch bump.
+
+The publisher token lives in the `ADO_MARKETPLACE_PAT` GitHub Actions secret and
+is consumed only by the release workflow, which is pinned to the `marketplace`
+environment so approval rules can be added to it. Never echo the secret in a
+workflow, and never add it to a workflow that runs on `pull_request` — that
+would expose it to forks.
+
+Manual publish remains available as a fallback (unchanged, requires local
+`ado.pat`):
+
+```powershell
+npm run build
+$pat = (Get-Content C:\Users\peter\sources\repos\PowerWiki\ado.pat -Raw).Trim()
+npx tfx-cli extension publish --manifest-globs vss-extension.json --token $pat
+```
 
 ## Verifying in the browser (Playwright)
 

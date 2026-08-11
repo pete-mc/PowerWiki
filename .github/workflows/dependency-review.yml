@@ -1,0 +1,26 @@
+name: Dependency review
+
+# Flags dependencies with known vulnerabilities (or an unacceptable licence)
+# as they are introduced, rather than after they are already in main.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # post the summary comment
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
