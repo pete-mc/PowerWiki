@@ -21,7 +21,7 @@ before a non-trivial change.
 
 ## Prerequisites
 
-- Node.js 20.9 or later, and npm.
+- Node.js 24.15 or later, and npm.
 - An Azure DevOps organization you can install extensions into (only needed for
   end-to-end verification — see below).
 

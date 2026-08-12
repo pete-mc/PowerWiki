@@ -22,8 +22,19 @@ module.exports = {
   module: {
     rules: [
       {
+        // Transpile only. TypeScript 7 is the native compiler port and no longer
+        // exposes the JS compiler-host API that ts-loader drove, so ts-loader
+        // fails outright against it. Types are not lost: `npm test` runs
+        // `tsc --noEmit` over the whole project as a separate step, and
+        // `isolatedModules` in tsconfig.json guarantees every file can be
+        // transpiled on its own — which is exactly what this loader does.
         test: /\.tsx?$/,
-        use: "ts-loader",
+        loader: "esbuild-loader",
+        options: {
+          // Keep these in step with tsconfig.json ("target" and "jsx").
+          target: "es2022",
+          jsx: "automatic"
+        },
         exclude: /node_modules/
       },
       {

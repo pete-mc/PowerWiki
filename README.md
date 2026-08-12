@@ -56,7 +56,7 @@ The extension requests these scopes in `vss-extension.json`:
 
 Prerequisites:
 
-- Node.js 20.9 or later.
+- Node.js 24.15 or later.
 - npm.
 - An Azure DevOps organization for testing.
 - Access to the `dataversepowertools` publisher — **only** needed to publish to the Marketplace. Building, testing, and contributing require none of it.
@@ -310,7 +310,7 @@ Contributions are welcome. Contributions should preserve the core principle of P
 
 Before implementing a feature, compare it with the current Azure DevOps Wiki behavior and document any intentional differences.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and pull request details, and `agents.md` for the fuller architectural guide. You do not need Marketplace publisher access to develop or test PowerWiki — only `npm install` and Node.js 20.9+.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and pull request details, and `agents.md` for the fuller architectural guide. You do not need Marketplace publisher access to develop or test PowerWiki — only `npm install` and Node.js 24.15+.
 
 Bugs and feature requests belong in [GitHub Issues](https://github.com/pete-mc/PowerWiki/issues).
 

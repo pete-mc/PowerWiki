@@ -143,6 +143,19 @@ all: build tokens with the constructor the parser exposes as `state.Token` (see
 `adoWorkItemsPlugin.ts`). Attribute values are now typed `string | number`, so
 `attrGet`/`attrs[i][1]` need normalising where a string is required.
 
+**The webpack build transpiles only; `tsc` is what checks types.** TypeScript 7
+is the native compiler port and no longer exposes the JS compiler-host API that
+`ts-loader` drove, so the bundle is produced by `esbuild-loader` instead. That is
+safe because `tsconfig.json` sets `isolatedModules`, which makes TypeScript
+guarantee every file can be transpiled on its own — but it does mean **a type
+error will not fail `npm run build`**. Always run `npm test` (which runs
+`tsc --noEmit` first); CI runs both. Keep the loader's `target` and `jsx` options
+in step with `tsconfig.json` if you change either.
+
+Node 24.15+ is required to build and test (jsdom 30 and its undici 8 dropped
+Node 20, which is EOL). This affects contributors and CI only — the extension
+itself runs in the browser.
+
 Mermaid is loaded as a lazily-imported async chunk (`import("mermaid")` in `renderMermaidDiagrams`) to keep the initial hub bundle small, and webpack uses `output.publicPath: "auto"` so those chunks load from the extension's own CDN `dist/` path. Do not reintroduce a single-chunk limit (`LimitChunkCountPlugin`); if you change the webpack config, confirm Mermaid still renders in the iframe with `npm run pw:verify`.
 
 ## Documentation Expectations

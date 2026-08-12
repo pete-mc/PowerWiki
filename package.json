@@ -32,7 +32,7 @@
   },
   "homepage": "https://github.com/pete-mc/PowerWiki#readme",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=24.15.0"
   },
   "overrides": {
     "dompurify": "^3.4.13"
@@ -61,12 +61,12 @@
     "@types/turndown": "^5.0.6",
     "copy-webpack-plugin": "^14.0.0",
     "css-loader": "^7.1.4",
-    "jsdom": "^29.1.1",
+    "esbuild-loader": "^4.5.0",
+    "jsdom": "^30.0.1",
     "playwright-core": "^1.62.1",
     "style-loader": "^4.0.0",
     "tfx-cli": "^0.23.4",
-    "ts-loader": "^9.6.2",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10",
     "webpack": "^5.109.2",
     "webpack-cli": "^7.2.2"

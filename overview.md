@@ -77,6 +77,6 @@ PowerWiki stores nothing outside your wiki's Git repository. Every page remains 
 PowerWiki is MIT-licensed and developed in the open at **[github.com/pete-mc/PowerWiki](https://github.com/pete-mc/PowerWiki)**. Read the source before you install it — and see exactly what it does with the permissions it asks for.
 
 - **[Report a bug or request a feature](https://github.com/pete-mc/PowerWiki/issues)**
-- **[Contribute](https://github.com/pete-mc/PowerWiki/blob/main/CONTRIBUTING.md)** — Node.js 20.9+ is all you need to build and test; no publisher access required.
+- **[Contribute](https://github.com/pete-mc/PowerWiki/blob/main/CONTRIBUTING.md)** — Node.js 24.15+ is all you need to build and test; no publisher access required.
 
 Install it, open **Power Wiki** in your project, and give your wiki the experience it deserves.
