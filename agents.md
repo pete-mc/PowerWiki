@@ -123,7 +123,7 @@ leaves `data-*` attributes untouched (it validates URIs only on known
 attributes such as `src`/`href`), so a page author can plant any value in one
 with raw HTML. An enricher that copies such a value into a URL sink therefore
 bypasses the sanitizer — validate it first, as `enrichImages` does via
-`isSafeImageUrl` (`src/rendering/safeImageUrl.ts`). This was CodeQL's
+`toSafeImageUrl` (`src/rendering/safeImageUrl.ts`). This was CodeQL's
 `js/xss-through-dom` finding; keep new enrichers to the same rule.
 
 **markdown-it 15 removed its deep export paths.** `markdown-it/lib/token.mjs`

@@ -1,57 +1,55 @@
 import { describe, expect, it } from "vitest";
 
-import { isSafeImageUrl } from "./safeImageUrl";
+import { toSafeImageUrl } from "./safeImageUrl";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
 
 const BASE = "https://dev.azure.com/org/project/";
 
-describe("isSafeImageUrl", () => {
+describe("toSafeImageUrl", () => {
   it("allows the authenticated Git Items URLs the app builds", () => {
-    expect(
-      isSafeImageUrl(
+    expect(toSafeImageUrl(
         "https://dev.azure.com/org/project/_apis/git/repositories/abc/Items?path=%2F.attachments%2Fa.png",
         BASE
-      )
-    ).toBe(true);
+      )).toBeDefined();
   });
 
   it("allows http, for Azure DevOps Server behind plain http", () => {
-    expect(isSafeImageUrl("http://tfs.internal/collection/x.png", BASE)).toBe(true);
+    expect(toSafeImageUrl("http://tfs.internal/collection/x.png", BASE)).toBeDefined();
   });
 
   it("allows the object URLs the preview creates for fetched attachments", () => {
-    expect(isSafeImageUrl("blob:https://dev.azure.com/9f8e-4a1b", BASE)).toBe(true);
+    expect(toSafeImageUrl("blob:https://dev.azure.com/9f8e-4a1b", BASE)).toBeDefined();
   });
 
   it("allows a relative path, which inherits the page's scheme", () => {
-    expect(isSafeImageUrl("/.attachments/diagram.png", BASE)).toBe(true);
-    expect(isSafeImageUrl("image.png", BASE)).toBe(true);
+    expect(toSafeImageUrl("/.attachments/diagram.png", BASE)).toBeDefined();
+    expect(toSafeImageUrl("image.png", BASE)).toBeDefined();
   });
 
   it("rejects javascript:", () => {
-    expect(isSafeImageUrl("javascript:alert(1)", BASE)).toBe(false);
+    expect(toSafeImageUrl("javascript:alert(1)", BASE)).toBeUndefined();
     // Scheme matching must not be fooled by case or padding.
-    expect(isSafeImageUrl("  JaVaScRiPt:alert(1)  ", BASE)).toBe(false);
+    expect(toSafeImageUrl("  JaVaScRiPt:alert(1)  ", BASE)).toBeUndefined();
   });
 
   it("rejects data: and other schemes an attachment never legitimately uses", () => {
-    expect(isSafeImageUrl("data:text/html,<script>alert(1)</script>", BASE)).toBe(false);
-    expect(isSafeImageUrl("vbscript:msgbox(1)", BASE)).toBe(false);
-    expect(isSafeImageUrl("file:///etc/passwd", BASE)).toBe(false);
+    expect(toSafeImageUrl("data:text/html,<script>alert(1)</script>", BASE)).toBeUndefined();
+    expect(toSafeImageUrl("vbscript:msgbox(1)", BASE)).toBeUndefined();
+    expect(toSafeImageUrl("file:///etc/passwd", BASE)).toBeUndefined();
   });
 
   it("rejects empty and unparseable values", () => {
-    expect(isSafeImageUrl("", BASE)).toBe(false);
-    expect(isSafeImageUrl("   ", BASE)).toBe(false);
+    expect(toSafeImageUrl("", BASE)).toBeUndefined();
+    expect(toSafeImageUrl("   ", BASE)).toBeUndefined();
     // No base to resolve against, and not absolute.
-    expect(isSafeImageUrl("not a url", "")).toBe(false);
+    expect(toSafeImageUrl("not a url", "")).toBeUndefined();
   });
 });
 
 describe("the sanitizer bypass this guards", () => {
   // Regression cover for the CodeQL js/xss-through-dom finding. The preview's
   // image enricher reads this attribute back out of the DOM *after*
-  // sanitization, so the scheme check in isSafeImageUrl is the only thing
+  // sanitization, so the scheme check in toSafeImageUrl is the only thing
   // standing between a page author and `img.src`.
   it("confirms DOMPurify does NOT strip a planted data-powerwiki-image", () => {
     const sanitized = sanitizeRenderedHtml('<img data-powerwiki-image="javascript:alert(1)">');
@@ -73,6 +71,6 @@ describe("the sanitizer bypass this guards", () => {
     const planted = host.querySelector("img")?.getAttribute("data-powerwiki-image") ?? "";
 
     expect(planted).toBe("javascript:alert(1)");
-    expect(isSafeImageUrl(planted, BASE)).toBe(false);
+    expect(toSafeImageUrl(planted, BASE)).toBeUndefined();
   });
 });

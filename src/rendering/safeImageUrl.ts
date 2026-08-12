@@ -20,21 +20,27 @@
 const SAFE_IMAGE_SCHEMES = new Set(["http:", "https:", "blob:"]);
 
 /**
- * True when `url` resolves to something an <img> may safely load. Relative
- * URLs are resolved against `base` first, so they inherit the page's scheme
- * and keep working.
+ * Returns the normalised URL when `url` is something an <img> may safely load,
+ * or undefined when it is not. Relative URLs are resolved against `base` first,
+ * so they inherit the page's scheme and keep working.
+ *
+ * This deliberately returns the parsed URL rather than a boolean: callers assign
+ * *this* value, so what reaches `src` is the output of URL parsing rather than
+ * the raw attribute text. A boolean guard leaves the original tainted string
+ * flowing to the sink, which is both weaker in principle and invisible to
+ * CodeQL's taint tracking.
  */
-export function isSafeImageUrl(url: string, base?: string): boolean {
+export function toSafeImageUrl(url: string, base?: string): string | undefined {
   const trimmed = url.trim();
   if (!trimmed) {
-    return false;
+    return undefined;
   }
 
   try {
     const resolved = new URL(trimmed, base ?? document.baseURI);
-    return SAFE_IMAGE_SCHEMES.has(resolved.protocol);
+    return SAFE_IMAGE_SCHEMES.has(resolved.protocol) ? resolved.href : undefined;
   } catch {
     // A value that will not parse as a URL is not one we should hand to `src`.
-    return false;
+    return undefined;
   }
 }

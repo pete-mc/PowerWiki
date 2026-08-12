@@ -13,7 +13,7 @@ import { renderMath } from "./mathRender";
 import { ZoomPanOverlay } from "./ZoomPanOverlay";
 import { addMermaidToolbars, downloadMermaidSvg } from "./mermaidTools";
 import { renderMermaidDiagrams } from "./renderMermaidDiagrams";
-import { isSafeImageUrl } from "./safeImageUrl";
+import { toSafeImageUrl } from "./safeImageUrl";
 import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
 
 /** A direct child of the current page, used to fill the [[_TOSP_]] placeholder. */
@@ -140,16 +140,18 @@ interface ImageEnrichmentContext {
 function enrichImages(container: HTMLElement, ctx: ImageEnrichmentContext): void {
   const images = Array.from(container.querySelectorAll<HTMLImageElement>(`img[${ATTACHMENT_IMAGE_ATTR}]`));
   for (const image of images) {
-    const target = image.getAttribute(ATTACHMENT_IMAGE_ATTR);
-    if (!target) {
+    const planted = image.getAttribute(ATTACHMENT_IMAGE_ATTR);
+    if (!planted) {
       continue;
     }
 
     // This URL comes back out of the DOM, not from the renderer, so it never
     // went through the sanitizer's URI validation — DOMPurify leaves `data-*`
-    // attributes alone, so a page author can plant one in raw HTML. Check the
-    // scheme before it reaches `src` (see safeImageUrl.ts).
-    if (!isSafeImageUrl(target)) {
+    // attributes alone, so a page author can plant one in raw HTML. Everything
+    // below uses the parsed result rather than the raw attribute text, so what
+    // reaches `src` (and the authenticated fetch) is a URL we validated.
+    const target = toSafeImageUrl(planted);
+    if (!target) {
       image.removeAttribute(ATTACHMENT_IMAGE_ATTR);
       continue;
     }
