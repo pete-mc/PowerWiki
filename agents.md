@@ -116,6 +116,16 @@ to write a new file and repoint its references (see `src/drawio/`), unless the
 extension takes `vso.code_write` to push to the wiki repository directly — which
 would force every organization to re-approve the extension, so don't.
 
+**Anything read back out of the rendered DOM has not been sanitized.**
+`sanitizeRenderedHtml` runs once, before the HTML is inserted; the preview's
+enrichers then read attributes back out and write them to real sinks. DOMPurify
+leaves `data-*` attributes untouched (it validates URIs only on known
+attributes such as `src`/`href`), so a page author can plant any value in one
+with raw HTML. An enricher that copies such a value into a URL sink therefore
+bypasses the sanitizer — validate it first, as `enrichImages` does via
+`isSafeImageUrl` (`src/rendering/safeImageUrl.ts`). This was CodeQL's
+`js/xss-through-dom` finding; keep new enrichers to the same rule.
+
 **markdown-it 15 removed its deep export paths.** `markdown-it/lib/token.mjs`
 and `markdown-it/lib/rules_inline/state_inline.mjs` no longer resolve — the
 package only exports `.` and `./browser`. Import the types by name from the
