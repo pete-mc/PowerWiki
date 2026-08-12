@@ -126,6 +126,12 @@ bypasses the sanitizer — validate it first, as `enrichImages` does via
 `toSafeImageUrl` (`src/rendering/safeImageUrl.ts`). This was CodeQL's
 `js/xss-through-dom` finding; keep new enrichers to the same rule.
 
+Note the shape of that guard: it **returns the parsed value**, and the caller
+assigns *that*. A boolean `if (isSafe(x)) use(x)` does not fix the problem — the
+original untrusted string still reaches the sink, the check and the sink can
+drift apart later, and CodeQL keeps reporting it (correctly). Validate by
+replacing the value, not by asserting about it.
+
 **markdown-it 15 removed its deep export paths.** `markdown-it/lib/token.mjs`
 and `markdown-it/lib/rules_inline/state_inline.mjs` no longer resolve — the
 package only exports `.` and `./browser`. Import the types by name from the
