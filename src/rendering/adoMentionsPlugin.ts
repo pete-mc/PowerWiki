@@ -1,4 +1,4 @@
-import type MarkdownIt from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 
 export const MENTION_ATTR = "data-powerwiki-mention-id";
 export const MENTION_SELECTOR = `[${MENTION_ATTR}]`;

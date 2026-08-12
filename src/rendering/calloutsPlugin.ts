@@ -1,5 +1,4 @@
-import type MarkdownIt from "markdown-it";
-import type Token from "markdown-it/lib/token.mjs";
+import type { MarkdownIt, Token } from "markdown-it";
 
 /**
  * Renders GitHub-style callouts / admonitions written as a blockquote whose

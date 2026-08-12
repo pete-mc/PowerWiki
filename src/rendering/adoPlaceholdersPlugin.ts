@@ -1,5 +1,4 @@
-import type MarkdownIt from "markdown-it";
-import type Token from "markdown-it/lib/token.mjs";
+import type { MarkdownIt, Token } from "markdown-it";
 
 /**
  * Adds support for the Azure DevOps Wiki placeholder tags:
@@ -44,7 +43,9 @@ function collectHeadings(tokens: readonly Token[]): TocHeading[] {
       continue;
     }
 
-    const id = token.attrGet("id") ?? "";
+    // markdown-it 15 widened attribute values to `string | number`; a heading's
+    // anchor id is always textual, so normalise rather than thread the union on.
+    const id = String(token.attrGet("id") ?? "");
     const inline = tokens[i + 1];
     const text = inline && inline.type === "inline" ? inlinePlainText(inline) : "";
 
