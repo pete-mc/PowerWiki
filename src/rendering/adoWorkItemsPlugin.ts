@@ -1,5 +1,12 @@
-import type MarkdownIt from "markdown-it";
-import Token from "markdown-it/lib/token.mjs";
+import type { MarkdownIt, StateCore, Token } from "markdown-it";
+
+/**
+ * markdown-it 15 dropped its deep export paths, so `markdown-it/lib/token.mjs`
+ * no longer resolves and `Token` is only exported as a type. The parser still
+ * hands the constructor out on its state, which is the supported way to build
+ * tokens outside a `state.push`, so it is threaded through the helpers below.
+ */
+type TokenConstructor = StateCore["Token"];
 
 export const QUERY_TABLE_ATTR = "data-powerwiki-query-id";
 export const QUERY_TABLE_SELECTOR = `[${QUERY_TABLE_ATTR}]`;
@@ -64,12 +71,12 @@ export function adoWorkItemsPlugin(md: MarkdownIt): void {
         continue;
       }
 
-      token.children = replaceWorkItemReferences(token.children);
+      token.children = replaceWorkItemReferences(token.children, state.Token);
     }
   });
 }
 
-function replaceWorkItemReferences(tokens: Token[]): Token[] {
+function replaceWorkItemReferences(tokens: Token[], TokenCtor: TokenConstructor): Token[] {
   const replaced: Token[] = [];
   let linkDepth = 0;
 
@@ -91,13 +98,13 @@ function replaceWorkItemReferences(tokens: Token[]): Token[] {
       continue;
     }
 
-    replaced.push(...splitWorkItemReferences(token));
+    replaced.push(...splitWorkItemReferences(token, TokenCtor));
   }
 
   return replaced;
 }
 
-function splitWorkItemReferences(token: Token): Token[] {
+function splitWorkItemReferences(token: Token, TokenCtor: TokenConstructor): Token[] {
   const result: Token[] = [];
   const pattern = /(^|[^\w/])#([1-9]\d{0,9})(?=\b)/g;
   let cursor = 0;
@@ -110,10 +117,10 @@ function splitWorkItemReferences(token: Token): Token[] {
     const badgeStart = match.index + prefix.length;
 
     if (badgeStart > cursor) {
-      result.push(createTextToken(token.content.slice(cursor, badgeStart)));
+      result.push(createTextToken(token.content.slice(cursor, badgeStart), TokenCtor));
     }
 
-    result.push(createWorkItemBadge(id));
+    result.push(createWorkItemBadge(id, TokenCtor));
     cursor = match.index + fullMatch.length;
   }
 
@@ -122,20 +129,20 @@ function splitWorkItemReferences(token: Token): Token[] {
   }
 
   if (cursor < token.content.length) {
-    result.push(createTextToken(token.content.slice(cursor)));
+    result.push(createTextToken(token.content.slice(cursor), TokenCtor));
   }
 
   return result;
 }
 
-function createTextToken(content: string): Token {
-  const token = new Token("text", "", 0);
+function createTextToken(content: string, TokenCtor: TokenConstructor): Token {
+  const token = new TokenCtor("text", "", 0);
   token.content = content;
   return token;
 }
 
-function createWorkItemBadge(id: string): Token {
-  const wrapper = new Token("html_inline", "", 0);
+function createWorkItemBadge(id: string, TokenCtor: TokenConstructor): Token {
+  const wrapper = new TokenCtor("html_inline", "", 0);
   wrapper.content =
     `<a href="#" class="powerwiki-work-item-badge" ${WORK_ITEM_ATTR}="${id}" title="Open work item ${id}">#${id}</a>`;
 

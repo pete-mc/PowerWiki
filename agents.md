@@ -116,6 +116,17 @@ to write a new file and repoint its references (see `src/drawio/`), unless the
 extension takes `vso.code_write` to push to the wiki repository directly — which
 would force every organization to re-approve the extension, so don't.
 
+**markdown-it 15 removed its deep export paths.** `markdown-it/lib/token.mjs`
+and `markdown-it/lib/rules_inline/state_inline.mjs` no longer resolve — the
+package only exports `.` and `./browser`. Import the types by name from the
+package root instead (`import type { MarkdownIt, Token, StateInline } from
+"markdown-it"`). The root's *default* export is the callable constructor, while
+`MarkdownIt` itself is only a type, so a module needing both must import them
+separately (see `createMarkdownRenderer.ts`). `Token` has no runtime export at
+all: build tokens with the constructor the parser exposes as `state.Token` (see
+`adoWorkItemsPlugin.ts`). Attribute values are now typed `string | number`, so
+`attrGet`/`attrs[i][1]` need normalising where a string is required.
+
 Mermaid is loaded as a lazily-imported async chunk (`import("mermaid")` in `renderMermaidDiagrams`) to keep the initial hub bundle small, and webpack uses `output.publicPath: "auto"` so those chunks load from the extension's own CDN `dist/` path. Do not reintroduce a single-chunk limit (`LimitChunkCountPlugin`); if you change the webpack config, confirm Mermaid still renders in the iframe with `npm run pw:verify`.
 
 ## Documentation Expectations

@@ -1,4 +1,7 @@
-import MarkdownIt from "markdown-it";
+// The default export is the callable constructor; `MarkdownIt` itself is only
+// exported as a type in markdown-it 15, so the two are imported separately.
+import MarkdownItConstructor from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 import markdownItAnchor from "markdown-it-anchor";
 
 import { adoImageSizePlugin } from "./adoImageSizePlugin";
@@ -74,7 +77,7 @@ function mermaidContainerPlugin(md: MarkdownIt): void {
 }
 
 export function createMarkdownRenderer(): MarkdownIt {
-  const md = new MarkdownIt({
+  const md = new MarkdownItConstructor({
     breaks: false,
     html: true,
     linkify: true,
