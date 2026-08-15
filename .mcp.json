@@ -1,12 +1,10 @@
 {
   "mcpServers": {
     "azure-devops": {
-      "command": "cmd",
+      "comment": "Launched via `node` against the locally installed package rather than `npx`, so it starts identically on Windows, Linux, and macOS. A bare `npx` cannot be spawned on Windows (npx is a .cmd shim, and MCP clients spawn without a shell), which is why this previously needed a `cmd /c` wrapper that in turn broke on Linux. Running the installed copy also pins the version instead of letting `npx -y` fetch latest on every launch. Requires `npm ci`.",
+      "command": "node",
       "args": [
-        "/c",
-        "npx",
-        "-y",
-        "@azure-devops/mcp",
+        "node_modules/@azure-devops/mcp/dist/index.js",
         "dataversepowertools",
         "-a",
         "pat",

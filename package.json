@@ -55,6 +55,7 @@
     "turndown-plugin-gfm": "^1.0.2"
   },
   "devDependencies": {
+    "@azure-devops/mcp": "^2.9.0",
     "@types/katex": "^0.16.8",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
