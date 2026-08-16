@@ -7,3 +7,7 @@ mcps
 tools/pw/artifacts/
 screenshots/
 .claude/settings.local.json
+
+# Machine-specific agent notes; AGENTS.md is the tracked source of truth.
+CLAUDE.local.md
+AGENTS.local.md

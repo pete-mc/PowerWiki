@@ -2,9 +2,9 @@
 //
 // PowerWiki renders in a cross-origin iframe (gallerycdn.vsassets.io) inside
 // dev.azure.com. Playwright can reach into that frame (DOM, console, network),
-// which the Claude-in-Chrome extension cannot. Auth is handled once by signing
+// which a browser-extension automation agent cannot. Auth is handled once by signing
 // in to a dedicated persistent Chrome profile (see auth.mjs); every later run
-// reuses that profile's cookies. See tools/pw/README.md and agents.md.
+// reuses that profile's cookies. See tools/pw/README.md and AGENTS.md.
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";

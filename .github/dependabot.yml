@@ -29,7 +29,7 @@ updates:
           - minor
           - patch
     # Majors stay ungrouped: renderer upgrades are deliberate, fixture-backed
-    # changes (see agents.md), so they deserve their own PR and review.
+    # changes (see AGENTS.md), so they deserve their own PR and review.
     labels:
       - dependencies
 

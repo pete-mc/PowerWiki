@@ -15,7 +15,7 @@ Before implementing a feature, compare it with the current Azure DevOps Wiki
 behavior and document any intentional difference — especially differences that
 affect stored Markdown, links, attachments, permissions, or page history.
 
-`agents.md` in the repository root is the fuller architectural guide, including
+`AGENTS.md` in the repository root is the fuller architectural guide, including
 the module boundaries, theming rules, and hard-won API constraints. Read it
 before a non-trivial change.
 
