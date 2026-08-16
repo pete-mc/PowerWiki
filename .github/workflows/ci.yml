@@ -36,3 +36,18 @@ jobs:
       # Catches webpack/bundling breakage that the unit tests cannot see.
       - name: Build extension assets
         run: npm run build
+
+      # Package the real artefact on every run. Previously the build output was
+      # discarded, so manifest and packaging errors only surfaced at release time,
+      # when a bad version number is already spent. This also gives a .vsix that
+      # can be sideloaded into a test organisation from a pull request.
+      - name: Package the extension
+        run: npm run package:vsix
+
+      - name: Upload the .vsix
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerwiki-vsix-${{ github.sha }}
+          path: "*.vsix"
+          if-no-files-found: error
+          retention-days: 14

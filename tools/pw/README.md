@@ -1,6 +1,8 @@
 # PowerWiki Playwright harness
 
-Drives the published PowerWiki extension inside Azure DevOps for verification.
+Drives a published PowerWiki extension inside Azure DevOps for verification.
+`PW_EXTENSION` selects which one, so this works against the private dev and canary
+builds as well as the public release — see "Testing before release" in `AGENTS.md`.
 Playwright can reach into PowerWiki's cross-origin iframe (DOM, console,
 network) and save screenshots to disk — things a browser-extension automation
 agent cannot do for a cross-origin extension iframe, because it only ever sees
@@ -49,6 +51,8 @@ defaults to the maintainer's org; override with environment variables:
 | `PW_HUB` | *(derived)* | Full hub URL, for hosts that aren't `dev.azure.com` (e.g. Azure DevOps Server) |
 | `PW_TEAM_ID` | *(PowerWiki Team)* | Identity GUID used by the `@mention` check |
 | `PW_TEAM_NAME` | `PowerWiki Team` | Display name that GUID must resolve to |
+| `PW_EXTENSION` | `powerwiki` | Which published build to drive: `powerwiki-canary` for the pre-release canary, `powerwiki-dev` for the working tree via `baseUri` |
+| `PW_PUBLISHER` | `dataversepowertools` | Publisher segment of the contribution id |
 | `PW_CHANNEL` | `chrome` | Browser to drive. Left unset it uses your system Chrome, falling back to Playwright's own build if there is none. Set `chromium` to require that build; any other value (`msedge`, ...) must be installed or the run fails. |
 
 ```powershell

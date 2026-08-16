@@ -52,6 +52,20 @@ To iterate with a watching build:
 npm run dev
 ```
 
+Better, to actually *see* your change without an Azure DevOps organization:
+
+```bash
+npm run dev:sandbox
+```
+
+That serves the whole UI at <http://localhost:3000/dist/sandbox.html> against an
+in-memory wiki — no organization, no extension install, no sign-in — and rebuilds
+as you edit. Add `?theme=dark` to check the dark theme, or `?latency=800` to make
+loading states obvious. Rendering, the editors, the page tree, and export can all
+be developed here. Attachments, follow, work-item enrichment, and `@mentions` need
+real host services, so they degrade rather than work; the seed content shows what
+that looks like.
+
 ## Where code goes
 
 Keep responsibilities separated — do not mix UI, API access, rendering, and
@@ -79,9 +93,14 @@ colors are acceptable only for semantic states such as destructive actions.
 
 ## End-to-end verification (maintainers)
 
-PowerWiki runs inside a cross-origin iframe, and only the published Marketplace
-build runs in a real organization. The Playwright harness in `tools/pw/` drives
-a real browser against that iframe:
+PowerWiki runs inside a cross-origin iframe, so a real browser is needed to assert
+on what it renders. The Playwright harness in `tools/pw/` does that.
+
+This no longer requires a public release. Maintainers publish two *private*
+extensions — a `powerwiki-dev` build whose assets are served from localhost, and a
+`powerwiki-canary` build published automatically from `main` — and verify against
+those. See "Testing before release" in `AGENTS.md`; the public Marketplace is the
+last step, never the test bed.
 
 ```bash
 npm run pw:auth
@@ -95,12 +114,16 @@ npm run pw:verify
 sign in to Azure DevOps once. That profile holds session cookies — it lives
 outside the repository and must never be committed.
 
-Because this harness targets a *published* build against your own organization,
-it cannot run in CI and outside contributors generally cannot run it. That is
-expected: open your pull request with unit tests passing, and a maintainer will
-run the end-to-end pass before release. If you add a feature worth guarding,
-add an assertion to `tools/pw/verify.mjs` anyway so the maintainer pass covers
-it.
+Because the harness needs an interactive Azure DevOps sign-in, it cannot run in
+CI and outside contributors generally cannot run it. That is expected: develop
+against `npm run dev:sandbox`, open your pull request with unit tests passing, and
+a maintainer will run the end-to-end pass before release. If you add a feature
+worth guarding, add an assertion to `tools/pw/verify.mjs` anyway so the maintainer
+pass covers it.
+
+CI packages the `.vsix` on every run and uploads it as a build artifact, so a
+maintainer can sideload your pull request into a test organization without
+publishing anything.
 
 ## Pull requests
 

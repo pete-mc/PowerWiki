@@ -9,21 +9,30 @@ import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
-// Which Azure DevOps organization/project to drive. The harness targets the
-// *published* Marketplace build, so point it at any org that has PowerWiki
-// installed and a wiki to read:
+// Which Azure DevOps organization/project to drive, and which published
+// extension. Point it at any org that has the extension installed and a wiki to
+// read:
 //
 //   PW_ORG=myorg PW_PROJECT=myproject npm run pw:verify
 //
-// PW_HUB overrides the whole URL for hosts that don't match the dev.azure.com
-// shape (e.g. Azure DevOps Server). The publisher segment is fixed because the
-// contribution id comes from the published extension, not from your org.
+// PW_EXTENSION selects which build to verify. The hub URL contains the
+// contribution id, which is `<publisher>.<extension-id>.<contribution>`, so the
+// private dev and canary builds live at different URLs from the public one:
+//
+//   npm run pw:verify                        # public powerwiki
+//   PW_EXTENSION=powerwiki-canary npm run pw:verify
+//   PW_EXTENSION=powerwiki-dev    npm run pw:verify   # working tree, via baseUri
+//
+// PW_HUB still overrides the whole URL for hosts that don't match the
+// dev.azure.com shape (e.g. Azure DevOps Server).
 const ORG = process.env.PW_ORG ?? "dataversepowertools";
 const PROJECT = process.env.PW_PROJECT ?? "PowerWiki";
+const PUBLISHER = process.env.PW_PUBLISHER ?? "dataversepowertools";
+const EXTENSION = process.env.PW_EXTENSION ?? "powerwiki";
 
 export const HUB =
   process.env.PW_HUB ??
-  `https://dev.azure.com/${ORG}/${PROJECT}/_apps/hub/dataversepowertools.powerwiki.wiki`;
+  `https://dev.azure.com/${ORG}/${PROJECT}/_apps/hub/${PUBLISHER}.${EXTENSION}.wiki`;
 
 // Which browser binary to drive. Defaults to the system Chrome install, which
 // is what a maintainer desktop has. Set PW_CHANNEL=chromium on a machine with
@@ -47,6 +56,10 @@ export async function launch({ headless = false } = {}) {
     headless,
     viewport: { width: 1600, height: 1000 },
     args: ["--hide-crash-restore-bubble"],
+    // The dev extension (PW_EXTENSION=powerwiki-dev) loads its assets from the
+    // local HTTPS dev server, which uses a self-signed certificate. Without this
+    // the iframe fails to load and the failure looks like a missing extension.
+    ignoreHTTPSErrors: true,
   };
   // The Playwright-managed build is selected by omitting channel entirely, not
   // by passing "chromium" as a channel name.
