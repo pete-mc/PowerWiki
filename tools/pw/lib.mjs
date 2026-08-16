@@ -25,6 +25,14 @@ export const HUB =
   process.env.PW_HUB ??
   `https://dev.azure.com/${ORG}/${PROJECT}/_apps/hub/dataversepowertools.powerwiki.wiki`;
 
+// Which browser binary to drive. Defaults to the system Chrome install, which
+// is what a maintainer desktop has. Set PW_CHANNEL=chromium on a machine with
+// no system Chrome (the headless Linux VM) to drive the Playwright-managed
+// build in ~/.cache/ms-playwright instead; that cache is namespaced per
+// Playwright release, so projects on different versions can share it safely.
+const CHANNEL = process.env.PW_CHANNEL || "chrome";
+const CHANNEL_IS_EXPLICIT = Boolean(process.env.PW_CHANNEL);
+
 // A dedicated profile OUTSIDE the repo (it holds session cookies — never commit
 // it). Non-default dir is also required: Chrome blocks remote debugging on the
 // real default profile, and App-Bound Encryption blocks copying its cookies.
@@ -33,14 +41,35 @@ export const ARTIFACTS_DIR = path.join(import.meta.dirname, "artifacts");
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Launches Chrome (system install, via channel) against the persistent profile. */
+/** Launches the browser (system Chrome, or PW_CHANNEL) against the persistent profile. */
 export async function launch({ headless = false } = {}) {
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, {
-    channel: "chrome",
+  const options = {
     headless,
     viewport: { width: 1600, height: 1000 },
     args: ["--hide-crash-restore-bubble"],
-  });
+  };
+  // The Playwright-managed build is selected by omitting channel entirely, not
+  // by passing "chromium" as a channel name.
+  const requested = CHANNEL === "chromium" ? options : { ...options, channel: CHANNEL };
+
+  let context;
+  try {
+    context = await chromium.launchPersistentContext(PROFILE_DIR, requested);
+  } catch (error) {
+    // On a machine with no system Chrome (the headless Linux VM, CI) Playwright
+    // fails here advising `npx playwright install chrome`, which on Linux is a
+    // global apt install. Prefer its own per-version build from
+    // `npx playwright install chromium` instead, which several projects can
+    // share without fighting over one auto-updating system browser.
+    // Only the default falls back. A channel you asked for by name fails loudly,
+    // rather than quietly testing against a browser you did not choose.
+    const missing = /is not found|Executable doesn't exist/.test(error.message);
+    if (CHANNEL_IS_EXPLICIT || !missing) {
+      throw error;
+    }
+    console.warn(`No "${CHANNEL}" install found - using the Playwright-managed Chromium.`);
+    context = await chromium.launchPersistentContext(PROFILE_DIR, options);
+  }
   const page = context.pages()[0] ?? (await context.newPage());
   // Callers attach their own dialog handler (verify needs to answer prompts with
   // specific values), so none is registered here.

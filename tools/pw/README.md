@@ -12,6 +12,19 @@ npm install            # installs playwright-core (uses your system Chrome)
 npm run pw:auth        # opens Chrome; sign in to Azure DevOps once
 ```
 
+On a machine with **no system Chrome** — a headless Linux box, or CI — install
+Playwright's own browser once instead:
+
+```bash
+npx playwright install chromium
+```
+
+The harness then picks it up with no further configuration. That build lands in
+a per-version cache (`~/.cache/ms-playwright/chromium-<build>`), so several
+projects on one machine can share it without competing over a single
+auto-updating system browser. Note that a headless machine still cannot complete
+the interactive sign-in below without a virtual display.
+
 `pw:auth` launches a real Chrome window against a dedicated persistent profile
 at `~/.powerwiki-pw/chrome-profile` and waits for you to complete Microsoft
 sign-in (or for Windows SSO to auto-complete). The session persists there, so
@@ -35,6 +48,7 @@ defaults to the maintainer's org; override with environment variables:
 | `PW_HUB` | *(derived)* | Full hub URL, for hosts that aren't `dev.azure.com` (e.g. Azure DevOps Server) |
 | `PW_TEAM_ID` | *(PowerWiki Team)* | Identity GUID used by the `@mention` check |
 | `PW_TEAM_NAME` | `PowerWiki Team` | Display name that GUID must resolve to |
+| `PW_CHANNEL` | `chrome` | Browser to drive. Left unset it uses your system Chrome, falling back to Playwright's own build if there is none. Set `chromium` to require that build; any other value (`msedge`, ...) must be installed or the run fails. |
 
 ```powershell
 $env:PW_ORG="myorg"; $env:PW_PROJECT="myproject"; npm run pw:verify
