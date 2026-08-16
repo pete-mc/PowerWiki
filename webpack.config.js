@@ -1,9 +1,16 @@
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const path = require("path");
 
-module.exports = {
+module.exports = (_env, argv) => ({
   entry: {
-    powerwiki: path.resolve(__dirname, "src/extension/main.tsx")
+    powerwiki: path.resolve(__dirname, "src/extension/main.tsx"),
+    // The local sandbox (src/sandbox/main.tsx) runs the UI against an in-memory
+    // wiki with no Azure DevOps SDK. It is a development tool, so it is left out
+    // of production builds entirely and never reaches the packaged extension —
+    // `files` in vss-extension.json publishes all of dist/.
+    ...(argv.mode === "production"
+      ? {}
+      : { sandbox: path.resolve(__dirname, "src/sandbox/main.tsx") })
   },
   output: {
     clean: true,
@@ -55,7 +62,13 @@ module.exports = {
       patterns: [
         {
           from: path.resolve(__dirname, "public"),
-          to: path.resolve(__dirname, "dist")
+          to: path.resolve(__dirname, "dist"),
+          globOptions: {
+            // sandbox.html loads sandbox.js, which only exists in development
+            // builds. Copying it into a production build would publish a dead
+            // page inside the extension.
+            ignore: argv.mode === "production" ? ["**/sandbox.html"] : []
+          }
         },
         {
           from: path.resolve(__dirname, "node_modules/monaco-editor/min/vs"),
@@ -64,4 +77,4 @@ module.exports = {
       ]
     })
   ]
-};
+});

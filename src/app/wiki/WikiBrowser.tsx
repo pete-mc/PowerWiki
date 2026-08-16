@@ -21,6 +21,8 @@ import {
 import { AzureDevOpsIdentityClient } from "../../identity/AzureDevOpsIdentityClient";
 import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
 import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
+import type { WikiRepositoryClient } from "../../wiki/WikiRepositoryClient";
+import { resolveWithinTimeout } from "./hostServiceTimeout";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "../../wiki/WikiComment";
@@ -55,6 +57,14 @@ interface WikiBrowserProps {
   readonly projectId?: string;
   readonly projectName?: string;
   readonly userId?: string;
+  /**
+   * Wiki data access. Defaults to the real Azure DevOps REST client for the
+   * current project; the local sandbox injects an in-memory fake so the UI can
+   * run with no organization and no sign-in. Only this client is injectable —
+   * follow, work-item, and identity access go through host services that are
+   * absent outside a real hub, so those features degrade rather than being faked.
+   */
+  readonly wikiClient?: WikiRepositoryClient;
 }
 
 // The page-tree rail is user-resizable so long page names stay readable. The
@@ -103,12 +113,26 @@ const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 // only fetch child pages for pages that actually use it.
 const TOSP_PLACEHOLDER = /\[\[_?TOSP_?\]\]/i;
 
-async function getNavigationService(): Promise<IHostNavigationService | undefined> {
-  try {
-    return await SDK.getService<IHostNavigationService>(HOST_NAVIGATION_SERVICE_ID);
-  } catch {
-    return undefined;
-  }
+// A real host answers in milliseconds; this only has to be short enough that a
+// stalled host degrades to hash-based navigation rather than hanging.
+const HOST_NAVIGATION_TIMEOUT_MS = 3000;
+
+/**
+ * The host navigation service, or undefined when the host does not supply one.
+ *
+ * `SDK.getService()` only *rejects* on an explicit failure. If the host handshake
+ * never completes — which is the normal case outside a real hub iframe, such as
+ * the local sandbox — the promise simply never settles. This call is on the
+ * critical path to loading the wiki (see the `navigationReady` gate below), so an
+ * unbounded await shows a permanent "Loading wiki." with no error and no way out,
+ * even though the caller already knows how to fall back to `window.location.hash`.
+ * Time out so that fallback is actually reachable.
+ */
+function getNavigationService(): Promise<IHostNavigationService | undefined> {
+  return resolveWithinTimeout(
+    SDK.getService<IHostNavigationService>(HOST_NAVIGATION_SERVICE_ID),
+    HOST_NAVIGATION_TIMEOUT_MS
+  );
 }
 
 function safeDecode(value: string): string {
@@ -336,7 +360,8 @@ export function WikiBrowser({
   organizationName,
   projectId,
   projectName,
-  userId
+  userId,
+  wikiClient: injectedWikiClient
 }: WikiBrowserProps) {
   const [activePage, setActivePage] = useState<WikiPage>();
   // Heading slug to scroll to once the active page renders (from an &anchor=
@@ -416,8 +441,11 @@ export function WikiBrowser({
   const lastNavigatedPathRef = useRef<string | undefined>(undefined);
 
   const wikiClient = useMemo(() => {
+    if (injectedWikiClient) {
+      return injectedWikiClient;
+    }
     return projectName ? new AzureDevOpsWikiRepositoryClient(projectName) : undefined;
-  }, [projectName]);
+  }, [injectedWikiClient, projectName]);
   const followClient = useMemo(() => new WikiFollowClient(), []);
   const workItemClient = useMemo(() => {
     return projectName ? new AzureDevOpsWorkItemClient(projectName) : undefined;
