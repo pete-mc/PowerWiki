@@ -243,6 +243,33 @@ The HTTPS server generates a self-signed localhost certificate on first run
 (`tools/serve/`); accept it once in your browser. `npm run pw:verify` sets
 `ignoreHTTPSErrors`, so the unattended harness never sees the interstitial.
 
+#### The browser must be allowed to reach the local network
+
+Chrome blocks a **public** origin from loading a subresource on the **local
+network**, and `dev.azure.com` embedding `https://localhost:3000` is exactly that
+shape. Left alone, the hub iframe fails with
+`net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS` and the blocked frame reads
+"The connection is blocked because it was initiated by a public page to connect
+to devices or servers on your local network."
+
+`npm run pw:verify` handles this by launching with
+`--disable-features=LocalNetworkAccessChecks`. **In an ordinary browser you must
+allow local network access for the site yourself** — this layer does not work
+without it.
+
+The symptom is unhelpful: the hub shows only "PowerWiki (Dev) is taking longer
+than expected to load". Nothing about the dev server looks wrong when this
+happens, because nothing is — it serves the HTML and chunks with permissive CORS
+and no frame-blocking headers, and the same browser loads that URL fine in a
+top-level tab. Diagnose it from the network panel, not the hub.
+
+**A stopped dev server looks identical.** The dev build has no
+`fallbackBaseUri`, so nothing sits behind `https://localhost:3000`. The canary
+carries both a CDN `baseUri` *and* a `fallbackBaseUri` pointing at a
+`privateasset/<token>` URL — and loads from the fallback, because a private build
+is not served from the public CDN. Check `npm run dev:extension` is actually
+running before diagnosing anything else.
+
 This catches everything the sandbox cannot except problems in the packaged
 artifact itself, since `baseUri` bypasses the packaged files.
 
