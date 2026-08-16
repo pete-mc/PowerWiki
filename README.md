@@ -98,6 +98,12 @@ For end-to-end verification against the published extension inside Azure DevOps,
 use the Playwright harness (`npm run pw:verify`) — see `tools/pw/README.md` and
 the "Verifying in the browser" section of `AGENTS.md`.
 
+To run the UI locally with no Azure DevOps organization at all — no install, no
+sign-in — use `npm run dev:sandbox`, which serves the whole interface against an
+in-memory wiki at <http://localhost:3000/dist/sandbox.html>. See "Testing before
+release" in `AGENTS.md` for how that fits alongside the private dev and canary
+builds used before a public release.
+
 Create a VSIX package:
 
 ```bash

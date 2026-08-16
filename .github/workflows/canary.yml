@@ -1,0 +1,122 @@
+name: Canary
+
+# Publishes a PRIVATE canary build of the extension on every push to main, so a
+# change can be exercised in a real Azure DevOps organization *before* the public
+# release. The public Marketplace has no staged rollout for extension updates —
+# every installed organization auto-updates, and there are 20+ of them — so a
+# separate private extension is the only way to get a pre-production ring.
+#
+# The canary is a different extension id (`powerwiki-canary`) shared only with the
+# organizations named below. It never touches the public `powerwiki` listing.
+#
+# Verification is deliberately NOT here: the Playwright harness needs an
+# interactive Azure DevOps sign-in and cannot run in CI (see CONTRIBUTING.md).
+# After this workflow succeeds, run locally:
+#
+#   PW_EXTENSION=powerwiki-canary npm run pw:verify
+
+on:
+  push:
+    branches: [main]
+  # Allow a canary to be cut deliberately without a push.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer canary supersedes an older one; never publish two at once, because
+  # the Marketplace rejects a duplicate version and the run order is not stable.
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Publish the private canary
+    runs-on: ubuntu-latest
+    # Same environment as the release, so the publisher token and any approval
+    # rules are configured in exactly one place.
+    environment: marketplace
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and unit tests
+        run: npm test
+
+      # The canary has its own extension id, so its version stream is independent
+      # of the public one. github.run_number gives a monotonic build component,
+      # which matters because the Marketplace refuses to republish a version.
+      - name: Generate the canary manifest
+        run: npm run manifest:canary -- --build "${{ github.run_number }}"
+
+      - name: Show what will be published
+        run: |
+          node -e "
+            const m = require('./vss-extension.canary.json');
+            console.log('id      =', m.id);
+            console.log('version =', m.version);
+            console.log('public  =', m.public);
+            if (m.public !== false) {
+              console.error('::error::The canary manifest is not private. Refusing to publish.');
+              process.exit(1);
+            }
+            if (m.id === require('./vss-extension.json').id) {
+              console.error('::error::The canary id matches the public extension. Refusing to publish.');
+              process.exit(1);
+            }
+          "
+
+      - name: Build and package
+        run: |
+          npm run build
+          npx tfx-cli extension create --manifest-globs vss-extension.canary.json
+
+      - name: Locate the .vsix
+        id: vsix
+        run: echo "path=$(ls dataversepowertools.powerwiki-canary-*.vsix | head -1)" >> "$GITHUB_OUTPUT"
+
+      # --share-with is what actually limits a private extension to named
+      # organizations. Publishing without it leaves the build unshared and
+      # therefore uninstallable, which looks like a broken canary.
+      - name: Publish the canary to the Marketplace (private)
+        env:
+          TFX_TOKEN: ${{ secrets.ADO_MARKETPLACE_PAT }}
+        run: |
+          if [ -z "$TFX_TOKEN" ]; then
+            echo "::error::ADO_MARKETPLACE_PAT is not set."
+            exit 1
+          fi
+          npx tfx-cli extension publish \
+            --vsix "${{ steps.vsix.outputs.path }}" \
+            --share-with dataversepowertools \
+            --token "$TFX_TOKEN" \
+            --no-wait-validation
+
+      - name: Upload the canary .vsix
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerwiki-canary-${{ github.run_number }}
+          path: "*.vsix"
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Canary published"
+            echo
+            echo "Verify it in a real organization before releasing:"
+            echo
+            echo '```bash'
+            echo 'PW_EXTENSION=powerwiki-canary npm run pw:verify'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -189,12 +189,92 @@ Update `README.md` when the project gains concrete setup, build, packaging, or p
 
 When implementing features, document any difference from the built-in Azure DevOps Wiki behavior, especially if the difference affects stored Markdown, links, attachments, permissions, or page history.
 
+## Testing before release
+
+**Do not publish to the public Marketplace in order to test a change.** The
+Marketplace has no staged rollout for extension updates: every organization that
+has installed PowerWiki auto-updates within minutes, there are 20+ of them, and a
+version number can never be republished. Publishing publicly is a production
+deployment, and it is the *last* step, not the first.
+
+Three layers, cheapest first. Use the cheapest one that can actually catch the
+class of bug you are working on.
+
+### 1. The local sandbox — no Azure DevOps at all
+
+```bash
+npm run dev:sandbox        # http://localhost:3000/dist/sandbox.html
+```
+
+Runs the whole UI against an in-memory wiki (`src/sandbox/`), with no
+organization, no extension install, and no sign-in. Rebuilds on change. Append
+`?theme=dark` to check the dark theme, or `?latency=800` to make loading states
+obvious.
+
+This is the right loop for rendering, the editors, the page tree, export, and
+theming — most of the codebase. It cannot catch REST-contract drift, permission
+errors, host-service behaviour, or CDN problems, because it fakes the wiki client
+and skips the extension SDK entirely. Follow, work-item enrichment, and
+`@mention` resolution go through host services that are not faked, so they
+degrade; the seed content includes examples so you can see how.
+
+### 2. The dev extension — real Azure DevOps, working-tree code, no publishing
+
+A private extension (`powerwiki-dev`) whose manifest sets
+`"baseUri": "https://localhost:3000"`. Azure DevOps then resolves the hub's
+assets against your machine instead of the CDN, so the code running inside a real
+hub is your working tree. **Publish it once**, then iterate freely:
+
+```bash
+npm run publish:dev        # once, and again only if the manifest changes
+npm run dev:extension      # serves dist/ over HTTPS, rebuilding on change
+```
+
+The HTTPS server generates a self-signed localhost certificate on first run
+(`tools/serve/`); accept it once in your browser. `npm run pw:verify` sets
+`ignoreHTTPSErrors`, so the unattended harness never sees the interstitial.
+
+This catches everything the sandbox cannot except problems in the packaged
+artifact itself, since `baseUri` bypasses the packaged files.
+
+### 3. The canary — the real packaged artifact, in a real organization
+
+`.github/workflows/canary.yml` publishes a private `powerwiki-canary` on every
+push to `main`, shared only with the `dataversepowertools` organization, versioned
+`<base>.<run_number>`. Verify it, then promote:
+
+```bash
+PW_EXTENSION=powerwiki-canary npm run pw:verify
+```
+
+The public release then promotes a build that has already run in real Azure
+DevOps, rather than being the first time anyone has seen it.
+
+### Rules for the variant extensions
+
+- They **must** use a different extension `id` from the public `powerwiki`.
+  Publisher + id is the extension's identity, so publishing a private build under
+  the public id would replace the public listing that every installed
+  organization updates from. `tools/release/variant-manifest.mjs` derives the
+  variant manifests from `vss-extension.json` so they cannot drift, and the canary
+  workflow refuses to publish if the id collides or `public` is not `false`.
+- `--share-with` is what actually restricts a private extension to named
+  organizations. Note that neither `"public": false` nor `galleryFlags` appears
+  anywhere in the packaged `.vsix` — visibility is applied at publish time — so
+  **confirm in the publisher portal that a newly created variant really is private
+  the first time you publish it.** It cannot be verified from the package.
+- All three contributions are relabelled ("Power Wiki (Dev)", "(Canary)"), because
+  an organization with more than one build installed otherwise shows several
+  identical "Power Wiki" menu entries with no way to tell them apart.
+- A variant requests the same `scopes`, so installing it needs the same one-time
+  admin consent.
+
 ## Publishing
 
-After every set of changes, always publish to the marketplace. **Publishing is
-automated: pushing a version tag triggers `.github/workflows/release.yml`, which
-packages the extension, publishes it to the Marketplace, and attaches the `.vsix`
-to a GitHub Release.**
+Publishing is the final step, after the change has been verified through the
+layers above. **It is automated: pushing a version tag triggers
+`.github/workflows/release.yml`, which packages the extension, publishes it to the
+Marketplace, and attaches the `.vsix` to a GitHub Release.**
 
 1. Increment only the patch version (the third number) in both `package.json` and `vss-extension.json`. Never change the major or minor version.
 2. Run `npm test`.
@@ -246,11 +326,22 @@ instead — Playwright treats the cross-origin iframe as a first-class frame, so
 can assert on the real rendered DOM, capture iframe console/network, and save
 screenshots locally. Prefer it for verifying rendering and editing behavior.
 
-Because the extension only runs from the published Marketplace build, verify a
-change by publishing it first (see Publishing). The org auto-updates to the new
-version within a few minutes; a change that alters `scopes` instead pauses at
-"Pending review" until an org admin approves it in Organization settings →
-Extensions.
+The harness runs against whichever build you point it at, so it does **not**
+require a public release — see "Testing before release":
+
+```bash
+npm run pw:verify                                  # public powerwiki
+PW_EXTENSION=powerwiki-canary npm run pw:verify    # the pre-release canary
+PW_EXTENSION=powerwiki-dev    npm run pw:verify    # working tree, via baseUri
+```
+
+`PW_EXTENSION` works because the hub URL embeds the contribution id
+(`<publisher>.<extension-id>.wiki`), so each build has its own URL. `PW_ORG`,
+`PW_PROJECT`, `PW_PUBLISHER`, and `PW_HUB` override the rest.
+
+A change that alters `scopes` pauses at "Pending review" until an org admin
+approves it in Organization settings → Extensions. That applies to the private
+variants too, so expect one consent step the first time each is installed.
 
 Setup and use (details in `tools/pw/README.md`):
 
