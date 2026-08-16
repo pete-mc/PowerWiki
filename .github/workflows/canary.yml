@@ -58,22 +58,9 @@ jobs:
       - name: Generate the canary manifest
         run: npm run manifest:canary -- --build "${{ github.run_number }}"
 
-      - name: Show what will be published
-        run: |
-          node -e "
-            const m = require('./vss-extension.canary.json');
-            console.log('id      =', m.id);
-            console.log('version =', m.version);
-            console.log('public  =', m.public);
-            if (m.public !== false) {
-              console.error('::error::The canary manifest is not private. Refusing to publish.');
-              process.exit(1);
-            }
-            if (m.id === require('./vss-extension.json').id) {
-              console.error('::error::The canary id matches the public extension. Refusing to publish.');
-              process.exit(1);
-            }
-          "
+      # Shared with publish-dev.yml so there is exactly one copy of the rule.
+      - name: Refuse to publish unless it is private
+        run: node tools/release/assert-private.mjs vss-extension.canary.json
 
       - name: Build and package
         run: |

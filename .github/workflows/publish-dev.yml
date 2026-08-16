@@ -1,0 +1,117 @@
+name: Publish dev extension
+
+# Publishes the PRIVATE `powerwiki-dev` extension, whose manifest points `baseUri`
+# at a maintainer's local dev server. Azure DevOps then loads the hub's assets from
+# that machine, so a real hub runs your working tree with no publishing per change.
+#
+# Run this ONCE (and again only if the manifest, scopes, or baseUri change). The
+# day-to-day loop afterwards is just:
+#
+#   npm run dev:extension        # serves dist/ over HTTPS, rebuilding on change
+#
+# This is a workflow rather than a local `npm run publish:dev` so the publisher
+# token never has to leave GitHub — it reuses the same ADO_MARKETPLACE_PAT and
+# `marketplace` environment as the release. Nothing about publishing PowerWiki
+# needs a Marketplace token on a developer machine.
+#
+# It is manual-only on purpose: unlike the canary, this build is pinned to one
+# person's localhost and there is no reason to republish it on every push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_uri:
+        description: "Origin serving dist/ (must be HTTPS; Azure DevOps blocks mixed content)"
+        required: true
+        default: "https://localhost:3000"
+      share_with:
+        description: "Comma-separated organizations to share the private build with"
+        required: true
+        default: "dataversepowertools"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-dev
+  cancel-in-progress: false
+
+jobs:
+  publish-dev:
+    name: Publish the private dev extension
+    runs-on: ubuntu-latest
+    environment: marketplace
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A mixed-content baseUri fails inside the hub iframe in a way that looks
+      # like a broken extension rather than a bad input, so reject it up front.
+      - name: Validate the baseUri
+        run: |
+          case "${{ inputs.base_uri }}" in
+            https://*) echo "baseUri = ${{ inputs.base_uri }}" ;;
+            *) echo "::error::baseUri must start with https:// (got '${{ inputs.base_uri }}')"; exit 1 ;;
+          esac
+
+      - name: Typecheck and unit tests
+        run: npm test
+
+      - name: Generate the dev manifest
+        run: npm run manifest:dev -- --base-uri "${{ inputs.base_uri }}"
+
+      # Same guard the canary uses: refuses to publish anything that is not
+      # private or that collides with the public extension id.
+      - name: Refuse to publish unless it is private
+        run: node tools/release/assert-private.mjs vss-extension.dev.json
+
+      # baseUri means these assets are never actually served from the package, but
+      # the manifest still declares `files`, so a build has to exist to package.
+      - name: Build and package
+        run: |
+          npm run build
+          npx tfx-cli extension create --manifest-globs vss-extension.dev.json
+
+      - name: Locate the .vsix
+        id: vsix
+        run: echo "path=$(ls dataversepowertools.powerwiki-dev-*.vsix | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish (private, shared)
+        env:
+          TFX_TOKEN: ${{ secrets.ADO_MARKETPLACE_PAT }}
+        run: |
+          if [ -z "$TFX_TOKEN" ]; then
+            echo "::error::ADO_MARKETPLACE_PAT is not set on the marketplace environment."
+            exit 1
+          fi
+          npx tfx-cli extension publish \
+            --vsix "${{ steps.vsix.outputs.path }}" \
+            --share-with "${{ inputs.share_with }}" \
+            --token "$TFX_TOKEN" \
+            --no-wait-validation
+
+      - name: Next steps
+        run: |
+          {
+            echo "### Dev extension published"
+            echo
+            echo "\`powerwiki-dev\` is shared with \`${{ inputs.share_with }}\`, serving from \`${{ inputs.base_uri }}\`."
+            echo
+            echo "**Confirm it is actually private** in the publisher portal. Visibility is"
+            echo "applied at publish time and does not appear anywhere in the packaged .vsix,"
+            echo "so it cannot be verified from the artifact."
+            echo
+            echo "Then install it in the organization (one-time scope consent), and run:"
+            echo
+            echo '```bash'
+            echo 'npm run dev:extension'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
