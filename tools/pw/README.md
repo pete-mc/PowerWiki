@@ -2,8 +2,9 @@
 
 Drives the published PowerWiki extension inside Azure DevOps for verification.
 Playwright can reach into PowerWiki's cross-origin iframe (DOM, console,
-network) and save screenshots to disk — things the Claude-in-Chrome browser
-tools can't do for a cross-origin extension iframe.
+network) and save screenshots to disk — things a browser-extension automation
+agent cannot do for a cross-origin extension iframe, because it only ever sees
+the top frame.
 
 ## One-time setup
 

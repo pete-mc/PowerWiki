@@ -8,7 +8,7 @@ body:
         PowerWiki keeps the Azure DevOps Wiki as the system of record and stores
         pages as portable Markdown. Requests that would need a proprietary page
         format, a separate backing store, or a backend service are out of scope
-        — see `agents.md` for the full constraints.
+        — see `AGENTS.md` for the full constraints.
 
   - type: textarea
     id: problem

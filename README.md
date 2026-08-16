@@ -96,7 +96,7 @@ boundary, so CommonMark/GFM and Mermaid upgrades stay deliberate.
 
 For end-to-end verification against the published extension inside Azure DevOps,
 use the Playwright harness (`npm run pw:verify`) — see `tools/pw/README.md` and
-the "Verifying in the browser" section of `agents.md`.
+the "Verifying in the browser" section of `AGENTS.md`.
 
 Create a VSIX package:
 
@@ -310,7 +310,7 @@ Contributions are welcome. Contributions should preserve the core principle of P
 
 Before implementing a feature, compare it with the current Azure DevOps Wiki behavior and document any intentional differences.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and pull request details, and `agents.md` for the fuller architectural guide. You do not need Marketplace publisher access to develop or test PowerWiki — only `npm install` and Node.js 24.15+.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and pull request details, and `AGENTS.md` for the fuller architectural guide. You do not need Marketplace publisher access to develop or test PowerWiki — only `npm install` and Node.js 24.15+.
 
 Bugs and feature requests belong in [GitHub Issues](https://github.com/pete-mc/PowerWiki/issues).
 

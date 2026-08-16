@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # agents.md requires bumping the version in BOTH manifests. Forgetting one
+      # AGENTS.md requires bumping the version in BOTH manifests. Forgetting one
       # is the classic slip, and the Marketplace refuses to republish a version,
       # so catch the mismatch before anything is uploaded.
       - name: Verify tag matches both manifests

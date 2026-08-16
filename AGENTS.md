@@ -2,6 +2,21 @@
 
 This repository is for PowerWiki, an Azure DevOps extension that adds a Power Wiki menu experience alongside the default Azure DevOps Wiki while continuing to use the standard Azure DevOps Wiki repositories as the backing store.
 
+## Agent instruction files
+
+This file is the authoritative guide for **every** AI agent and human working in
+this repository, and it is meant to stay tool-neutral. `AGENTS.md` is the
+cross-tool convention, so keep the guidance here and add per-tool files only as
+thin pointers to it — `CLAUDE.md` is exactly that and holds no guidance of its
+own. Duplicated instructions drift apart, and then whichever copy an agent
+happens to load wins.
+
+Machine-specific notes (provisioned tool versions, local credential paths, how a
+browser or display is launched on one box) do not belong here. They go in an
+untracked `CLAUDE.local.md` / `AGENTS.local.md`, which `.gitignore` covers. The
+test: if a note would also be true on another contributor's machine, it belongs
+in this file.
+
 ## Where things live
 
 | Concern | Location |
@@ -157,6 +172,16 @@ Node 20, which is EOL). This affects contributors and CI only — the extension
 itself runs in the browser.
 
 Mermaid is loaded as a lazily-imported async chunk (`import("mermaid")` in `renderMermaidDiagrams`) to keep the initial hub bundle small, and webpack uses `output.publicPath: "auto"` so those chunks load from the extension's own CDN `dist/` path. Do not reintroduce a single-chunk limit (`LimitChunkCountPlugin`); if you change the webpack config, confirm Mermaid still renders in the iframe with `npm run pw:verify`.
+
+## Build and test gating
+
+`npm run build` **will not fail on a type error.** The bundle is transpiled by
+esbuild-loader, which strips types without checking them; `tsc` runs separately.
+Always gate on `npm test` (which runs `tsc --noEmit` and then Vitest), never on a
+successful build.
+
+The two webpack warnings about entrypoint/asset size (~665 KiB) are known and
+expected. They are not a failure.
 
 ## Documentation Expectations
 
