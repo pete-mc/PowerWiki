@@ -223,12 +223,21 @@ degrade; the seed content includes examples so you can see how.
 A private extension (`powerwiki-dev`) whose manifest sets
 `"baseUri": "https://localhost:3000"`. Azure DevOps then resolves the hub's
 assets against your machine instead of the CDN, so the code running inside a real
-hub is your working tree. **Publish it once**, then iterate freely:
+hub is your working tree.
+
+Publish it **once** by running the *Publish dev extension* workflow
+(Actions → Publish dev extension → Run workflow), which takes the `baseUri` and the
+organizations to share with as inputs. Publishing from CI means the Marketplace
+token never has to exist on a developer machine — nothing about publishing
+PowerWiki requires one locally. Then iterate freely:
 
 ```bash
-npm run publish:dev        # once, and again only if the manifest changes
 npm run dev:extension      # serves dist/ over HTTPS, rebuilding on change
 ```
+
+Re-run the workflow only if the manifest, scopes, or `baseUri` change.
+`npm run publish:dev` does the same thing locally and stays available for anyone
+who already holds a publisher token.
 
 The HTTPS server generates a self-signed localhost certificate on first run
 (`tools/serve/`); accept it once in your browser. `npm run pw:verify` sets
@@ -241,7 +250,9 @@ artifact itself, since `baseUri` bypasses the packaged files.
 
 `.github/workflows/canary.yml` publishes a private `powerwiki-canary` on every
 push to `main`, shared only with the `dataversepowertools` organization, versioned
-`<base>.<run_number>`. Verify it, then promote:
+`<base>.<run_number>`. It needs no new credential — it reuses the same
+`ADO_MARKETPLACE_PAT` and `marketplace` environment as the release. Verify it, then
+promote:
 
 ```bash
 PW_EXTENSION=powerwiki-canary npm run pw:verify
@@ -256,8 +267,10 @@ DevOps, rather than being the first time anyone has seen it.
   Publisher + id is the extension's identity, so publishing a private build under
   the public id would replace the public listing that every installed
   organization updates from. `tools/release/variant-manifest.mjs` derives the
-  variant manifests from `vss-extension.json` so they cannot drift, and the canary
-  workflow refuses to publish if the id collides or `public` is not `false`.
+  variant manifests from `vss-extension.json` so they cannot drift, and
+  `tools/release/assert-private.mjs` — which both publish workflows run before
+  uploading anything — refuses to publish unless `public` is exactly `false`, the
+  id differs from the public one, and the publisher matches.
 - `--share-with` is what actually restricts a private extension to named
   organizations. Note that neither `"public": false` nor `galleryFlags` appears
   anywhere in the packaged `.vsix` — visibility is applied at publish time — so
