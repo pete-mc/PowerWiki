@@ -89,7 +89,7 @@ jobs:
             --no-wait-validation
 
       - name: Upload the canary .vsix
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: powerwiki-canary-${{ github.run_number }}
           path: "*.vsix"
