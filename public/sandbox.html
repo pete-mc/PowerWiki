@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PowerWiki sandbox</title>
+    <style>
+      /* The real hub supplies these host theme variables. Provide a light-theme
+         approximation so --pw-* tokens resolve; append ?theme=dark for the dark
+         set, which is what themeMode.ts infers from luminance. */
+      html {
+        --background-color: #ffffff;
+        --palette-neutral-2: #f5f5f5;
+        --palette-neutral-8: #eaeaea;
+        --palette-neutral-20: #d0d0d0;
+        --palette-primary-shade-20: #005a9e;
+        --text-primary-color: #1f1f1f;
+        --text-secondary-color: #605e5c;
+        --communication-background: #0078d4;
+        height: 100%;
+      }
+      html.sandbox-dark {
+        --background-color: #1f1f1f;
+        --palette-neutral-2: #2d2d2d;
+        --palette-neutral-8: #3a3a3a;
+        --palette-neutral-20: #555555;
+        --palette-primary-shade-20: #4fa3e3;
+        --text-primary-color: #f3f3f3;
+        --text-secondary-color: #b9b9b9;
+        --communication-background: #4fa3e3;
+      }
+      body {
+        background: var(--background-color);
+        color: var(--text-primary-color);
+        margin: 0;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        height: 100%;
+      }
+      #root {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // ?theme=dark flips the host variables so both themes can be checked
+      // without a real Azure DevOps theme switch, which AGENTS.md requires.
+      if (new URLSearchParams(location.search).get("theme") === "dark") {
+        document.documentElement.classList.add("sandbox-dark");
+      }
+    </script>
+    <script src="sandbox.js"></script>
+  </body>
+</html>

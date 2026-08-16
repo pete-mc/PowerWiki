@@ -7,6 +7,8 @@
   "scripts": {
     "build": "webpack --mode production",
     "dev": "webpack --mode development --watch",
+    "dev:extension": "node tools/serve/serve.mjs --watch --https --index /dist/powerwiki.html",
+    "dev:sandbox": "node tools/serve/serve.mjs --watch --index /dist/sandbox.html",
     "typecheck": "tsc --noEmit",
     "package:vsix": "npm run build && npx tfx-cli extension create --manifest-globs vss-extension.json",
     "publish:marketplace": "npm run build && npx tfx-cli extension publish --manifest-globs vss-extension.json",

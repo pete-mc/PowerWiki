@@ -1,4 +1,9 @@
-import type { WikiComment, WikiPageChange, WikiPageMeta } from "./WikiComment";
+import type {
+  WikiComment,
+  WikiPageChange,
+  WikiPageMeta,
+  WikiPageRevision
+} from "./WikiComment";
 import type { WikiAttachment, WikiPage, WikiPageSummary, WikiSummary } from "./WikiPage";
 
 export interface WikiRepositoryClient {
@@ -15,12 +20,32 @@ export interface WikiRepositoryClient {
   deletePage(wikiId: string, path: string): Promise<void>;
   /** Returns the direct children of parentPath (one level deep). */
   getChildPages(wikiId: string, parentPath: string): Promise<WikiPageSummary[]>;
+  /** Raw bytes of a file in the wiki's Git repository, used by export. */
+  getItemBytes(repositoryId: string, repoPath: string): Promise<ArrayBuffer>;
   getPage(wikiId: string, path: string): Promise<WikiPage>;
+  /** The page's Markdown as it was at a specific commit, for history compare. */
+  getPageContentAtCommit(
+    repositoryId: string,
+    gitItemPath: string,
+    commitId: string
+  ): Promise<string>;
   /** Returns the id and backing Git path for a page (for comments and history). */
   getPageMeta(wikiId: string, path: string): Promise<WikiPageMeta>;
   /** Returns the author and date of the most recent change to a page's file. */
   getPageLastChange(repositoryId: string, gitItemPath: string, branch?: string): Promise<WikiPageChange | undefined>;
+  /** Commits that touched the page's file, newest first. */
+  getPageRevisions(
+    repositoryId: string,
+    gitItemPath: string,
+    branch?: string,
+    top?: number
+  ): Promise<WikiPageRevision[]>;
   getWikis(): Promise<WikiSummary[]>;
+  /** Files under the wiki's `.attachments` folder. */
+  listAttachments(
+    repositoryId: string,
+    mappedPath: string | undefined
+  ): Promise<WikiAttachment[]>;
   /** Returns the top-level comments on a page, oldest first. */
   listComments(wikiId: string, pageId: number): Promise<WikiComment[]>;
   /**

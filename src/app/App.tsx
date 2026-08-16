@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AzureDevOpsHostContext } from "../extension/azureDevOpsHost";
+import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
 import type { HeaderMenuAction } from "./HeaderMenuAction";
 import { WikiPageByline, type WikiPageBylineProps } from "./wiki/WikiPageByline";
 import { WikiBrowser } from "./wiki/WikiBrowser";
@@ -10,9 +11,11 @@ interface AppProps {
   readonly error?: unknown;
   readonly hostContext?: AzureDevOpsHostContext;
   readonly status: "failed" | "loading" | "ready";
+  /** Injected by the local sandbox; the extension entry leaves it unset. */
+  readonly wikiClient?: WikiRepositoryClient;
 }
 
-export function App({ error, hostContext, status }: AppProps) {
+export function App({ error, hostContext, status, wikiClient }: AppProps) {
   const headerMenuRef = useRef<HTMLDivElement>(null);
   const [headerMenuActions, setHeaderMenuActions] = useState<readonly HeaderMenuAction[]>([]);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
@@ -124,6 +127,7 @@ export function App({ error, hostContext, status }: AppProps) {
           projectId={hostContext?.projectId}
           projectName={hostContext?.projectName}
           userId={hostContext?.userId}
+          wikiClient={wikiClient}
         />
       )}
     </main>

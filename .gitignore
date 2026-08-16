@@ -5,6 +5,7 @@ npm-debug.log*
 ado.pat
 mcps
 tools/pw/artifacts/
+tools/serve/.cert/
 screenshots/
 .claude/settings.local.json
 
