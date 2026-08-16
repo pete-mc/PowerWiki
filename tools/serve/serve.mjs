@@ -89,17 +89,22 @@ function handle(req, res) {
     return;
   }
 
-  fs.stat(resolved, (error, stats) => {
-    if (error || !stats.isFile()) {
+  // One read, and Content-Length taken from the bytes actually being sent.
+  // Deliberately not stat-then-read: --watch rewrites dist/ while this server is
+  // running, so a size from an earlier stat can disagree with the body and
+  // truncate the response. A directory or missing file fails here as EISDIR or
+  // ENOENT, which is the same 404 either way.
+  fs.readFile(resolved, (error, body) => {
+    if (error) {
       const hint =
-        error && error.code === "ENOENT" && !fs.existsSync(DIST_DIR)
+        error.code === "ENOENT" && !fs.existsSync(DIST_DIR)
           ? "dist/ does not exist yet — run `npm run build` or start this with --watch."
           : "Not found";
       send(res, 404, hint);
       return;
     }
-    send(res, 200, fs.readFileSync(resolved), {
-      "Content-Length": stats.size,
+    send(res, 200, body, {
+      "Content-Length": body.length,
       "Content-Type": MIME[path.extname(resolved)] ?? "application/octet-stream"
     });
   });
