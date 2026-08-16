@@ -55,7 +55,12 @@ export async function launch({ headless = false } = {}) {
   const options = {
     headless,
     viewport: { width: 1600, height: 1000 },
-    args: ["--hide-crash-restore-bubble"],
+    // Chrome's Local Network Access checks block a public origin (dev.azure.com)
+    // from loading a subresource on localhost. That is exactly the shape of the
+    // dev extension, whose manifest points baseUri at the local HTTPS dev server,
+    // so without this the hub iframe fails with
+    // ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS and the layer is unusable.
+    args: ["--hide-crash-restore-bubble", "--disable-features=LocalNetworkAccessChecks"],
     // The dev extension (PW_EXTENSION=powerwiki-dev) loads its assets from the
     // local HTTPS dev server, which uses a self-signed certificate. Without this
     // the iframe fails to load and the failure looks like a missing extension.
@@ -96,13 +101,17 @@ export async function launch({ headless = false } = {}) {
 export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const frame = page
-      .frames()
-      .find((f) => f.url().includes("/powerwiki/") && f.url().includes("powerwiki.html"));
-    if (frame) {
-      const mounted = await frame.$(".powerwiki-shell").catch(() => null);
+    // Identify the frame by the mounted shell, not by its URL. The URL shape
+    // differs per build in ways that are easy to get wrong: the public build is
+    // served from the gallery CDN under /<extension-id>/, while a PRIVATE build
+    // (dev and canary) is served from a `privateasset/<token>` URL containing
+    // neither the file name nor the id in a stable position. The shell is the one
+    // invariant across all three, and waiting for it stays a positive assertion
+    // that the app actually mounted rather than an inference from a URL.
+    for (const candidate of page.frames()) {
+      const mounted = await candidate.$(".powerwiki-shell").catch(() => null);
       if (mounted) {
-        return frame;
+        return candidate;
       }
     }
     if (/login\.microsoftonline|login\.live|\/oauth2|\/_signin|aadcdn/.test(page.url())) {
