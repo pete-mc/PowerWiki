@@ -9,6 +9,7 @@ import JSZip from "jszip";
 import {
   ARTIFACTS_DIR,
   launch,
+  deleteAttachments,
   openWikiPage,
   powerWikiFrame,
   readLoadedVersion,
@@ -74,13 +75,22 @@ page.on("console", (m) => {
 });
 const failedResponses = [];
 let attachmentResp = null;
+const uploadedAttachments = [];
 page.on("response", async (r) => {
   if (r.status() >= 400) {
     failedResponses.push(`${r.status()} ${r.request().method()} ${r.url()}`);
   }
   if (r.url().includes("/attachments") && r.request().method() === "PUT") {
     try {
-      attachmentResp = { status: r.status(), body: (await r.text()).slice(0, 600) };
+      const body = await r.text();
+      attachmentResp = { status: r.status(), body: body.slice(0, 600) };
+      // Remember what we stored so the run can delete it again afterwards. The
+      // server picks the final name (it suffixes for uniqueness), so the response
+      // is the only place the real path appears.
+      const stored = JSON.parse(body)?.path;
+      if (r.ok() && stored) {
+        uploadedAttachments.push(stored);
+      }
     } catch {
       attachmentResp = { status: r.status(), body: "<unreadable>" };
     }
@@ -1155,6 +1165,7 @@ try {
     path.join(ARTIFACTS_DIR, "summary.json"),
     JSON.stringify({ failures, consoleErrors: errorNoise }, null, 2)
   );
+  await deleteAttachments(context, uploadedAttachments);
   console.log(`\n${failures.length === 0 ? "ALL CHECKS PASSED" : `${failures.length} CHECK(S) FAILED`}`);
   await context.close();
   process.exitCode = failures.length === 0 ? 0 : 1;

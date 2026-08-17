@@ -125,6 +125,55 @@ export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
   throw new Error("PowerWiki iframe not ready. If this is a fresh profile, run: npm run pw:auth");
 }
 
+/**
+ * Deletes attachments the run uploaded, so the wiki does not accumulate one
+ * `pw-smoke-*` file per verify forever. The upload tests are the only thing that
+ * writes to /.attachments, and nothing reads them afterwards.
+ *
+ * Uses context.request, which shares the browser's signed-in cookie jar, so this
+ * needs no token of its own. There is no REST call to delete a wiki attachment —
+ * attachments are files in the wiki's Git repository — so it is one push with a
+ * delete change per file. Best effort by design: a failure here must never fail
+ * an otherwise passing verify, so it reports and moves on.
+ */
+export async function deleteAttachments(context, paths) {
+  if (!paths.length) {
+    return;
+  }
+  try {
+    const api = context.request;
+    const wikis = await api.get(`https://dev.azure.com/${ORG}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
+    const all = (await wikis.json()).value;
+    const wiki = all.find((w) => w.type === "projectWiki") ?? all[0];
+    // A project wiki's repository id is the wiki id, and its branch is whatever
+    // the wiki was provisioned with (wikiMaster on older projects, main on newer).
+    const branch = (wiki.versions?.[0]?.version) ?? "wikiMaster";
+    const refs = await api.get(
+      `https://dev.azure.com/${ORG}/_apis/git/repositories/${wiki.repositoryId}/refs?filter=heads/${branch}&api-version=7.1`
+    );
+    const head = (await refs.json()).value[0];
+    const push = await api.post(`https://dev.azure.com/${ORG}/_apis/git/repositories/${wiki.repositoryId}/pushes?api-version=7.1`, {
+      headers: { "Content-Type": "application/json" },
+      data: {
+        refUpdates: [{ name: `refs/heads/${branch}`, oldObjectId: head.objectId }],
+        commits: [
+          {
+            comment: `Remove ${paths.length} smoke-test attachment(s)`,
+            changes: paths.map((item) => ({ changeType: "delete", item: { path: item } })),
+          },
+        ],
+      },
+    });
+    console.log(
+      push.ok()
+        ? `cleaned up ${paths.length} uploaded attachment(s)`
+        : `attachment cleanup failed (${push.status()}); leaving ${paths.join(", ")}`
+    );
+  } catch (error) {
+    console.log(`attachment cleanup failed (${error.message}); leaving ${paths.join(", ")}`);
+  }
+}
+
 /** Navigates to a wiki page (by hash) and returns its mounted iframe. */
 export async function openWikiPage(page, hash, options) {
   await page.goto(HUB + hash, { waitUntil: "domcontentloaded" });
