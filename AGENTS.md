@@ -239,6 +239,12 @@ Re-run the workflow only if the manifest, scopes, or `baseUri` change.
 `npm run publish:dev` does the same thing locally and stays available for anyone
 who already holds a publisher token.
 
+One published build serves everyone: `localhost` resolves to whichever machine
+the *browser* is on, so the default `baseUri` is not tied to whoever ran the
+workflow. Start the dev server on port 3000 and the hub loads *your* working
+tree. Only a non-localhost `baseUri` — a tunnel origin, say — would pin the
+build to one machine and need republishing to move.
+
 The HTTPS server generates a self-signed localhost certificate on first run
 (`tools/serve/`); accept it once in your browser. `npm run pw:verify` sets
 `ignoreHTTPSErrors`, so the unattended harness never sees the interstitial.
