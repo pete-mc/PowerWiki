@@ -246,6 +246,125 @@ body {
   padding: 0 2px 8px 8px;
 }
 
+/* Search box, above the tree it replaces while a query is active. */
+.powerwiki-nav-search {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.powerwiki-nav-search-input {
+  background: transparent;
+  border: 1px solid var(--pw-border-strong);
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: var(--pw-text);
+  flex: 1;
+  font: inherit;
+  min-height: 28px;
+  min-width: 0;
+  padding: 2px 6px;
+}
+
+.powerwiki-nav-search-input:focus {
+  border-color: var(--pw-accent);
+  outline: none;
+}
+
+.powerwiki-nav-search-clear {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--pw-text-secondary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  height: 24px;
+  line-height: 1;
+  width: 24px;
+}
+
+.powerwiki-nav-search-clear:hover {
+  background: var(--pw-hover);
+  color: var(--pw-accent);
+}
+
+.powerwiki-search-results {
+  display: grid;
+  gap: 12px;
+}
+
+.powerwiki-search-section {
+  display: grid;
+  gap: 2px;
+}
+
+.powerwiki-search-heading {
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0 0 2px;
+  text-transform: uppercase;
+}
+
+.powerwiki-search-hit {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 2px;
+  padding: 6px;
+  text-align: left;
+  width: 100%;
+}
+
+.powerwiki-search-hit:hover {
+  background: var(--pw-hover);
+}
+
+.powerwiki-search-hit-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.powerwiki-search-hit-path,
+.powerwiki-search-hit-snippet {
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
+  overflow-wrap: anywhere;
+}
+
+/* Matches are marked rather than the snippet being rendered as HTML; the yellow
+   browser default reads as an error in a dark theme, so tint it instead. */
+.powerwiki-search-results mark {
+  background: var(--pw-selected);
+  border-radius: 2px;
+  color: inherit;
+  padding: 0 1px;
+}
+
+.powerwiki-search-note {
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
+  margin: 2px 0;
+  padding: 0 6px;
+}
+
+/* Used for every state that is not "here are your results" — an index that is
+   still building must not be mistaken for an empty wiki. */
+.powerwiki-search-note-warning {
+  background: var(--pw-hover);
+  border: 1px solid var(--pw-border-strong);
+  border-radius: 4px;
+  color: var(--pw-text);
+  padding: 6px;
+}
+
 .powerwiki-nav-footer {
   align-items: center;
   border-top: 1px solid var(--pw-border);
