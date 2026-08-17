@@ -90,6 +90,70 @@ body {
   text-align: right;
 }
 
+.powerwiki-header-right-stack {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Full-text search sits under the brand. Fixed width rather than fluid: the
+   header's left column holds a page title of unpredictable length, and a
+   flexible box beside it reflowed the title on every keystroke. */
+.powerwiki-header-search {
+  align-items: center;
+  display: flex;
+  position: relative;
+  width: 260px;
+}
+
+.powerwiki-header-search-input {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 3px;
+  box-sizing: border-box;
+  color: var(--pw-text);
+  font: inherit;
+  padding: 4px 26px 4px 8px;
+  width: 100%;
+}
+
+.powerwiki-header-search-input:focus {
+  border-color: var(--pw-accent);
+  outline: 1px solid var(--pw-accent);
+}
+
+/* type="search" gives WebKit its own clear affordance, which sits next to ours
+   and reads as two buttons doing the same thing. Keep the semantics, hide the
+   duplicate. */
+.powerwiki-header-search-input::-webkit-search-cancel-button,
+.powerwiki-nav-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.powerwiki-header-search-clear {
+  background: none;
+  border: none;
+  color: var(--pw-text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  position: absolute;
+  right: 2px;
+}
+
+.powerwiki-header-search-clear:hover {
+  color: var(--pw-text);
+}
+
+.powerwiki-nav-filter-empty {
+  color: var(--pw-text-secondary);
+  font-size: 12px;
+  margin: 8px 12px;
+}
+
 .powerwiki-header-right {
   align-items: center;
   display: flex;

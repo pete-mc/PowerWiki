@@ -47,6 +47,7 @@ import type { WikiPageBylineProps } from "./WikiPageByline";
 import { WikiPageEditor, type WikiPageLink } from "./WikiPageEditor";
 import { WikiPageTree, type WikiPageTreeActions } from "./WikiPageTree";
 import { WikiSearchResults } from "./WikiSearchResults";
+import { filterWikiPageTree } from "./wikiTreeFilter";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
 
@@ -65,6 +66,13 @@ interface WikiBrowserProps {
    * search box works with no organization and no SDK.
    */
   readonly searchTransport?: SearchTransport;
+  /**
+   * The full-text query, owned by the search bar in the header (see App). Its
+   * results render into the content area, so the query has to cross from the
+   * header down to here; the tree's name filter is separate and stays local.
+   */
+  readonly searchQuery?: string;
+  readonly onSearchQueryChange?: (query: string) => void;
   readonly userId?: string;
   /**
    * Wiki data access. Defaults to the real Azure DevOps REST client for the
@@ -369,6 +377,8 @@ export function WikiBrowser({
   organizationName,
   projectId,
   projectName,
+  onSearchQueryChange,
+  searchQuery = "",
   searchTransport,
   userId,
   wikiClient: injectedWikiClient
@@ -433,7 +443,7 @@ export function WikiBrowser({
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [splitRatio, setSplitRatio] = useState(56);
   // Non-empty means the nav rail is showing search results instead of the tree.
-  const [searchQuery, setSearchQuery] = useState("");
+  const [treeFilter, setTreeFilter] = useState("");
 
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
@@ -487,6 +497,10 @@ export function WikiBrowser({
   const pageTree = useMemo(
     () => buildWikiPageTree(pageList, loadedPaths),
     [loadedPaths, pageList]
+  );
+  const filteredPageTree = useMemo(
+    () => filterWikiPageTree(pageTree, treeFilter),
+    [pageTree, treeFilter]
   );
   const pageLinks = useMemo<readonly WikiPageLink[]>(
     () =>
@@ -1400,6 +1414,10 @@ export function WikiBrowser({
         return;
       }
 
+      // Results occupy the content area, so the query has to clear or the page
+      // you just chose never becomes visible.
+      onSearchQueryChange?.("");
+
       const targetWikiId = wikiName ? wikis.find((wiki) => wiki.name === wikiName)?.id : undefined;
       if (targetWikiId && targetWikiId !== activeWikiId) {
         savedNavigation.current = { pagePath: path, wikiId: targetWikiId, wikiName };
@@ -2008,49 +2026,42 @@ export function WikiBrowser({
             />
             <div className="powerwiki-nav-search">
               <input
-                aria-label="Search the wiki"
+                aria-label="Filter pages by name"
                 className="powerwiki-nav-search-input"
-                // Until a wiki is selected there is nowhere for a result to
-                // navigate to, so searching then would silently do nothing.
                 disabled={!activeWikiId}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) => setTreeFilter(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
-                    setSearchQuery("");
+                    setTreeFilter("");
                   }
                 }}
-                placeholder="Search wiki…"
+                placeholder="Filter pages…"
                 type="search"
-                value={searchQuery}
+                value={treeFilter}
               />
-              {searchQuery ? (
+              {treeFilter ? (
                 <button
-                  aria-label="Clear search"
+                  aria-label="Clear filter"
                   className="powerwiki-nav-search-clear"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => setTreeFilter("")}
                   type="button"
                 >
                   ×
                 </button>
               ) : null}
             </div>
-            {/* Results take over the tree's scroll area: the rail is narrow, and
-                a searching user is looking for a destination, not the tree. */}
             <div className="powerwiki-nav-tree">
-              {searchQuery.trim() ? (
-                <WikiSearchResults
-                  activeWikiName={activeWiki?.name}
-                  onSearchContent={searchContent}
-                  onSelect={handleSearchResultSelected}
-                  pages={pageLinks}
-                  query={searchQuery}
-                />
+              {/* When a filter matches nothing, show only that. Rendering the
+                  tree as well produces its "no pages in this wiki" empty state
+                  beside it, which is both a duplicate and untrue. */}
+              {treeFilter.trim() && filteredPageTree.length === 0 ? (
+                <p className="powerwiki-nav-filter-empty">No page name matches “{treeFilter.trim()}”.</p>
               ) : (
                 <WikiPageTree
                   actions={treeActions}
                   activePath={activePage?.path}
                   isLoading={loadState === "loading" && pageTree.length === 0}
-                  nodes={pageTree}
+                  nodes={filteredPageTree}
                 />
               )}
             </div>
@@ -2094,7 +2105,18 @@ export function WikiBrowser({
         ref={contentRef}
       >
         <ErrorBoundary key={activePage?.path ?? "no-page"} label="page">
-        {activePage && isEditing ? (
+        {/* A full-text query takes over the content area rather than the rail:
+            snippets need the width, and the tree stays visible so the reader
+            keeps their place in the wiki while scanning results. */}
+        {searchQuery.trim() ? (
+          <WikiSearchResults
+            activeWikiName={activeWiki?.name}
+            onSearchContent={searchContent}
+            onSelect={handleSearchResultSelected}
+            pages={pageLinks}
+            query={searchQuery}
+          />
+        ) : activePage && isEditing ? (
           <section className="wiki-editor-shell" aria-label={`Editing ${pageTitle(activePage.path)}`}>
             <div className="wiki-editor-toolbar">
               <div>

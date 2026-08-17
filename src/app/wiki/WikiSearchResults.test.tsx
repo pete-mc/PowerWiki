@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { WikiSearchOutcome } from "../../wiki/wikiSearch";
-import { WikiSearchResults } from "./WikiSearchResults";
+import { WikiSearchResults, clampSegments } from "./WikiSearchResults";
 
 const PAGES = [
   { path: "/Home", title: "Home" },
@@ -155,5 +155,47 @@ describe("WikiSearchResults", () => {
     await settle();
     expect(element.querySelectorAll(".powerwiki-search-hit")).toHaveLength(1);
     expect(element.textContent).toContain("No further matches in page content.");
+  });
+});
+
+describe("clampSegments", () => {
+  it("leaves a short snippet alone", () => {
+    const segments = [{ text: "a ", isMatch: false }, { text: "hit", isMatch: true }];
+    expect(clampSegments(segments)).toBe(segments);
+  });
+
+  // A page with a long fenced code block returns a snippet long enough to swamp
+  // the result list, which is what this exists to prevent.
+  it("clamps a long snippet to roughly the budget", () => {
+    const segments = [
+      { text: "x".repeat(400), isMatch: false },
+      { text: "hit", isMatch: true },
+      { text: "y".repeat(400), isMatch: false }
+    ];
+    const clamped = clampSegments(segments, 100);
+    const length = clamped.reduce((sum, s) => sum + s.text.length, 0);
+    expect(length).toBeLessThan(140);
+  });
+
+  it("keeps the match itself when clamping around it", () => {
+    const clamped = clampSegments(
+      [{ text: "x".repeat(400), isMatch: false }, { text: "needle", isMatch: true }],
+      60
+    );
+    expect(clamped.some((s) => s.isMatch && s.text === "needle")).toBe(true);
+  });
+
+  it("marks elision so truncation is visible", () => {
+    const clamped = clampSegments(
+      [{ text: "x".repeat(400), isMatch: false }, { text: "hit", isMatch: true }],
+      60
+    );
+    expect(clamped.map((s) => s.text).join("")).toContain("…");
+  });
+
+  it("truncates the head when the snippet has no match at all", () => {
+    const clamped = clampSegments([{ text: "z".repeat(400), isMatch: false }], 50);
+    expect(clamped).toHaveLength(1);
+    expect(clamped[0].text.length).toBeLessThanOrEqual(51);
   });
 });
