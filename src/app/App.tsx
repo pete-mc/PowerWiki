@@ -24,6 +24,10 @@ export function App({ error, hostContext, searchTransport, status, wikiClient }:
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [pageByline, setPageByline] = useState<WikiPageBylineProps>();
   const [pageTitle, setPageTitle] = useState<string>();
+  // Full-text search lives in the header, next to the brand, and renders its
+  // results into the content area — so the query is owned here and handed down,
+  // while the tree's name filter stays private to the browser.
+  const [searchQuery, setSearchQuery] = useState("");
   const headerTitle = useMemo(() => {
     if (status === "loading") {
       return "Loading PowerWiki";
@@ -72,12 +76,41 @@ export function App({ error, hostContext, searchTransport, status, wikiClient }:
           {pageByline ? <WikiPageByline {...pageByline} /> : null}
         </div>
         <div className="powerwiki-header-right">
-          <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>
-            <img alt="" src="../media/logo_new.png" />
-            <div>
-              <strong>PowerWiki</strong>
-              <span>Version {packageMetadata.version}</span>
+          <div className="powerwiki-header-right-stack">
+            <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>
+              <img alt="" src="../media/logo_new.png" />
+              <div>
+                <strong>PowerWiki</strong>
+                <span>Version {packageMetadata.version}</span>
+              </div>
             </div>
+            {status === "ready" ? (
+              <div className="powerwiki-header-search">
+                <input
+                  aria-label="Search all pages"
+                  className="powerwiki-header-search-input"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setSearchQuery("");
+                    }
+                  }}
+                  placeholder="Search all pages…"
+                  type="search"
+                  value={searchQuery}
+                />
+                {searchQuery ? (
+                  <button
+                    aria-label="Clear search"
+                    className="powerwiki-header-search-clear"
+                    onClick={() => setSearchQuery("")}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           {headerMenuActions.length > 0 ? (
             <div className="powerwiki-header-menu" ref={headerMenuRef}>
@@ -129,6 +162,8 @@ export function App({ error, hostContext, searchTransport, status, wikiClient }:
           organizationName={hostContext?.organizationName}
           projectId={hostContext?.projectId}
           projectName={hostContext?.projectName}
+          onSearchQueryChange={setSearchQuery}
+          searchQuery={searchQuery}
           searchTransport={searchTransport}
           userId={hostContext?.userId}
           wikiClient={wikiClient}

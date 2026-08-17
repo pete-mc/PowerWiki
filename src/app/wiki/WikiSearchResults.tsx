@@ -31,6 +31,53 @@ type ContentState =
 // enough that the results feel like they are keeping up.
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_SNIPPETS_PER_HIT = 2;
+/* A snippet is whatever the service decided to return, and for a page holding a
+   long fenced code block that is hundreds of characters — enough for one hit to
+   swamp the whole result list. Clamp around the match rather than truncating the
+   tail, because the match is usually not at the start. */
+const MAX_SNIPPET_CHARS = 180;
+
+export function clampSegments(
+  segments: readonly WikiSearchSegment[],
+  maxChars: number = MAX_SNIPPET_CHARS
+): readonly WikiSearchSegment[] {
+  const total = segments.reduce((sum, segment) => sum + segment.text.length, 0);
+  if (total <= maxChars) {
+    return segments;
+  }
+
+  const firstMatch = segments.findIndex((segment) => segment.isMatch);
+  if (firstMatch === -1) {
+    return [{ text: `${segments[0].text.slice(0, maxChars).trimEnd()}…`, isMatch: false }];
+  }
+
+  const matchLength = segments[firstMatch].text.length;
+  const context = Math.max(0, Math.floor((maxChars - matchLength) / 2));
+  const clamped: WikiSearchSegment[] = [];
+
+  const before = segments.slice(0, firstMatch);
+  const beforeText = before.map((segment) => segment.text).join("");
+  if (beforeText.length > context) {
+    clamped.push({ text: `…${beforeText.slice(-context).trimStart()}`, isMatch: false });
+  } else if (beforeText) {
+    clamped.push({ text: beforeText, isMatch: false });
+  }
+
+  clamped.push(segments[firstMatch]);
+
+  let remaining = context;
+  for (const segment of segments.slice(firstMatch + 1)) {
+    if (remaining <= 0) {
+      clamped.push({ text: "…", isMatch: false });
+      break;
+    }
+    const text = segment.text.slice(0, remaining);
+    clamped.push({ ...segment, text: text === segment.text ? segment.text : `${text.trimEnd()}…` });
+    remaining -= segment.text.length;
+  }
+
+  return clamped;
+}
 
 export function WikiSearchResults({
   activeWikiName,
@@ -148,7 +195,7 @@ export function WikiSearchResults({
             </span>
             {hit.snippets.slice(0, MAX_SNIPPETS_PER_HIT).map((snippet, index) => (
               <span className="powerwiki-search-hit-snippet" key={index}>
-                <HighlightedText segments={snippet} />
+                <HighlightedText segments={clampSegments(snippet)} />
               </span>
             ))}
           </button>
