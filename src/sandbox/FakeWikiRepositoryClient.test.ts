@@ -114,4 +114,24 @@ describe("FakeWikiRepositoryClient", () => {
     const older = await fake.getPageContentAtCommit("repo", "/Home.md", revisions[0]!.commitId);
     expect(older).toContain("# Home");
   });
+
+  // The tree loads a level at a time, so the name filter can only see a page
+  // nobody expanded if this returns the whole wiki in one go.
+  it("returns every page, not just the root level", async () => {
+    const fake = client();
+
+    const roots = await fake.getChildPages(WIKI, "/");
+    const all = await fake.getAllPages(WIKI);
+
+    expect(roots.map((page) => page.path)).toEqual(["/Home", "/Guides", "/Other"]);
+    // The nested pages are the point: they are what a lazy tree has not loaded.
+    expect(all.map((page) => page.path).sort()).toEqual([
+      "/Guides",
+      "/Guides/A",
+      "/Guides/B",
+      "/Home",
+      "/Other"
+    ]);
+    expect(all.find((page) => page.path === "/Guides")?.isParentPage).toBe(true);
+  });
 });

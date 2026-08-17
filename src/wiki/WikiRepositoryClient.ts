@@ -18,6 +18,16 @@ export interface WikiRepositoryClient {
   createPage(wikiId: string, path: string, content?: string): Promise<WikiPage>;
   /** Deletes the page at the given path and any of its sub-pages. */
   deletePage(wikiId: string, path: string): Promise<void>;
+  /**
+   * Every page in the wiki, flattened, in a single request.
+   *
+   * The tree loads a level at a time, which is right for browsing but means a
+   * name filter can only see what happens to be expanded. This is the whole
+   * structure at once so the filter can match a page the user has never opened.
+   * Paths and ordering only — no content, so the cost is proportional to the
+   * page count rather than the wiki's size on disk.
+   */
+  getAllPages(wikiId: string): Promise<WikiPageSummary[]>;
   /** Returns the direct children of parentPath (one level deep). */
   getChildPages(wikiId: string, parentPath: string): Promise<WikiPageSummary[]>;
   /** Raw bytes of a file in the wiki's Git repository, used by export. */

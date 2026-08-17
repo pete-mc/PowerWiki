@@ -51,6 +51,10 @@ import { filterWikiPageTree } from "./wikiTreeFilter";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
 
+/* Long enough to stay clear of the initial load, short enough that the
+   upgrade lands before most people reach for the filter. */
+const PREFETCH_DELAY_MS = 1500;
+
 interface WikiBrowserProps {
   readonly contributionId?: string;
   readonly onHeaderMenuActionsChange?: (actions: readonly HeaderMenuAction[]) => void;
@@ -498,9 +502,82 @@ export function WikiBrowser({
     () => buildWikiPageTree(pageList, loadedPaths),
     [loadedPaths, pageList]
   );
+  // The whole page list for the active wiki, fetched once in the background.
+  //
+  // The tree deliberately still loads a level at a time for the first render and
+  // the first navigations: that is what keeps the hub responsive on a large wiki.
+  // Once the initial load has settled, one request fetches every page path, and
+  // the tree switches to that copy — after which expanding a node costs nothing,
+  // and the name filter can match a page nobody has opened. Paths only, no
+  // content, so the cost scales with page count rather than wiki size.
+  const [allPages, setAllPages] = useState<{ pages: readonly WikiPageSummary[]; wikiId: string }>();
+  // Which wiki the prefetch has already been started for. A ref rather than
+  // state on purpose: an in-flight flag kept in state would be a dependency of
+  // the effect that sets it, so the effect would re-run, its cleanup would fire,
+  // and the request it had just started would be discarded on arrival.
+  const prefetchedWikiRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!wikiClient || !activeWikiId || loadState !== "ready") {
+      return;
+    }
+    if (prefetchedWikiRef.current === activeWikiId) {
+      return;
+    }
+
+    prefetchedWikiRef.current = activeWikiId;
+
+    let cancelled = false;
+    // Deferred so it competes with neither the first paint nor the first page
+    // fetch; this is a background upgrade, not part of getting on screen.
+    const handle = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+
+      wikiClient
+        .getAllPages(activeWikiId)
+        .then((pages) => {
+          if (!cancelled) {
+            setAllPages({ pages, wikiId: activeWikiId });
+          }
+        })
+        .catch((error: unknown) => {
+          // Not worth interrupting anyone: without this the tree simply stays
+          // lazy, which is exactly how it behaved before. Logged rather than
+          // swallowed, because silent failure here looks like a filter bug.
+          console.warn("PowerWiki: could not prefetch the full page list.", error);
+          // Let a later attempt retry rather than pinning the failure forever.
+          prefetchedWikiRef.current = undefined;
+        });
+    }, PREFETCH_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [activeWikiId, loadState, wikiClient]);
+
+  // Switching wikis invalidates the copy; so does any edit that adds, removes or
+  // moves a page, so the tree cannot keep offering a page that no longer exists.
+  // Falling back to the lazy list is safe — the prefetch simply runs again.
+  useEffect(() => {
+    prefetchedWikiRef.current = undefined;
+    setAllPages(undefined);
+  }, [activeWikiId]);
+
+  // One tree, used for browsing and filtering alike: the prefetched copy once it
+  // is in memory, the lazily loaded pages until then.
+  const navigationTree = useMemo(() => {
+    if (!allPages || allPages.wikiId !== activeWikiId) {
+      return pageTree;
+    }
+    const paths = new Set(allPages.pages.map((page) => page.path));
+    return buildWikiPageTree(allPages.pages, paths);
+  }, [activeWikiId, allPages, pageTree]);
   const filteredPageTree = useMemo(
-    () => filterWikiPageTree(pageTree, treeFilter),
-    [pageTree, treeFilter]
+    () => filterWikiPageTree(navigationTree, treeFilter),
+    [navigationTree, treeFilter]
   );
   const pageLinks = useMemo<readonly WikiPageLink[]>(
     () =>
@@ -1450,6 +1527,8 @@ export function WikiBrowser({
         })
       );
 
+      prefetchedWikiRef.current = undefined;
+      setAllPages(undefined);
       const removedParents = new Set(uniqueParents);
       setPageList((prev) => {
         const kept = prev.filter((page) => !removedParents.has(parentOfPath(page.path)));
@@ -1555,6 +1634,8 @@ export function WikiBrowser({
         // page under its new parent and lazily re-fetch its children.
         const isMoved = (candidate: string) =>
           candidate === sourcePath || candidate.startsWith(`${sourcePath}/`);
+        prefetchedWikiRef.current = undefined;
+        setAllPages(undefined);
         setPageList((prev) => prev.filter((page) => !isMoved(page.path)));
         setLoadedPaths((prev) => new Set([...prev].filter((entry) => !isMoved(entry))));
 
@@ -2060,7 +2141,8 @@ export function WikiBrowser({
                 <WikiPageTree
                   actions={treeActions}
                   activePath={activePage?.path}
-                  isLoading={loadState === "loading" && pageTree.length === 0}
+                  expandAll={Boolean(treeFilter.trim())}
+                  isLoading={loadState === "loading" && navigationTree.length === 0}
                   nodes={filteredPageTree}
                 />
               )}

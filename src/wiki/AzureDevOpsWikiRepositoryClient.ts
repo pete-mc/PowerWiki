@@ -69,6 +69,22 @@ class WikiJsonClient extends WikiRestClient {
     });
   }
 
+  public getPageTreeJson(
+    project: string,
+    wikiIdentifier: string
+  ): Promise<WikiApiPage> {
+    return this.beginRequest<WikiApiPage>({
+      apiVersion: "5.2-preview.1",
+      routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages",
+      routeValues: { project, wikiIdentifier },
+      queryParams: {
+        path: "/",
+        recursionLevel: VersionControlRecursionType.Full,
+        includeContent: false,
+      },
+    });
+  }
+
   public async getPageTextWithVersion(
     project: string,
     wikiIdentifier: string,
@@ -260,6 +276,26 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       remoteUrl: wiki.remoteUrl,
       version: wiki.versions?.[0]?.version,
     }));
+  }
+
+  public async getAllPages(wikiId: string): Promise<WikiPageSummary[]> {
+    const root = await this.wikiJsonClient.getPageTreeJson(this.projectName, wikiId);
+    const pages: WikiPageSummary[] = [];
+
+    const collect = (page: WikiApiPage) => {
+      for (const subPage of page.subPages ?? []) {
+        pages.push({
+          id: subPage.id,
+          isParentPage: subPage.isParentPage ?? false,
+          order: subPage.order ?? 0,
+          path: subPage.path,
+        });
+        collect(subPage);
+      }
+    };
+
+    collect(root);
+    return pages;
   }
 
   public async getChildPages(wikiId: string, parentPath: string): Promise<WikiPageSummary[]> {
