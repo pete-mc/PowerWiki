@@ -1,6 +1,11 @@
-// Loads every page's Markdown for features that need the whole wiki's content:
-// client-side search and inbound-link updates after a rename/move. Walks the
-// page tree breadth-first, then fetches page bodies with bounded concurrency.
+// Loads every page's Markdown for the features that genuinely need the whole
+// wiki's content: inbound-link updates after a rename/move, and repointing
+// diagram references. Walks the page tree breadth-first, then fetches page
+// bodies with bounded concurrency.
+//
+// Deliberately not used for search. One REST call per page does not scale past a
+// few hundred pages, and the Azure DevOps Search service already indexes the
+// same content — see wiki/wikiSearch.ts.
 
 import type { WikiPage, WikiPageSummary } from "../../wiki/WikiPage";
 

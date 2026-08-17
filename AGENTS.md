@@ -131,6 +131,21 @@ to write a new file and repoint its references (see `src/drawio/`), unless the
 extension takes `vso.code_write` to push to the wiki repository directly — which
 would force every organization to re-approve the extension, so don't.
 
+**Wiki search is a different service on a different host, and it reports
+trouble as success.** Search lives on `almsearch.dev.azure.com`, not
+`dev.azure.com`, and `azure-devops-extension-api` ships no Search client — hence
+the hand-rolled request in `src/wiki/wikiSearch.ts`, with the token-authenticated
+POST kept separately in `src/wiki/wikiSearchTransport.ts` so the request building
+and response mapping stay testable without a network. The `vso.wiki` scope
+already covers searching, so this needs no new scope. The trap: an organization
+whose index is not ready answers a *valid* query with HTTP 200, `count: 0` and an
+`infoCode` saying why. Rendering that as "no results found" tells the user their
+content is missing when the index is merely still building, so every status
+`interpretInfoCode` can return has to reach the UI. Search snippets arrive
+wrapped in the service's own `<highlighthit>` markup around wiki content, so they
+are parsed into `{ text, isMatch }` segments and rendered as React text nodes —
+they must never reach `innerHTML`.
+
 **Anything read back out of the rendered DOM has not been sanitized.**
 `sanitizeRenderedHtml` runs once, before the HTML is inserted; the preview's
 enrichers then read attributes back out and write them to real sinks. DOMPurify
@@ -208,8 +223,9 @@ npm run dev:sandbox        # http://localhost:3000/dist/sandbox.html
 
 Runs the whole UI against an in-memory wiki (`src/sandbox/`), with no
 organization, no extension install, and no sign-in. Rebuilds on change. Append
-`?theme=dark` to check the dark theme, or `?latency=800` to make loading states
-obvious.
+`?theme=dark` to check the dark theme, `?latency=800` to make loading states
+obvious, or `?searchInfoCode=2` to make the fake search service answer the way an
+organization whose index is still building does (see `src/sandbox/fakeWikiSearch.ts`).
 
 This is the right loop for rendering, the editors, the page tree, export, and
 theming — most of the codebase. It cannot catch REST-contract drift, permission

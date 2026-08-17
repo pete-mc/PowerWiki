@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "../app/App";
 import { ErrorBoundary } from "../app/ErrorBoundary";
 import { FakeWikiRepositoryClient } from "./FakeWikiRepositoryClient";
+import { createFakeWikiSearchTransport } from "./fakeWikiSearch";
 import { SANDBOX_PAGES } from "./fixtures";
 
 import "../app/styles.css";
@@ -29,11 +30,24 @@ if (!rootElement) {
   throw new Error("PowerWiki sandbox root element was not found.");
 }
 
+const parameters = new URLSearchParams(window.location.search);
+
 // Latency is deliberate, not incidental: with instant responses the loading and
 // empty states never render, and those are exactly the states that regress.
-const latencyMs = Number(new URLSearchParams(window.location.search).get("latency") ?? 120);
+const latencyMs = Number(parameters.get("latency") ?? 120);
 
 const wikiClient = new FakeWikiRepositoryClient(SANDBOX_PAGES, {
+  latencyMs: Number.isFinite(latencyMs) ? latencyMs : 120
+});
+
+// Search would otherwise be the one feature the sandbox could not show at all,
+// because it is the only part of the UI that talks to a host other than the wiki
+// API. `?searchInfoCode=2` makes the fake answer the way an organization whose
+// index is still building does — zero results, HTTP 200 — which is the state
+// worth being able to look at and impossible to reproduce on demand for real.
+const searchInfoCode = Number(parameters.get("searchInfoCode") ?? 0);
+const searchTransport = createFakeWikiSearchTransport(SANDBOX_PAGES, {
+  infoCode: Number.isFinite(searchInfoCode) ? searchInfoCode : 0,
   latencyMs: Number.isFinite(latencyMs) ? latencyMs : 120
 });
 
@@ -51,6 +65,11 @@ const hostContext = {
 
 createRoot(rootElement).render(
   <ErrorBoundary label="PowerWiki sandbox">
-    <App hostContext={hostContext} status="ready" wikiClient={wikiClient} />
+    <App
+      hostContext={hostContext}
+      searchTransport={searchTransport}
+      status="ready"
+      wikiClient={wikiClient}
+    />
   </ErrorBoundary>
 );

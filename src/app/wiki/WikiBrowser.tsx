@@ -28,6 +28,8 @@ import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "../../wiki/WikiComment";
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
 import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
+import { searchWiki, type SearchTransport, type WikiSearchOutcome } from "../../wiki/wikiSearch";
+import { azureDevOpsWikiSearchTransport } from "../../wiki/wikiSearchTransport";
 import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
 import { WikiAttachmentsDialog } from "./WikiAttachmentsDialog";
 import { WikiExportDialog } from "./WikiExportDialog";
@@ -44,6 +46,7 @@ import { WikiMovePageDialog } from "./WikiMovePageDialog";
 import type { WikiPageBylineProps } from "./WikiPageByline";
 import { WikiPageEditor, type WikiPageLink } from "./WikiPageEditor";
 import { WikiPageTree, type WikiPageTreeActions } from "./WikiPageTree";
+import { WikiSearchResults } from "./WikiSearchResults";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
 
@@ -56,6 +59,12 @@ interface WikiBrowserProps {
   readonly organizationName?: string;
   readonly projectId?: string;
   readonly projectName?: string;
+  /**
+   * How a wiki search request reaches the network. Defaults to the real
+   * token-authenticated transport; the sandbox injects an in-memory one so the
+   * search box works with no organization and no SDK.
+   */
+  readonly searchTransport?: SearchTransport;
   readonly userId?: string;
   /**
    * Wiki data access. Defaults to the real Azure DevOps REST client for the
@@ -360,6 +369,7 @@ export function WikiBrowser({
   organizationName,
   projectId,
   projectName,
+  searchTransport,
   userId,
   wikiClient: injectedWikiClient
 }: WikiBrowserProps) {
@@ -422,6 +432,8 @@ export function WikiBrowser({
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [splitRatio, setSplitRatio] = useState(56);
+  // Non-empty means the nav rail is showing search results instead of the tree.
+  const [searchQuery, setSearchQuery] = useState("");
 
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
@@ -453,6 +465,21 @@ export function WikiBrowser({
   // Mentions resolve through a host service rather than a REST client, so this
   // works in any project context.
   const identityClient = useMemo(() => new AzureDevOpsIdentityClient(), []);
+  // Content search runs against the Azure DevOps Search service, which indexes
+  // the same wikis the built-in search covers — the alternative, downloading
+  // every page and searching in the browser, costs one request per page and does
+  // not scale. It needs the organization and project from the host context; with
+  // neither, the search box still matches page titles locally rather than
+  // failing.
+  const searchContent = useMemo(() => {
+    if (!organizationName || !projectName) {
+      return undefined;
+    }
+
+    const transport = searchTransport ?? azureDevOpsWikiSearchTransport;
+    return (searchText: string): Promise<WikiSearchOutcome> =>
+      searchWiki({ organizationName, projectName, searchText }, transport);
+  }, [organizationName, projectName, searchTransport]);
   const activeWiki = useMemo(
     () => wikis.find((wiki) => wiki.id === activeWikiId),
     [activeWikiId, wikis]
@@ -1363,6 +1390,28 @@ export function WikiBrowser({
     [confirmDiscardEdits, loadPageByPath]
   );
 
+  // Search covers every wiki in the project, so a hit can live in a wiki other
+  // than the one being browsed. Switching wikis and letting the page-load effect
+  // open the page is the route a deep link already takes, so results behave the
+  // same way as a pasted URL.
+  const handleSearchResultSelected = useCallback(
+    (path: string, wikiName?: string) => {
+      if (!confirmDiscardEdits()) {
+        return;
+      }
+
+      const targetWikiId = wikiName ? wikis.find((wiki) => wiki.name === wikiName)?.id : undefined;
+      if (targetWikiId && targetWikiId !== activeWikiId) {
+        savedNavigation.current = { pagePath: path, wikiId: targetWikiId, wikiName };
+        setActiveWikiId(targetWikiId);
+        return;
+      }
+
+      void loadPageByPath(path, true);
+    },
+    [activeWikiId, confirmDiscardEdits, loadPageByPath, wikis]
+  );
+
   // Re-fetches the direct children of the given parent paths and merges them
   // into the flat page list, replacing any stale direct children. Used to keep
   // the tree in sync after a page is created, deleted, or moved.
@@ -1957,13 +2006,53 @@ export function WikiBrowser({
               }}
               wikis={wikis}
             />
-            <div className="powerwiki-nav-tree">
-              <WikiPageTree
-                actions={treeActions}
-                activePath={activePage?.path}
-                isLoading={loadState === "loading" && pageTree.length === 0}
-                nodes={pageTree}
+            <div className="powerwiki-nav-search">
+              <input
+                aria-label="Search the wiki"
+                className="powerwiki-nav-search-input"
+                // Until a wiki is selected there is nowhere for a result to
+                // navigate to, so searching then would silently do nothing.
+                disabled={!activeWikiId}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setSearchQuery("");
+                  }
+                }}
+                placeholder="Search wiki…"
+                type="search"
+                value={searchQuery}
               />
+              {searchQuery ? (
+                <button
+                  aria-label="Clear search"
+                  className="powerwiki-nav-search-clear"
+                  onClick={() => setSearchQuery("")}
+                  type="button"
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+            {/* Results take over the tree's scroll area: the rail is narrow, and
+                a searching user is looking for a destination, not the tree. */}
+            <div className="powerwiki-nav-tree">
+              {searchQuery.trim() ? (
+                <WikiSearchResults
+                  activeWikiName={activeWiki?.name}
+                  onSearchContent={searchContent}
+                  onSelect={handleSearchResultSelected}
+                  pages={pageLinks}
+                  query={searchQuery}
+                />
+              ) : (
+                <WikiPageTree
+                  actions={treeActions}
+                  activePath={activePage?.path}
+                  isLoading={loadState === "loading" && pageTree.length === 0}
+                  nodes={pageTree}
+                />
+              )}
             </div>
             <div className="powerwiki-nav-footer">
               <button

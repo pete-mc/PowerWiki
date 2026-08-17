@@ -121,6 +121,7 @@ The current implementation provides a working Power Wiki experience:
 - Lists available project wikis through the Azure DevOps Wiki client.
 - Lists wiki pages and builds a navigable, collapsible page tree with lazy-loaded children.
 - Supports URL hash deep links and browser back/forward navigation for wiki pages.
+- Searches the wiki from the page-tree rail: page titles match locally as you type, and page content comes from the same Azure DevOps Search service the built-in wiki uses. When an organization's index is still building, that service answers a valid query with zero results and a reason code — PowerWiki shows the reason rather than reporting that nothing matched.
 - Loads selected page Markdown from the standard Azure DevOps Wiki backing store.
 - Renders Markdown through the PowerWiki Markdown pipeline.
 - Renders Mermaid diagrams through the bundled Mermaid runtime, including standard fenced blocks and Azure DevOps `::: mermaid` blocks.
