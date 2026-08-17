@@ -39,6 +39,8 @@ interface DropTarget {
 interface WikiPageTreeContextValue {
   readonly actions: WikiPageTreeActions;
   readonly activeAncestors: ReadonlySet<string>;
+  /** Forces every node open — used while filtering, so matches are visible. */
+  readonly expandAll: boolean;
   readonly activePath?: string;
   readonly draggedPath?: string;
   readonly dropTarget?: DropTarget;
@@ -60,11 +62,16 @@ function useWikiPageTreeContext(): WikiPageTreeContextValue {
 interface WikiPageTreeProps {
   readonly actions: WikiPageTreeActions;
   readonly activePath?: string;
+  /**
+   * Expands every node. A filtered tree is already pruned to matches and their
+   * ancestors, so leaving it collapsed hides the very pages the filter found.
+   */
+  readonly expandAll?: boolean;
   readonly isLoading?: boolean;
   readonly nodes: readonly WikiPageTreeNode[];
 }
 
-export function WikiPageTree({ actions, activePath, isLoading = false, nodes }: WikiPageTreeProps) {
+export function WikiPageTree({ actions, activePath, expandAll = false, isLoading = false, nodes }: WikiPageTreeProps) {
   const [draggedPath, setDraggedPath] = useState<string | undefined>(undefined);
   const [dropTarget, setDropTarget] = useState<DropTarget | undefined>(undefined);
   const activeAncestors = useMemo(() => findActiveAncestors(nodes, activePath), [activePath, nodes]);
@@ -76,6 +83,7 @@ export function WikiPageTree({ actions, activePath, isLoading = false, nodes }: 
     () => ({
       actions,
       activeAncestors,
+      expandAll,
       activePath,
       draggedPath,
       dropTarget,
@@ -83,7 +91,7 @@ export function WikiPageTree({ actions, activePath, isLoading = false, nodes }: 
       setDraggedPath,
       setDropTarget,
     }),
-    [actions, activeAncestors, activePath, draggedPath, dropTarget, homePath]
+    [actions, activeAncestors, activePath, draggedPath, dropTarget, expandAll, homePath]
   );
 
   if (nodes.length === 0) {
@@ -102,7 +110,7 @@ export function WikiPageTree({ actions, activePath, isLoading = false, nodes }: 
 }
 
 function WikiPageTreeList({ nodes }: { readonly nodes: readonly WikiPageTreeNode[] }) {
-  const { activeAncestors, activePath } = useWikiPageTreeContext();
+  const { activeAncestors, activePath, expandAll } = useWikiPageTreeContext();
 
   return (
     <ul className="wiki-page-tree">
@@ -117,7 +125,9 @@ function WikiPageTreeList({ nodes }: { readonly nodes: readonly WikiPageTreeNode
           //      subtree hasn't been fetched yet. This is what lets the tree
           //      auto-cascade-expand on deep-link restore without pre-loading.
           initialExpanded={
-            activeAncestors.has(node.path) || isAncestorOfActivePath(node.path, activePath)
+            expandAll ||
+            activeAncestors.has(node.path) ||
+            isAncestorOfActivePath(node.path, activePath)
           }
           key={node.path}
           node={node}

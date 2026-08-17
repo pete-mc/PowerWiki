@@ -113,6 +113,18 @@ export class FakeWikiRepositoryClient implements WikiRepositoryClient {
     }
   }
 
+  async getAllPages(_wikiId: string): Promise<WikiPageSummary[]> {
+    await this.tick();
+    return [...this.pages.values()]
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .map((page) => ({
+        id: page.id,
+        isParentPage: this.hasChildren(page.path),
+        order: page.order,
+        path: page.path
+      }));
+  }
+
   async getChildPages(_wikiId: string, parentPath_: string): Promise<WikiPageSummary[]> {
     await this.tick();
     return [...this.pages.values()]
