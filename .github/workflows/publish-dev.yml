@@ -14,8 +14,16 @@ name: Publish dev extension
 # `marketplace` environment as the release. Nothing about publishing PowerWiki
 # needs a Marketplace token on a developer machine.
 #
-# It is manual-only on purpose: unlike the canary, this build is pinned to one
-# person's localhost and there is no reason to republish it on every push.
+# It is manual-only on purpose: nothing in a push changes it. `baseUri` bypasses
+# the packaged files, so the published build carries no code — republishing it
+# per commit would upload the same thing again.
+#
+# Note that the default `baseUri` is NOT specific to whoever ran this workflow.
+# `localhost` resolves to whichever machine the *browser* is on, so a single
+# published build serves every maintainer: run `npm run dev:extension` on port
+# 3000 and the hub loads your working tree. Only re-run this workflow if the
+# manifest, the scopes, or the `baseUri` itself change — pointing it at a
+# non-localhost origin (a tunnel, say) is what would tie it to one machine.
 
 on:
   workflow_dispatch:
