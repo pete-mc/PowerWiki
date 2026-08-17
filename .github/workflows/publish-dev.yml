@@ -73,8 +73,14 @@ jobs:
       - name: Typecheck and unit tests
         run: npm test
 
+      # The build number matters more here than it looks. Without it every run
+      # publishes the same version, and the Marketplace refuses to republish a
+      # version — so the workflow would succeed exactly once and fail forever
+      # after, despite the guidance to re-run it whenever the manifest, scopes
+      # or baseUri change. github.run_number gives a monotonic component, the
+      # same way the canary does it.
       - name: Generate the dev manifest
-        run: npm run manifest:dev -- --base-uri "${{ inputs.base_uri }}"
+        run: npm run manifest:dev -- --base-uri "${{ inputs.base_uri }}" --build "${{ github.run_number }}"
 
       # Same guard the canary uses: refuses to publish anything that is not
       # private or that collides with the public extension id.
