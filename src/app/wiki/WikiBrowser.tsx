@@ -2074,6 +2074,10 @@ export function WikiBrowser({
           height the hub gives us instead of a fixed viewport fraction. */}
       <article
         className={activePage && isEditing ? "powerwiki-content editing" : "powerwiki-content"}
+        // Which page is on screen, readable from the DOM. The VS Code host
+        // reports it back to the extension so an editor tab and its webview
+        // cannot disagree about what they are showing.
+        data-powerwiki-page-path={activePage?.path}
         ref={contentRef}
       >
         <ErrorBoundary key={activePage?.path ?? "no-page"} label="page">

@@ -1,0 +1,5 @@
+# The UI test harness is a development tool: it pulls in Mocha and the VS Code
+# download helper, and has no reason to ship inside the extension.
+dist/test/**
+**/*.map
+.vscodeignore

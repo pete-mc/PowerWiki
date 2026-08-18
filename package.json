@@ -9,6 +9,9 @@
     "dev": "webpack --mode development --watch",
     "dev:extension": "node tools/serve/serve.mjs --watch --https --index /dist/powerwiki.html",
     "dev:sandbox": "node tools/serve/serve.mjs --watch --index /dist/sandbox.html",
+    "build:vscode": "webpack --config webpack.vscode.config.js --mode production",
+    "dev:vscode": "webpack --config webpack.vscode.config.js --mode development --watch",
+    "package:vscode": "npm run build:vscode && cd vscode && npx @vscode/vsce package --no-dependencies --out powerwiki-vscode.vsix",
     "typecheck": "tsc --noEmit",
     "manifest:dev": "node tools/release/variant-manifest.mjs dev",
     "manifest:canary": "node tools/release/variant-manifest.mjs canary",
@@ -21,7 +24,8 @@
     "pw:auth": "node tools/pw/auth.mjs",
     "pw:verify": "node tools/pw/verify.mjs",
     "test:unit": "vitest run",
-    "test": "npm run typecheck && vitest run"
+    "test": "npm run typecheck && vitest run",
+    "test:vscode": "npm run build:vscode && node vscode/dist/test/runTests.js"
   },
   "keywords": [
     "azure-devops",

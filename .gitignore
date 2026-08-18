@@ -16,3 +16,8 @@ screenshots/
 # Machine-specific agent notes; AGENTS.md is the tracked source of truth.
 CLAUDE.local.md
 AGENTS.local.md
+
+# VS Code extension build output and downloaded test runtimes
+vscode/dist/
+vscode/*.vsix
+.vscode-test/
