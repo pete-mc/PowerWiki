@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "../app/App";
 import { ErrorBoundary } from "../app/ErrorBoundary";
-import { initializeAzureDevOpsHost } from "./azureDevOpsHost";
+import { createAzureDevOpsWikiHost } from "../host/azureDevOpsWikiHost";
 
 import "../app/styles.css";
 
@@ -23,9 +23,9 @@ const renderApp = (props: Parameters<typeof App>[0]) =>
 
 renderApp({ status: "loading" });
 
-initializeAzureDevOpsHost()
-  .then((hostContext) => {
-    renderApp({ hostContext, status: "ready" });
+createAzureDevOpsWikiHost()
+  .then((host) => {
+    renderApp({ host, status: "ready" });
   })
   .catch((error: unknown) => {
     renderApp({ error, status: "failed" });
