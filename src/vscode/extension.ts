@@ -36,7 +36,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<PowerW
     vscode.commands.registerCommand("powerwiki.openAsText", (uri?: vscode.Uri) =>
       openAsText(uri)
     ),
-    vscode.commands.registerCommand("powerwiki.openHome", () => openHome(workspace)),
+    vscode.commands.registerCommand("powerwiki.openHome", (wikiRoot?: string) =>
+      openHome(workspace, wikiRoot)
+    ),
     vscode.commands.registerCommand("powerwiki.refreshWikis", async () => {
       await workspace.refresh();
       void vscode.window.showInformationMessage(
@@ -135,7 +137,15 @@ async function openAsText(uri: vscode.Uri | undefined): Promise<void> {
   await vscode.commands.executeCommand("vscode.openWith", resolved, "default");
 }
 
-async function openHome(workspace: WikiWorkspace): Promise<void> {
+/**
+ * Opens a wiki's home page.
+ *
+ * `wikiRoot` names the wiki outright; without it, the wiki containing whatever
+ * is open wins, and only a window with several wikis and nothing open falls
+ * through to a picker. Guessing between three wikis every time would be worse
+ * than asking, but asking when the answer is obvious is worse still.
+ */
+async function openHome(workspace: WikiWorkspace, wikiRoot?: string): Promise<void> {
   const wikis = workspace.discovered;
   if (wikis.length === 0) {
     void vscode.window.showWarningMessage(
@@ -144,15 +154,22 @@ async function openHome(workspace: WikiWorkspace): Promise<void> {
     return;
   }
 
+  const named = wikiRoot ? wikis.find((candidate) => candidate.rootPath === wikiRoot) : undefined;
+  const active = vscode.window.activeTextEditor
+    ? workspace.findWikiForFile(vscode.window.activeTextEditor.document.uri.fsPath)
+    : undefined;
+
   const wiki =
-    wikis.length === 1
+    named ??
+    active ??
+    (wikis.length === 1
       ? wikis[0]
       : (
           await vscode.window.showQuickPick(
             wikis.map((candidate) => ({ label: candidate.name, description: candidate.rootPath, candidate })),
             { placeHolder: "Which wiki?" }
           )
-        )?.candidate;
+        )?.candidate);
 
   if (!wiki) {
     return;

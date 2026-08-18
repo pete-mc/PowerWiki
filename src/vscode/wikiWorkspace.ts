@@ -5,7 +5,6 @@
 // per-workspace, not per-tab, and duplicating them per tab would rescan the
 // disk every time a page is opened.
 
-import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -54,9 +53,14 @@ export const vsCodeFileWriter: WikiFileWriter = {
         recursive: options.recursive,
         useTrash: true
       });
-    } catch {
+    } catch (error: unknown) {
       // Deleting a page removes both `Name.md` and `Name/`, and a page normally
-      // has only one of them. A missing target is the expected case, not an error.
+      // has only one of them, so a missing target is the expected case. Only
+      // that case: swallowing everything would turn a permission error into a
+      // delete that silently did nothing.
+      if ((error as vscode.FileSystemError).code !== "FileNotFound") {
+        throw error;
+      }
     }
   },
 
@@ -193,14 +197,4 @@ function resolveConfiguredRoot(configured: string): string {
 function isInside(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-/** Whether a path exists, used to decide if a page link points at a real file. */
-export async function fileExists(target: string): Promise<boolean> {
-  try {
-    await fs.stat(target);
-    return true;
-  } catch {
-    return false;
-  }
 }

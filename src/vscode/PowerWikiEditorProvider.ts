@@ -78,9 +78,38 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
 
     const disposables: vscode.Disposable[] = [];
     let editing = false;
+    let initialised = false;
+
+    const sendInit = async () => {
+      // A webview reloads itself after an external file change, so "ready" can
+      // arrive more than once; re-sending init is what makes that reload land
+      // on the same page rather than an empty shell.
+      const wikis = await this.workspace.repositoryClient.getWikis();
+      await post(panel, {
+        type: "init",
+        capabilities: VS_CODE_CAPABILITIES,
+        context: buildContext(wiki.name),
+        wikis,
+        activeWikiId: wiki.rootPath,
+        activePagePath: pagePath,
+        logoUrl: panel.webview
+          .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "dist", "media", "logo_new.png"))
+          .toString(),
+        attachmentBaseUrl: `${panel.webview.asWebviewUri(wikiRootUri).toString()}/`,
+        monacoBaseUrl: panel.webview
+          .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "dist", "vs"))
+          .toString()
+      });
+      initialised = true;
+    };
 
     disposables.push(
       panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
+        if (message.type === "ready") {
+          void sendInit();
+          return;
+        }
+
         if (message.type === "state") {
           editing = message.editing;
           const screen: EditorScreen = { ...message, documentPath: document.uri.fsPath };
@@ -120,22 +149,14 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
       return;
     }
 
-    const wikis = await this.workspace.repositoryClient.getWikis();
-    await post(panel, {
-      type: "init",
-      capabilities: VS_CODE_CAPABILITIES,
-      context: buildContext(wiki.name),
-      wikis,
-      activeWikiId: wiki.rootPath,
-      activePagePath: pagePath,
-      logoUrl: panel.webview
-        .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "dist", "media", "logo_new.png"))
-        .toString(),
-      attachmentBaseUrl: `${panel.webview.asWebviewUri(wikiRootUri).toString()}/`,
-      monacoBaseUrl: panel.webview
-        .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "dist", "vs"))
-        .toString()
-    });
+    // A belt-and-braces fallback: if "ready" never arrives — an old webview, a
+    // bundle that failed to attach its listener — send init anyway rather than
+    // leaving a blank panel with no diagnosis.
+    setTimeout(() => {
+      if (!initialised) {
+        void sendInit();
+      }
+    }, 2000);
   }
 
   /**
@@ -176,6 +197,14 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
         }
 
         const result = await method.apply(this.workspace.repositoryClient, args);
+
+        // An editor tab is one page of one wiki, and the wiki picker is off, so
+        // offering the window's other wikis here would only let the app pick
+        // the wrong one — which it does, since with no picker it just takes the
+        // first. Scope the list to this tab's wiki.
+        if (methodName === "getWikis") {
+          return (result as { id: string }[]).filter((entry) => entry.id === wikiId);
+        }
         // postMessage to a webview is JSON, so bytes have to be encoded rather
         // than arriving as an empty object.
         return BINARY_WIKI_METHODS.has(methodName)
@@ -214,11 +243,6 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
 
       case "openPage": {
         await this.openPage(wikiId, String(request.args[0]));
-        return undefined;
-      }
-
-      case "openExternal": {
-        await vscode.env.openExternal(vscode.Uri.parse(String(request.args[0])));
         return undefined;
       }
 

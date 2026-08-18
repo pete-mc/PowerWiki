@@ -32,27 +32,39 @@ root.render(
   </ErrorBoundary>
 );
 
+// Only after the listener above exists, or the init message lands nowhere.
 bridge.onMessage((message) => {
   if (message.type === "init") {
     mount(message);
     return;
   }
 
-  if (message.type === "reload") {
-    // The file changed outside PowerWiki. The extension only sends this when no
-    // edit is in progress (it watches the state messages below), so nothing
-    // unsaved is lost.
-    window.location.reload();
+  if (message.type === "reload" && lastInit) {
+    // The file changed outside PowerWiki. Remount rather than reloading the
+    // document: a webview reload would re-fetch the bundle, re-download Monaco
+    // and lose the extension's message channel mid-flight, where remounting
+    // just makes the app read the page again. The extension only sends this
+    // when no edit is in progress, so nothing unsaved is lost.
+    mount(lastInit);
   }
 });
 
+bridge.signalReady();
+
+let lastInit: InitMessage | undefined;
+let mountGeneration = 0;
+
 function mount(init: InitMessage): void {
+  lastInit = init;
+  mountGeneration += 1;
   document.documentElement.classList.add("powerwiki-vscode-root");
   setMonacoBaseUrl(init.monacoBaseUrl);
   const host = new VsCodeWikiHost(bridge, init);
 
+  // The key forces a fresh mount, which is what makes a remount re-read the
+  // page instead of reusing the component state that holds the old content.
   root.render(
-    <ErrorBoundary label="PowerWiki">
+    <ErrorBoundary key={mountGeneration} label="PowerWiki">
       <ScreenReporter />
       <App host={host} logoUrl={init.logoUrl} status="ready" />
     </ErrorBoundary>
@@ -86,7 +98,10 @@ function ScreenReporter() {
     const report = () => {
       const content = document.querySelector(".powerwiki-content");
       const headings = [...(content?.querySelectorAll("h1, h2, h3, h4, h5, h6") ?? [])]
-        .map((heading) => heading.textContent?.trim() ?? "")
+        // Headings carry a permalink anchor whose text is "#"; that is chrome,
+        // not the heading, and reporting it would make every assertion about a
+        // heading depend on how the permalink is rendered.
+        .map((heading) => (heading.textContent ?? "").replace(/[#¶]\s*$/, "").trim())
         .filter(Boolean);
 
       const payload = {
@@ -101,11 +116,11 @@ function ScreenReporter() {
           pageTree: Boolean(document.querySelector(".powerwiki-nav-tree")),
           wikiSelector: Boolean(document.querySelector(".wiki-selector")),
           commentsToggle: Boolean(document.querySelector(".wiki-byline-comments")),
-          // A badge that never gained the "-rich" class was never enriched,
-          // which off a clone is the intended outcome, not a failure.
-          inertWorkItems: document.querySelectorAll(
-            ".powerwiki-work-item-badge:not(.powerwiki-work-item-badge-rich)"
-          ).length,
+          workItems: document.querySelectorAll(".powerwiki-work-item-badge").length,
+          // A title span only appears once the work item's details have been
+          // loaded, so its absence is what "inert" actually looks like in the
+          // DOM — the badge itself is always painted, with just the id.
+          enrichedWorkItems: document.querySelectorAll(".powerwiki-work-item-title").length,
           inertMentions: document.querySelectorAll(".powerwiki-mention-unresolved").length
         }
       };

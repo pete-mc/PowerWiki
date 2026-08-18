@@ -19,8 +19,7 @@ export type HostMethod =
   | "confirm"
   | "prompt"
   | "alert"
-  | "openPage"
-  | "openExternal";
+  | "openPage";
 
 export interface RpcRequest {
   readonly type: "request";
@@ -104,14 +103,33 @@ export interface StateMessage {
     readonly pageTree: boolean;
     readonly wikiSelector: boolean;
     readonly commentsToggle: boolean;
-    /** Work-item badges present but not enriched — i.e. inert, as intended. */
-    readonly inertWorkItems: number;
+    /** Work-item references on the page. */
+    readonly workItems: number;
+    /**
+     * Of those, how many were filled in with a title. Off a clone this must be
+     * zero: the references stay as written rather than becoming chips that
+     * never resolve.
+     */
+    readonly enrichedWorkItems: number;
     /** Mentions left unresolved, for the same reason. */
     readonly inertMentions: number;
   };
 }
 
-export type WebviewMessage = RpcRequest | StateMessage;
+/**
+ * "The script is running and listening."
+ *
+ * Needed because `postMessage` to a webview is not queued: anything sent before
+ * the bundle attaches its `message` listener is dropped, and the init message is
+ * the first thing sent. Without this handshake the webview waits forever for an
+ * init that was delivered to nobody — and it fails exactly as often as the
+ * machine is fast, which is the worst kind of race to debug.
+ */
+export interface ReadyMessage {
+  readonly type: "ready";
+}
+
+export type WebviewMessage = RpcRequest | StateMessage | ReadyMessage;
 
 /**
  * Binary results cross the boundary as base64.

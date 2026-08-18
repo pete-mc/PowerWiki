@@ -115,10 +115,12 @@ suite("PowerWiki in VS Code", function () {
       const screen = await openPage(
         api,
         wikiFile(productWiki, "Home.md"),
-        (candidate) => candidate.rendered && candidate.chrome.inertWorkItems > 0
+        (candidate) => candidate.rendered && candidate.chrome.workItems > 0
       );
 
-      assert.equal(screen.chrome.inertWorkItems, 1);
+      assert.equal(screen.chrome.workItems, 1);
+      // The reference is shown, but nothing was fetched to fill it in.
+      assert.equal(screen.chrome.enrichedWorkItems, 0);
       assert.equal(screen.chrome.inertMentions, 1);
     });
   });
@@ -138,7 +140,7 @@ suite("PowerWiki in VS Code", function () {
     });
 
     test("opens the wiki's home page on command", async () => {
-      await vscode.commands.executeCommand("powerwiki.openHome");
+      await vscode.commands.executeCommand("powerwiki.openHome", productWiki);
 
       const screen = await waitForScreen(
         api,
@@ -165,6 +167,30 @@ suite("PowerWiki in VS Code", function () {
 
       const screen = await openPage(api, wikiFile(productWiki, scratchPage));
       assert.ok(screen.headings.includes("Scratch"));
+    });
+
+    // Page operations go through VS Code's own filesystem API, not node's, so
+    // these cover the writer the extension actually uses.
+    test("renames a page, moving its file", async () => {
+      await api.workspace.repositoryClient.createPage(productWiki, "/Scratch", "# Scratch\n");
+
+      await api.workspace.repositoryClient.movePage(productWiki, "/Scratch", "/Renamed", 0);
+
+      assert.equal(
+        await fs.readFile(path.join(productWiki, "Renamed.md"), "utf8"),
+        "# Scratch\n"
+      );
+      assert.equal(await exists(path.join(productWiki, scratchPage)), false);
+      await fs.rm(path.join(productWiki, "Renamed.md"), { force: true });
+    });
+
+    test("deletes a page, and its file goes", async () => {
+      await api.workspace.repositoryClient.createPage(productWiki, "/Scratch", "# Scratch\n");
+      assert.equal(await exists(path.join(productWiki, scratchPage)), true);
+
+      await api.workspace.repositoryClient.deletePage(productWiki, "/Scratch");
+
+      assert.equal(await exists(path.join(productWiki, scratchPage)), false);
     });
 
     // A save goes through VS Code's editor stack, so the document, the file and
@@ -239,3 +265,10 @@ suite("PowerWiki in VS Code", function () {
     });
   });
 });
+
+async function exists(target: string): Promise<boolean> {
+  return fs
+    .stat(target)
+    .then(() => true)
+    .catch(() => false);
+}

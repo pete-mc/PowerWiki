@@ -1960,6 +1960,11 @@ export function WikiBrowser({
 
   return (
     <>
+      {/* The rail is the whole page-navigation surface, so a host that already
+          has one of its own turns it off wholesale rather than emptying it. In
+          VS Code that host is the Explorer: the pages are files, so a second
+          tree beside it would be a duplicate that could disagree. */}
+      {capabilities.pageTree ? (
       <aside
         aria-label="Wiki pages"
         className={navCollapsed ? "powerwiki-nav collapsed" : "powerwiki-nav"}
@@ -2068,6 +2073,7 @@ export function WikiBrowser({
           </>
         )}
       </aside>
+      ) : null}
 
       {/* While editing the content area stops scrolling and becomes a flex
           column, so the editor (and the split preview beside it) fill the whole

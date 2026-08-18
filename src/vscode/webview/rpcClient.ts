@@ -53,6 +53,11 @@ export class ExtensionBridge {
     return this.request<T>(method, args);
   }
 
+  /** Tells the extension the listener is attached and init can be sent. */
+  public signalReady(): void {
+    this.api.postMessage({ type: "ready" });
+  }
+
   /** Reports what is on screen: an edit-in-progress guard, and the test hook. */
   public postState(state: Omit<StateMessage, "type">): void {
     this.api.postMessage({ type: "state", ...state });
