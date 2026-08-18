@@ -104,6 +104,7 @@ function ScreenReporter() {
         .map((heading) => (heading.textContent ?? "").replace(/[#¶]\s*$/, "").trim())
         .filter(Boolean);
 
+      const contentImages = [...(content?.querySelectorAll("img") ?? [])];
       const payload = {
         editing: Boolean(document.querySelector(".wiki-editor-shell")),
         headings,
@@ -121,7 +122,9 @@ function ScreenReporter() {
           // loaded, so its absence is what "inert" actually looks like in the
           // DOM — the badge itself is always painted, with just the id.
           enrichedWorkItems: document.querySelectorAll(".powerwiki-work-item-title").length,
-          inertMentions: document.querySelectorAll(".powerwiki-mention-unresolved").length
+          inertMentions: document.querySelectorAll(".powerwiki-mention-unresolved").length,
+          images: contentImages.length,
+          loadedImages: contentImages.filter((image) => image.complete && image.naturalWidth > 0).length
         }
       };
 
@@ -135,7 +138,17 @@ function ScreenReporter() {
     report();
     const observer = new MutationObserver(report);
     observer.observe(shell, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
+
+    // An image finishes decoding *after* the DOM stops changing, so a mutation
+    // observer alone would report every image as not-yet-loaded, forever.
+    shell.addEventListener("load", report, true);
+    shell.addEventListener("error", report, true);
+
+    return () => {
+      observer.disconnect();
+      shell.removeEventListener("load", report, true);
+      shell.removeEventListener("error", report, true);
+    };
   }, []);
 
   return null;

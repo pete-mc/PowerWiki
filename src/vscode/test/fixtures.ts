@@ -77,9 +77,13 @@ async function buildMainWiki(wikiPath: string): Promise<void> {
   await write(wikiPath, "Home/Getting-Started.md", GETTING_STARTED_PAGE);
   await write(wikiPath, "Home/Well%2Dknown-Issues.md", "# Well-known Issues\n\nNothing yet.\n");
   await write(wikiPath, "Release-Notes.md", "# Release Notes\n\nMermaid lives on the home page.\n");
-  await write(wikiPath, ".order", "Home\nRelease-Notes\n");
+  await write(wikiPath, ".order", "Home\nRelease-Notes\nAttachment-Test\n");
   await write(wikiPath, "Home/.order", "Getting-Started\nWell%2Dknown-Issues\n");
   await fs.mkdir(path.join(wikiPath, ".attachments"), { recursive: true });
+  // A real (1x1) PNG, so the image assertion is about whether the webview can
+  // actually serve a file from the wiki root — not about a placeholder.
+  await fs.writeFile(path.join(wikiPath, ".attachments", "dot.png"), Buffer.from(ONE_PIXEL_PNG_BASE64, "base64"));
+  await write(wikiPath, "Attachment-Test.md", ATTACHMENT_PAGE);
 
   // A committed history, so "History" has something to show and the page's
   // byline can name an author.
@@ -143,3 +147,11 @@ Clone the wiki repository and open the folder in VS Code.
 | 1 | The Explorer lists the pages |
 | 2 | Opening one renders it here |
 `;
+
+const ATTACHMENT_PAGE = `# Attachment Test
+
+![A dot](/.attachments/dot.png)
+`;
+
+const ONE_PIXEL_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

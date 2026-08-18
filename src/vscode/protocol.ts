@@ -114,6 +114,14 @@ export interface StateMessage {
     readonly enrichedWorkItems: number;
     /** Mentions left unresolved, for the same reason. */
     readonly inertMentions: number;
+    /** `<img>` elements in the page body. */
+    readonly images: number;
+    /**
+     * Of those, how many actually decoded. Attachment images are files served
+     * through the webview's resource roots, which is a VS Code-specific way for
+     * an image to silently fail — counting them is the only way to notice.
+     */
+    readonly loadedImages: number;
   };
 }
 

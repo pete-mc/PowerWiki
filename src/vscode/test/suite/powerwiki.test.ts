@@ -85,6 +85,19 @@ suite("PowerWiki in VS Code", function () {
       assert.ok(screen.headings.includes("Well-known Issues"));
     });
 
+    // Attachment images are files served through the webview's resource roots,
+    // which is the VS Code-specific way for an image to silently fail.
+    test("displays an attachment image from the wiki's .attachments folder", async () => {
+      const screen = await openPage(
+        api,
+        wikiFile(productWiki, "Attachment-Test.md"),
+        (candidate) => candidate.rendered && candidate.chrome.loadedImages > 0
+      );
+
+      assert.equal(screen.chrome.images, 1);
+      assert.equal(screen.chrome.loadedImages, 1);
+    });
+
     test("renders GFM tables", async () => {
       const screen = await openPage(api, wikiFile(productWiki, "Home/Getting-Started.md"));
 
