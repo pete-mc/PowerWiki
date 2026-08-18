@@ -91,6 +91,21 @@ export interface WorkItemProvider {
   openWorkItem(id: number): Promise<void>;
 }
 
+/**
+ * Simple modal prompts, owned by the host because `window.alert`/`confirm`/
+ * `prompt` are not universally available: a VS Code webview iframe is sandboxed
+ * without `allow-modals`, so `confirm()` silently returns false and `prompt()`
+ * returns null there. Using them directly would leave "create page", "rename"
+ * and every discard guard quietly broken rather than visibly unsupported.
+ *
+ * All three are async so a host can answer with a real UI of its own.
+ */
+export interface WikiHostDialogs {
+  alert(message: string): Promise<void>;
+  confirm(message: string): Promise<boolean>;
+  prompt(message: string, defaultValue?: string): Promise<string | undefined>;
+}
+
 export interface IdentityProvider {
   getMentionIdentity(id: string): Promise<MentionIdentity>;
 }
@@ -99,6 +114,7 @@ export interface WikiHost {
   readonly context: WikiHostContext;
   readonly capabilities: WikiHostCapabilities;
   readonly wikiClient: WikiRepositoryClient;
+  readonly dialogs: WikiHostDialogs;
 
   /**
    * Full-text search, or undefined when this host cannot search (no organization

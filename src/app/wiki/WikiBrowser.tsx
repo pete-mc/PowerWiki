@@ -370,6 +370,7 @@ export function WikiBrowser({
   const lastNavigatedPathRef = useRef<string | undefined>(undefined);
 
   const wikiClient = host.wikiClient;
+  const dialogs = host.dialogs;
   const followClient = host.follow;
   const workItemClient = host.workItems;
   const identityClient = host.identity;
@@ -473,9 +474,11 @@ export function WikiBrowser({
     [pageList]
   );
   const hasUnsavedChanges = Boolean(activePage && isEditing && draftContent !== activePage.content);
-  const confirmDiscardEdits = useCallback(() => {
-    return !hasUnsavedChangesRef.current || window.confirm("Discard unsaved page edits?");
-  }, []);
+  // Async because the confirmation belongs to the host: a VS Code webview
+  // cannot open a browser modal, so it asks VS Code to show one instead.
+  const confirmDiscardEdits = useCallback(async () => {
+    return !hasUnsavedChangesRef.current || (await dialogs.confirm("Discard unsaved page edits?"));
+  }, [dialogs]);
   const startEditing = useCallback(() => {
     if (!activePage) {
       return;
@@ -487,8 +490,8 @@ export function WikiBrowser({
     setSaveState("idle");
     setIsEditing(true);
   }, [activePage]);
-  const cancelEditing = useCallback(() => {
-    if (!confirmDiscardEdits()) {
+  const cancelEditing = useCallback(async () => {
+    if (!(await confirmDiscardEdits())) {
       return;
     }
 
@@ -701,7 +704,7 @@ export function WikiBrowser({
         setFollowSubscriptionId(null);
       }
     } catch (followError: unknown) {
-      window.alert(`Could not update follow: ${formatError(followError)}`);
+      void dialogs.alert(`Could not update follow: ${formatError(followError)}`);
     } finally {
       setFollowBusy(false);
     }
@@ -951,7 +954,7 @@ export function WikiBrowser({
         await loadPageByPath(activePage.path, false);
       }
       if (failures.length > 0) {
-        window.alert(`Could not update links on: ${failures.join(", ")}`);
+        await dialogs.alert(`Could not update links on: ${failures.join(", ")}`);
       }
     } finally {
       setLinkUpdateBusy(false);
@@ -1002,7 +1005,8 @@ export function WikiBrowser({
       return;
     }
 
-    if (!confirmDiscardEdits()) {
+    void (async () => {
+    if (!(await confirmDiscardEdits())) {
       return;
     }
 
@@ -1024,6 +1028,7 @@ export function WikiBrowser({
     }
 
     void loadPageByPath(parsed.pagePath, false, parsed.anchor);
+    })();
   };
 
   useEffect(() => {
@@ -1365,7 +1370,7 @@ export function WikiBrowser({
 
   const handlePageSelected = useCallback(
     async (path: string) => {
-      if (!confirmDiscardEdits()) {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
@@ -1379,8 +1384,8 @@ export function WikiBrowser({
   // open the page is the route a deep link already takes, so results behave the
   // same way as a pasted URL.
   const handleSearchResultSelected = useCallback(
-    (path: string, wikiName?: string) => {
-      if (!confirmDiscardEdits()) {
+    async (path: string, wikiName?: string) => {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
@@ -1444,11 +1449,11 @@ export function WikiBrowser({
 
   const handleCreatePage = useCallback(
     async (parentPath: string) => {
-      if (!wikiClient || !activeWikiId || !confirmDiscardEdits()) {
+      if (!wikiClient || !activeWikiId || !(await confirmDiscardEdits())) {
         return;
       }
 
-      const title = window.prompt("New page title")?.trim();
+      const title = (await dialogs.prompt("New page title"))?.trim();
       if (!title) {
         return;
       }
@@ -1460,10 +1465,10 @@ export function WikiBrowser({
         pendingEditPathRef.current = newPath;
         await loadPageByPath(newPath, true);
       } catch (createError: unknown) {
-        window.alert(`Could not create page: ${formatError(createError)}`);
+        void dialogs.alert(`Could not create page: ${formatError(createError)}`);
       }
     },
-    [activeWikiId, confirmDiscardEdits, loadPageByPath, reloadChildrenInto, wikiClient]
+    [activeWikiId, confirmDiscardEdits, dialogs, loadPageByPath, reloadChildrenInto, wikiClient]
   );
 
   const handleEditPage = useCallback(
@@ -1473,7 +1478,7 @@ export function WikiBrowser({
         return;
       }
 
-      if (!confirmDiscardEdits()) {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
@@ -1489,7 +1494,7 @@ export function WikiBrowser({
         return;
       }
 
-      if (!window.confirm(`Delete "${pageTitle(path)}" and any of its sub-pages?`)) {
+      if (!(await dialogs.confirm(`Delete "${pageTitle(path)}" and any of its sub-pages?`))) {
         return;
       }
 
@@ -1508,7 +1513,7 @@ export function WikiBrowser({
           }
         }
       } catch (deleteError: unknown) {
-        window.alert(`Could not delete page: ${formatError(deleteError)}`);
+        void dialogs.alert(`Could not delete page: ${formatError(deleteError)}`);
       }
     },
     [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, wikiClient]
@@ -1543,15 +1548,15 @@ export function WikiBrowser({
         // Offer to fix inbound links now pointing at the old path (#21 parity).
         void scanInboundLinks(sourcePath, newPath);
       } catch (moveError: unknown) {
-        window.alert(`Could not move page: ${formatError(moveError)}`);
+        void dialogs.alert(`Could not move page: ${formatError(moveError)}`);
       }
     },
     [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, scanInboundLinks, wikiClient]
   );
 
   const handleOpenMoveDialog = useCallback(
-    (path: string) => {
-      if (!confirmDiscardEdits()) {
+    async (path: string) => {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
       setMoveDialogPath(path);
@@ -1564,18 +1569,18 @@ export function WikiBrowser({
   // sync just like a drag move does.
   const handleRenamePage = useCallback(
     async (path: string) => {
-      if (!confirmDiscardEdits()) {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
       const currentName = path.split("/").filter(Boolean).at(-1) ?? path;
-      const nextName = window.prompt("Rename page", currentName)?.trim();
+      const nextName = (await dialogs.prompt("Rename page", currentName))?.trim();
       if (!nextName || nextName === currentName) {
         return;
       }
 
       if (nextName.includes("/")) {
-        window.alert('A page name cannot contain "/".');
+        await dialogs.alert('A page name cannot contain "/".');
         return;
       }
 
@@ -1588,7 +1593,7 @@ export function WikiBrowser({
         pageList.filter((page) => parentOfPath(page.path) === parent).length;
       await performMove(path, newPath, order);
     },
-    [confirmDiscardEdits, pageList, performMove]
+    [confirmDiscardEdits, dialogs, pageList, performMove]
   );
   // The header menu is built (via effect) before this handler is defined, so it
   // dispatches through a ref that always points at the current handler.
@@ -1977,12 +1982,14 @@ export function WikiBrowser({
               activeWikiId={activeWikiId}
               disabled={loadState === "loading"}
               onWikiSelected={(wikiId) => {
-                if (!confirmDiscardEdits()) {
-                  return;
-                }
+                void (async () => {
+                  if (!(await confirmDiscardEdits())) {
+                    return;
+                  }
 
-                savedNavigation.current = null;
-                setActiveWikiId(wikiId);
+                  savedNavigation.current = null;
+                  setActiveWikiId(wikiId);
+                })();
               }}
               wikis={wikis}
               />
@@ -2123,6 +2130,7 @@ export function WikiBrowser({
               <WikiRichTextEditor
                 currentPath={activePage.path}
                 disabled={saveState === "saving"}
+                onPrompt={dialogs.prompt}
                 onChange={setDraftContent}
                 onResolveImageSrc={resolveImageSrc}
                 onLoadImage={loadImageObjectUrl}
@@ -2172,9 +2180,11 @@ export function WikiBrowser({
                     onLoadWorkItemBadge={loadWorkItemBadge}
                     onLoadMention={loadMention}
                     onNavigate={(path) => {
-                      if (confirmDiscardEdits()) {
-                        void loadPageByPath(path, true);
-                      }
+                      void confirmDiscardEdits().then((confirmed) => {
+                        if (confirmed) {
+                          void loadPageByPath(path, true);
+                        }
+                      });
                     }}
                     onOpenWorkItem={openWorkItem}
                     onResolveImageSrc={resolveImageSrc}
@@ -2213,9 +2223,11 @@ export function WikiBrowser({
               onLoadWorkItemBadge={loadWorkItemBadge}
               onLoadMention={loadMention}
               onNavigate={(path) => {
-                if (confirmDiscardEdits()) {
-                  void loadPageByPath(path, true);
-                }
+                void confirmDiscardEdits().then((confirmed) => {
+                  if (confirmed) {
+                    void loadPageByPath(path, true);
+                  }
+                });
               }}
               onOpenWorkItem={openWorkItem}
               onResolveImageSrc={resolveImageSrc}

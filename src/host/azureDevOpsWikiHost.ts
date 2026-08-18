@@ -11,6 +11,7 @@ import {
 } from "azure-devops-extension-api/WorkItemTracking";
 
 import { resolveWithinTimeout } from "../app/wiki/hostServiceTimeout";
+import { browserDialogs } from "./browserDialogs";
 import { buildHubPageUrl } from "../app/wiki/wikiHeadingLink";
 import { AzureDevOpsIdentityClient } from "../identity/AzureDevOpsIdentityClient";
 import type { QueryTableResult } from "../rendering/MarkdownPreview";
@@ -72,6 +73,7 @@ export async function createAzureDevOpsWikiHost(): Promise<WikiHost> {
 class AzureDevOpsWikiHost implements WikiHost {
   public readonly capabilities: WikiHostCapabilities;
   public readonly context: WikiHostContext;
+  public readonly dialogs = browserDialogs;
   public readonly follow: FollowProvider;
   public readonly identity: IdentityProvider;
   public readonly wikiClient: WikiRepositoryClient;

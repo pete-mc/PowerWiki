@@ -22,6 +22,12 @@ interface WikiRichTextEditorProps {
   readonly onLoadImage?: (url: string) => Promise<string>;
   /** Uploads a pasted/dropped/picked file and returns its wiki reference. */
   readonly onUploadAttachment?: UploadAttachment;
+  /**
+   * Asks the user for a value. Supplied by the host, because a VS Code webview
+   * iframe is sandboxed without `allow-modals` and `window.prompt` returns null
+   * there — the "insert link" button would silently do nothing.
+   */
+  readonly onPrompt?: (message: string, defaultValue?: string) => Promise<string | undefined>;
   readonly value: string;
 }
 
@@ -32,6 +38,7 @@ export function WikiRichTextEditor({
   onResolveImageSrc,
   onLoadImage,
   onUploadAttachment,
+  onPrompt,
   value,
 }: WikiRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -412,12 +419,14 @@ export function WikiRichTextEditor({
     });
   }
 
-  function insertLink() {
+  async function insertLink() {
     if (disabled) {
       return;
     }
 
-    const url = window.prompt("Link URL", "https://")?.trim();
+    const ask = onPrompt ?? ((message: string, defaultValue?: string) =>
+      Promise.resolve(window.prompt(message, defaultValue) ?? undefined));
+    const url = (await ask("Link URL", "https://"))?.trim();
     if (!url) {
       return;
     }
@@ -496,7 +505,7 @@ export function WikiRichTextEditor({
         <button disabled={disabled} onClick={() => runCommand("insertOrderedList")} type="button">Number</button>
         <button disabled={disabled} onClick={() => runCommand("formatBlock", "<blockquote>")} type="button">Quote</button>
         <button disabled={disabled} onClick={() => runCommand("formatBlock", "<pre>")} type="button">Code</button>
-        <button disabled={disabled} onClick={insertLink} type="button">Link</button>
+        <button disabled={disabled} onClick={() => void insertLink()} type="button">Link</button>
         <button disabled={disabled || !onUploadAttachment || uploadCount > 0} onClick={insertImage} type="button">Image</button>
         <button disabled={disabled} onClick={insertTable} type="button">Table</button>
         {uploadCount > 0 ? <span className="wiki-richtext-status" role="status">Uploading…</span> : null}

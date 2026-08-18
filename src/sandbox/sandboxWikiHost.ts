@@ -4,12 +4,15 @@
 // use (see `src/host/WikiHost.ts`), which is what lets `npm run dev:sandbox`
 // exercise the real UI rather than a mock of it.
 
+import { browserDialogs } from "../host/browserDialogs";
 import type { WikiHost, WikiHostCapabilities, WikiHostContext, WikiHostNavigation } from "../host/WikiHost";
 import type { WikiSummary } from "../wiki/WikiPage";
 import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
 import { searchWiki, type SearchTransport, type WikiSearchOutcome } from "../wiki/wikiSearch";
 
 export class SandboxWikiHost implements WikiHost {
+  public readonly dialogs = browserDialogs;
+
   public readonly capabilities: WikiHostCapabilities = {
     comments: true,
     follow: false,
