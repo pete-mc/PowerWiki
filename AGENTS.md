@@ -113,6 +113,10 @@ one already cost a debugging round:
   attaches its `message` listener is dropped, so the webview sends `ready` first
   and the extension replies with `init`. Without that handshake it fails only on
   fast machines.
+- **A webview cannot start a download**, so a generated file goes through
+  `host.saveExportedFile`, which in VS Code sends the bytes to the extension host
+  for a save dialog. It also cannot print, which is why `capabilities.printToPdf`
+  exists and the PDF option is hidden there.
 - **`postMessage` serialises as JSON**, so an `ArrayBuffer` would arrive as `{}`.
   `BINARY_WIKI_METHODS` in `src/vscode/protocol.ts` names the methods that cross
   as base64; keep it in step if a method starts returning bytes.

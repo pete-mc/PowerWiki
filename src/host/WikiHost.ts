@@ -57,6 +57,12 @@ export interface WikiHostCapabilities {
   readonly search: boolean;
   /** Shareable absolute deep links to a page/heading. */
   readonly permalinks: boolean;
+  /**
+   * PDF export, which works by rendering the pages into the document and
+   * calling `window.print()`. A VS Code webview provides no print pipeline, so
+   * the option is withheld there rather than offered and doing nothing.
+   */
+  readonly printToPdf: boolean;
 }
 
 /**
@@ -145,6 +151,16 @@ export interface WikiHost {
    * resolve a `blob:` URL minted here.
    */
   loadImageDataUrl(url: string): Promise<string>;
+
+  /**
+   * Delivers an exported file to the user.
+   *
+   * A browser does this with an `<a download>` click; a VS Code webview blocks
+   * downloads entirely, so there it is a save dialog and a file write in the
+   * extension host. Same reason as `dialogs`: it looks like something the page
+   * can just do, and in one of the two hosts it silently is not.
+   */
+  saveExportedFile(fileName: string, blob: Blob): Promise<void>;
 
   /** Absolute shareable URL for a route hash, or undefined when unsupported. */
   buildPageUrl(pageHash: string, anchor?: string): string | undefined;

@@ -34,7 +34,11 @@ export class VsCodeWikiHost implements WikiHost {
     pageTree: false,
     wikiSelector: false,
     search: true,
-    permalinks: false
+    permalinks: false,
+    // PDF export goes through `window.print()`, and a webview has no print
+    // pipeline. Word export still works; it produces bytes, which the extension
+    // can write to disk.
+    printToPdf: false
   };
 
   public readonly context: WikiHostContext;
@@ -92,6 +96,15 @@ export class VsCodeWikiHost implements WikiHost {
       reader.onerror = () => reject(new Error("Unable to read the attachment."));
       reader.readAsDataURL(blob);
     });
+  }
+
+  /**
+   * A webview cannot start a download, so the bytes go to the extension host,
+   * which asks where to put them and writes the file.
+   */
+  public async saveExportedFile(fileName: string, blob: Blob): Promise<void> {
+    const base64 = arrayBufferToBase64(await blob.arrayBuffer());
+    await this.bridge.call<void>("saveFile", fileName, base64);
   }
 
   /** No shareable URL for a local file; headings keep their in-page anchor. */
@@ -169,4 +182,16 @@ function fromHash(hash: string): string {
   } catch {
     return withoutAnchor;
   }
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  // Chunked because String.fromCharCode(...bytes) blows the argument limit on
+  // anything larger than a small document.
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
 }

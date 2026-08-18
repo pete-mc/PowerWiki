@@ -18,3 +18,22 @@ export const browserDialogs: WikiHostDialogs = {
     return Promise.resolve(window.prompt(message, defaultValue) ?? undefined);
   }
 };
+
+/**
+ * Hands a generated file to the browser. Works wherever a page is allowed to
+ * start a download — the hub and the sandbox, but not a VS Code webview.
+ */
+export function downloadInBrowser(fileName: string, blob: Blob): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Revoked on a later tick: revoking synchronously can cancel the download
+  // before the browser has read the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return Promise.resolve();
+}

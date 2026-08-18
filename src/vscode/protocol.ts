@@ -19,7 +19,8 @@ export type HostMethod =
   | "confirm"
   | "prompt"
   | "alert"
-  | "openPage";
+  | "openPage"
+  | "saveFile";
 
 export interface RpcRequest {
   readonly type: "request";

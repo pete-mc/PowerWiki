@@ -20,7 +20,7 @@ it opens as a rendered page instead of raw text.
 | Attachments | Insert, list, and **replace** — a local file has none of the API's create-only limits |
 | Diagrams | draw.io round-trips, storing revisions in `.attachments` |
 | History | `git log --follow`, so a renamed page keeps its whole history |
-| Export | Word and PDF, as in the Azure DevOps hub |
+| Export | Word (.docx), saved through a file dialog |
 
 ## What is missing, and why
 
@@ -31,6 +31,9 @@ broken**:
 - **Follow / notifications** — a subscription held by the service.
 - **Work item badges and `@mentions`** — rendered exactly as written, with
   nothing fetched to fill them in. `#1234` stays `#1234`.
+- **PDF export** — it works by printing the rendered document, and a VS Code
+  webview has no print pipeline. Word export is offered instead; the PDF option
+  is hidden rather than shown and doing nothing.
 
 ## Finding your wiki
 

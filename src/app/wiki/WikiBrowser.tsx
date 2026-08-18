@@ -2325,6 +2325,8 @@ export function WikiBrowser({
 
       {exportOpen && activePage ? (
         <WikiExportDialog
+          allowPdf={capabilities.printToPdf}
+          onSaveFile={(fileName, blob) => host.saveExportedFile(fileName, blob)}
           currentPage={{ path: activePage.path, title: pageTitleFromPath(activePage.path) }}
           loadImage={loadExportImage}
           loadPageContent={loadPageContent}

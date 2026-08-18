@@ -11,7 +11,7 @@ import {
 } from "azure-devops-extension-api/WorkItemTracking";
 
 import { resolveWithinTimeout } from "../app/wiki/hostServiceTimeout";
-import { browserDialogs } from "./browserDialogs";
+import { browserDialogs, downloadInBrowser } from "./browserDialogs";
 import { buildHubPageUrl } from "../app/wiki/wikiHeadingLink";
 import { AzureDevOpsIdentityClient } from "../identity/AzureDevOpsIdentityClient";
 import type { QueryTableResult } from "../rendering/MarkdownPreview";
@@ -90,7 +90,8 @@ class AzureDevOpsWikiHost implements WikiHost {
       pageTree: true,
       wikiSelector: true,
       search: Boolean(context.organizationName && context.projectName),
-      permalinks: true
+      permalinks: true,
+      printToPdf: true
     };
 
     // The hub always has a project; the type says otherwise only because the
@@ -137,6 +138,10 @@ class AzureDevOpsWikiHost implements WikiHost {
 
   public loadImageDataUrl(url: string): Promise<string> {
     return fetchAttachmentDataUrl(url);
+  }
+
+  public saveExportedFile(fileName: string, blob: Blob): Promise<void> {
+    return downloadInBrowser(fileName, blob);
   }
 
   public buildPageUrl(pageHash: string, anchor?: string): string | undefined {

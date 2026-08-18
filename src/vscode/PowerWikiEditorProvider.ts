@@ -24,7 +24,8 @@ const VS_CODE_CAPABILITIES: WikiHostCapabilities = {
   pageTree: false,
   wikiSelector: false,
   search: true,
-  permalinks: false
+  permalinks: false,
+  printToPdf: false
 };
 
 /** What a webview last reported it was showing. Exposed for the UI tests. */
@@ -241,6 +242,27 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
         });
       }
 
+      case "saveFile": {
+        const [fileName, base64] = request.args as [string, string];
+        const target = await vscode.window.showSaveDialog({
+          defaultUri: vscode.Uri.joinPath(defaultSaveFolder(wikiId), fileName),
+          saveLabel: "Export"
+        });
+        if (!target) {
+          return undefined;
+        }
+
+        await vscode.workspace.fs.writeFile(target, Buffer.from(base64, "base64"));
+        void vscode.window
+          .showInformationMessage(`Exported ${path.basename(target.fsPath)}.`, "Open")
+          .then((answer) => {
+            if (answer === "Open") {
+              void vscode.env.openExternal(target);
+            }
+          });
+        return undefined;
+      }
+
       case "openPage": {
         await this.openPage(wikiId, String(request.args[0]));
         return undefined;
@@ -295,6 +317,12 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
   </body>
 </html>`;
   }
+}
+
+/** Where the save dialog starts: beside the wiki, which is where exports belong. */
+function defaultSaveFolder(wikiId: string): vscode.Uri {
+  const [firstFolder] = vscode.workspace.workspaceFolders ?? [];
+  return vscode.Uri.file(path.dirname(wikiId)) ?? firstFolder?.uri;
 }
 
 function buildContext(wikiName: string): WikiHostContext {

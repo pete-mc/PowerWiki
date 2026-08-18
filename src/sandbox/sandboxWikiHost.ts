@@ -4,7 +4,7 @@
 // use (see `src/host/WikiHost.ts`), which is what lets `npm run dev:sandbox`
 // exercise the real UI rather than a mock of it.
 
-import { browserDialogs } from "../host/browserDialogs";
+import { browserDialogs, downloadInBrowser } from "../host/browserDialogs";
 import type { WikiHost, WikiHostCapabilities, WikiHostContext, WikiHostNavigation } from "../host/WikiHost";
 import type { WikiSummary } from "../wiki/WikiPage";
 import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
@@ -21,7 +21,8 @@ export class SandboxWikiHost implements WikiHost {
     pageTree: true,
     wikiSelector: true,
     search: true,
-    permalinks: false
+    permalinks: false,
+    printToPdf: true
   };
 
   public readonly searchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
@@ -48,6 +49,10 @@ export class SandboxWikiHost implements WikiHost {
 
   public loadImageDataUrl(url: string): Promise<string> {
     return Promise.resolve(url);
+  }
+
+  public saveExportedFile(fileName: string, blob: Blob): Promise<void> {
+    return downloadInBrowser(fileName, blob);
   }
 
   public buildPageUrl(): string | undefined {
