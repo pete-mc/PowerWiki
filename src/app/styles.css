@@ -403,6 +403,18 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* The filtered tree keeps ancestors that did not themselves match, so the
+   highlight is what distinguishes a hit from the path leading to one. Same
+   tint as search snippets, for the same reason: the browser's yellow default
+   reads as an error against a dark theme. */
+.wiki-page-tree-match {
+  background: var(--pw-selected);
+  border-radius: 2px;
+  color: inherit;
+  font-weight: 600;
+  padding: 0 1px;
+}
+
 /* Matches are marked rather than the snippet being rendered as HTML; the yellow
    browser default reads as an error in a dark theme, so tint it instead. */
 .powerwiki-search-results mark {
