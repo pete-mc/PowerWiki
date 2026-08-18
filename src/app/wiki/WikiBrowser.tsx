@@ -2142,6 +2142,7 @@ export function WikiBrowser({
                   actions={treeActions}
                   activePath={activePage?.path}
                   expandAll={Boolean(treeFilter.trim())}
+                  highlightQuery={treeFilter}
                   isLoading={loadState === "loading" && navigationTree.length === 0}
                   nodes={filteredPageTree}
                 />

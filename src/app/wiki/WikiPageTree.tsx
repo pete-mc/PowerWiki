@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import type { WikiPageTreeNode } from "../../wiki/WikiPageTree";
+import { splitOnMatch } from "./matchSegments";
 import { ChevronIcon, HomeIcon, PageIcon } from "./WikiPageIcons";
 import { WikiPageMenu, type WikiPageMenuItem } from "./WikiPageMenu";
 
@@ -41,6 +42,8 @@ interface WikiPageTreeContextValue {
   readonly activeAncestors: ReadonlySet<string>;
   /** Forces every node open — used while filtering, so matches are visible. */
   readonly expandAll: boolean;
+  /** The active filter, highlighted within each label. Empty when not filtering. */
+  readonly highlightQuery: string;
   readonly activePath?: string;
   readonly draggedPath?: string;
   readonly dropTarget?: DropTarget;
@@ -67,11 +70,24 @@ interface WikiPageTreeProps {
    * ancestors, so leaving it collapsed hides the very pages the filter found.
    */
   readonly expandAll?: boolean;
+  /**
+   * Highlights this text within page names. A filtered tree contains ancestors
+   * that did not themselves match, so without it you cannot tell which of the
+   * pages on screen are the actual hits.
+   */
+  readonly highlightQuery?: string;
   readonly isLoading?: boolean;
   readonly nodes: readonly WikiPageTreeNode[];
 }
 
-export function WikiPageTree({ actions, activePath, expandAll = false, isLoading = false, nodes }: WikiPageTreeProps) {
+export function WikiPageTree({
+  actions,
+  activePath,
+  expandAll = false,
+  highlightQuery = "",
+  isLoading = false,
+  nodes
+}: WikiPageTreeProps) {
   const [draggedPath, setDraggedPath] = useState<string | undefined>(undefined);
   const [dropTarget, setDropTarget] = useState<DropTarget | undefined>(undefined);
   const activeAncestors = useMemo(() => findActiveAncestors(nodes, activePath), [activePath, nodes]);
@@ -84,6 +100,7 @@ export function WikiPageTree({ actions, activePath, expandAll = false, isLoading
       actions,
       activeAncestors,
       expandAll,
+      highlightQuery,
       activePath,
       draggedPath,
       dropTarget,
@@ -91,7 +108,16 @@ export function WikiPageTree({ actions, activePath, expandAll = false, isLoading
       setDraggedPath,
       setDropTarget,
     }),
-    [actions, activeAncestors, activePath, draggedPath, dropTarget, expandAll, homePath]
+    [
+      actions,
+      activeAncestors,
+      activePath,
+      draggedPath,
+      dropTarget,
+      expandAll,
+      highlightQuery,
+      homePath
+    ]
   );
 
   if (nodes.length === 0) {
@@ -143,7 +169,7 @@ interface WikiPageTreeItemProps {
 }
 
 function WikiPageTreeItem({ initialExpanded, node }: WikiPageTreeItemProps) {
-  const { actions, activePath, draggedPath, dropTarget, homePath, setDraggedPath, setDropTarget } =
+  const { actions, activePath, draggedPath, dropTarget, highlightQuery, homePath, setDraggedPath, setDropTarget } =
     useWikiPageTreeContext();
   const isActive = activePath === node.path;
   const [expanded, setExpanded] = useState(Boolean(initialExpanded));
@@ -268,7 +294,17 @@ function WikiPageTreeItem({ initialExpanded, node }: WikiPageTreeItemProps) {
           <span className="wiki-page-tree-icon">
             {node.path === homePath ? <HomeIcon /> : <PageIcon />}
           </span>
-          <span className="wiki-page-tree-label">{node.name}</span>
+          <span className="wiki-page-tree-label">
+            {splitOnMatch(node.name, highlightQuery).map((segment, index) =>
+              segment.isMatch ? (
+                <mark className="wiki-page-tree-match" key={index}>
+                  {segment.text}
+                </mark>
+              ) : (
+                <span key={index}>{segment.text}</span>
+              )
+            )}
+          </span>
         </button>
         <WikiPageMenu items={buildMenuItems(node.path, actions)} label={`Actions for ${node.name}`} />
       </div>
