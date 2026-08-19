@@ -9,28 +9,14 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import type { WikiHostCapabilities, WikiHostContext } from "../host/WikiHost";
+import type { WikiHostContext } from "../host/WikiHost";
 import type { ExtensionMessage, RpcRequest, StateMessage, WebviewMessage } from "./protocol";
 import { BINARY_WIKI_METHODS } from "./protocol";
+import { VS_CODE_CAPABILITIES } from "./capabilities";
 import { closeTextTabsFor, openWikiPage } from "./pageEditors";
 import { pagePathToRelativePath } from "./wikiPathEncoding";
 import type { WikiWorkspace } from "./wikiWorkspace";
 
-/** Matches the VS Code host's own declaration; sent so the webview cannot drift. */
-const VS_CODE_CAPABILITIES: WikiHostCapabilities = {
-  comments: false,
-  follow: false,
-  workItems: false,
-  mentions: false,
-  pageTree: false,
-  // Only the work item form lists linked pages instead of the tree.
-  linkedPages: false,
-  wikiSelector: false,
-  search: true,
-  permalinks: false,
-  printToPdf: false,
-  vsCodeHandoff: false
-};
 
 /** What a webview last reported it was showing. Exposed for the UI tests. */
 export interface EditorScreen extends Omit<StateMessage, "type"> {

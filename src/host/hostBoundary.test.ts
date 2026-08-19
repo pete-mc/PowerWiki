@@ -112,6 +112,45 @@ describe("the host boundary", () => {
   });
 });
 
+// The detector itself, because the guard above is only as good as this is, and
+// a guard that cannot fail looks exactly like a guard that passes.
+describe("the host SDK import detector", () => {
+  const SDK = "azure-devops-extension-sdk";
+
+  it("finds the forms an import actually takes", () => {
+    expect(importsModule(`import * as SDK from "${SDK}";`, SDK)).toBe(true);
+    expect(importsModule(`import {getAccessToken} from '${SDK}';`, SDK)).toBe(true);
+    expect(importsModule(`import "${SDK}";`, SDK)).toBe(true);
+    expect(importsModule(`const s = require("${SDK}");`, SDK)).toBe(true);
+    expect(importsModule(`await import("${SDK}");`, SDK)).toBe(true);
+  });
+
+  it("finds submodule imports", () => {
+    expect(
+      importsModule(
+        'import { WorkItemTrackingServiceIds } from "azure-devops-extension-api/WorkItemTracking";',
+        "azure-devops-extension-api"
+      )
+    ).toBe(true);
+  });
+
+  // Erased at build time, imports no code, and is how a shared layer refers to a
+  // host client's return shape. Flagging it would push people to duplicate those
+  // types instead, which is worse than the thing being prevented.
+  it("ignores type-only imports", () => {
+    expect(importsModule(`import type { IHostNavigationService } from "${SDK}";`, SDK)).toBe(false);
+  });
+
+  it("does not match a different module with the same prefix", () => {
+    expect(importsModule('import x from "vscode-uri";', "vscode")).toBe(false);
+    expect(importsModule('import x from "azure-devops-extension-sdk-shim";', SDK)).toBe(false);
+  });
+
+  it("does not match the name appearing in prose", () => {
+    expect(importsModule("// see azure-devops-extension-sdk for details", SDK)).toBe(false);
+  });
+});
+
 function sharedLayerFiles(): string[] {
   return SHARED_LAYERS.flatMap((layer) => filesUnder(path.join(SOURCE_ROOT, layer)));
 }
@@ -148,7 +187,7 @@ function filesUnder(directory: string): string[] {
  * to a host client's return shape. Flagging it would push people towards
  * duplicating those types, which is worse.
  */
-function importsModule(source: string, module: string): boolean {
+export function importsModule(source: string, module: string): boolean {
   const escaped = module.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const specifier = `["'](?:${escaped})(?:/[^"']*)?["']`;
   const patterns = [
