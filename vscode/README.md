@@ -1,4 +1,4 @@
-# PowerWiki for VS Code
+# ADO PowerWiki for VS Code
 
 Browse, search and edit a **cloned Azure DevOps wiki** as an ordinary folder,
 with PowerWiki's Markdown, Mermaid, KaTeX and draw.io rendering. No Azure DevOps
@@ -7,6 +7,13 @@ connection, no sign-in, no PAT — everything comes from the files on disk and
 
 The Explorer is the page tree. Click a Markdown file that belongs to a wiki and
 it opens as a rendered page instead of raw text.
+
+> **Working in Azure DevOps too?** [**PowerWiki for Azure DevOps**](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki) is
+> the companion extension: the same rendering, editing and export, as a hub next
+> to the built-in wiki — plus comments, follow, and live Azure Boards work item
+> badges and query tables, which need the service and so cannot work off a clone.
+> The two share one codebase and read and write the same wiki repositories, so
+> you can move between them freely.
 
 ## What works
 
@@ -98,5 +105,5 @@ npm run test:vscode       # UI tests in a real VS Code window
 Install the result with `code --install-extension vscode/powerwiki-vscode.vsix`,
 or press **F5** in this repository to launch an Extension Development Host.
 
-The extension shares its entire UI with the Azure DevOps hub extension; see
+The extension shares its entire UI with the [Azure DevOps extension](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki); see
 [`AGENTS.md`](../AGENTS.md) for the host boundary that makes that possible.

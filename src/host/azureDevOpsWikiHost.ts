@@ -91,7 +91,8 @@ class AzureDevOpsWikiHost implements WikiHost {
       wikiSelector: true,
       search: Boolean(context.organizationName && context.projectName),
       permalinks: true,
-      printToPdf: true
+      printToPdf: true,
+      vsCodeHandoff: true
     };
 
     // The hub always has a project; the type says otherwise only because the
@@ -138,6 +139,10 @@ class AzureDevOpsWikiHost implements WikiHost {
 
   public loadImageDataUrl(url: string): Promise<string> {
     return fetchAttachmentDataUrl(url);
+  }
+
+  public openExternal(url: string): void {
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   public saveExportedFile(fileName: string, blob: Blob): Promise<void> {

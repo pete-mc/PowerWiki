@@ -4,6 +4,12 @@
 
 ![PowerWiki rendering a wiki page with work item badges, an embedded Azure Boards query table, a per-page byline, and a Mermaid diagram](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-rendering.png)
 
+> 💻 **Prefer to work in your editor?** [**ADO PowerWiki for VS Code**](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki-vscode)
+> runs this same experience against a cloned wiki repository — no sign-in, no PAT —
+> with the built-in Explorer as the page tree. Same rendering, same editors, same
+> export. Use whichever suits the task; both read and write the same wiki Git
+> repositories.
+
 ## Why teams switch
 
 - 🧜 **Today's Mermaid, today's Markdown.** Mermaid v11 (architecture, kanban, sankey, xy-chart, mindmap, timeline and more), GitHub-style callouts, KaTeX math, syntax-highlighted code — instead of the frozen renderers bundled with Azure DevOps.

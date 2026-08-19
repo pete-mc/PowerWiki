@@ -21,3 +21,4 @@ AGENTS.local.md
 vscode/dist/
 vscode/*.vsix
 .vscode-test/
+tools/e2e/artifacts/

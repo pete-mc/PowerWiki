@@ -1,15 +1,17 @@
 {
   "name": "powerwiki",
-  "version": "1.3.9",
+  "version": "1.3.10",
   "description": "PowerWiki is an Azure DevOps extension that adds a Power Wiki menu experience while continuing to use the standard Azure DevOps Wiki repositories as the source of truth.",
   "private": true,
   "main": "dist/powerwiki.js",
   "scripts": {
     "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
     "dev": "webpack --mode development --watch",
     "dev:extension": "node tools/serve/serve.mjs --watch --https --index /dist/powerwiki.html",
     "dev:sandbox": "node tools/serve/serve.mjs --watch --index /dist/sandbox.html",
     "build:vscode": "webpack --config webpack.vscode.config.js --mode production",
+    "icon:vscode": "node tools/media/make-vscode-icon.mjs",
     "dev:vscode": "webpack --config webpack.vscode.config.js --mode development --watch",
     "package:vscode": "npm run build:vscode && cd vscode && npx @vscode/vsce package --no-dependencies --out powerwiki-vscode.vsix",
     "publish:vscode": "npm run build:vscode && node tools/release/assert-vscode-manifest.mjs $(node -p \"require('./vscode/package.json').version\") && cd vscode && npx @vscode/vsce publish --no-dependencies",
@@ -26,7 +28,8 @@
     "pw:verify": "node tools/pw/verify.mjs",
     "test:unit": "vitest run",
     "test": "npm run typecheck && vitest run",
-    "test:vscode": "npm run build:vscode && node vscode/dist/test/runTests.js"
+    "test:vscode": "npm run build:vscode && node vscode/dist/test/runTests.js",
+    "test:e2e": "npm run build:dev && node tools/e2e/run.mjs"
   },
   "keywords": [
     "azure-devops",

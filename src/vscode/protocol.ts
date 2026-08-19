@@ -20,6 +20,7 @@ export type HostMethod =
   | "prompt"
   | "alert"
   | "openPage"
+  | "openExternal"
   | "saveFile";
 
 export interface RpcRequest {

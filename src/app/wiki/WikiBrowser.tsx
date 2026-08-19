@@ -43,6 +43,14 @@ import { WikiSelector } from "./WikiSelector";
    upgrade lands before most people reach for the filter. */
 const PREFETCH_DELAY_MS = 1500;
 
+// The companion extension, which runs this same UI against a cloned wiki.
+// An https URL rather than `vscode:extension/…` on purpose: the hub renders in a
+// sandboxed cross-origin iframe, where a custom-protocol navigation is silently
+// dropped by some browsers, and a button that does nothing is worse than one
+// that opens a page with an Install button on it.
+const VS_CODE_EXTENSION_URL =
+  "https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki-vscode";
+
 interface WikiBrowserProps {
   /**
    * Everything host-specific, behind one interface (see `src/host/WikiHost.ts`).
@@ -871,6 +879,28 @@ export function WikiBrowser({
       },
     ];
 
+    // Handing the wiki over to VS Code. Only offered from the hub — inside VS
+    // Code the user is already there — and the clone entry needs the wiki's
+    // repository URL, which an on-prem or unusual host may not report.
+    if (capabilities.vsCodeHandoff) {
+      if (activeWiki?.remoteUrl) {
+        actions.push({
+          id: "clone-in-vscode",
+          label: "Clone wiki in VS Code",
+          onClick: () =>
+            host.openExternal(
+              `vscode://vscode.git/clone?url=${encodeURIComponent(activeWiki.remoteUrl ?? "")}`
+            ),
+        });
+      }
+
+      actions.push({
+        id: "install-vscode-extension",
+        label: "Install the VS Code extension",
+        onClick: () => host.openExternal(VS_CODE_EXTENSION_URL),
+      });
+    }
+
     // Following is a notification subscription held by the service, so it only
     // exists in the hub. Omit the entry rather than showing one that fails.
     if (capabilities.follow) {
@@ -887,7 +917,7 @@ export function WikiBrowser({
     return () => {
       onHeaderMenuActionsChange?.([]);
     };
-  }, [activePage, cancelEditing, capabilities.follow, followBusy, followSubscriptionId, isEditing, onHeaderMenuActionsChange, startEditing, toggleFollow]);
+  }, [activePage, activeWiki?.remoteUrl, cancelEditing, capabilities.follow, capabilities.vsCodeHandoff, followBusy, followSubscriptionId, host, isEditing, onHeaderMenuActionsChange, startEditing, toggleFollow]);
 
   // Loads a page by path, trying hyphen/space variants, and (optionally) syncs
   // the URL hash. This is the single entry point for all navigation:

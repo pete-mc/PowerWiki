@@ -38,7 +38,9 @@ export class VsCodeWikiHost implements WikiHost {
     // PDF export goes through `window.print()`, and a webview has no print
     // pipeline. Word export still works; it produces bytes, which the extension
     // can write to disk.
-    printToPdf: false
+    printToPdf: false,
+    // Already in VS Code; offering to open it there would be absurd.
+    vsCodeHandoff: false
   };
 
   public readonly context: WikiHostContext;
@@ -105,6 +107,10 @@ export class VsCodeWikiHost implements WikiHost {
   public async saveExportedFile(fileName: string, blob: Blob): Promise<void> {
     const base64 = arrayBufferToBase64(await blob.arrayBuffer());
     await this.bridge.call<void>("saveFile", fileName, base64);
+  }
+
+  public openExternal(url: string): void {
+    void this.bridge.call<void>("openExternal", url);
   }
 
   /** No shareable URL for a local file; headings keep their in-page anchor. */

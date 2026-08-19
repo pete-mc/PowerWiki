@@ -303,6 +303,27 @@ and skips the extension SDK entirely. Follow, work-item enrichment, and
 `@mention` resolution go through host services that are not faked, so they
 degrade; the seed content includes examples so you can see how.
 
+#### End-to-end UI tests against the sandbox
+
+```bash
+npm run test:e2e
+```
+
+Drives the real application in a real browser (`tools/e2e/run.mjs`) against the
+sandbox: same `App`, same `WikiHost` boundary, in-memory wiki. It asserts on
+rendered DOM — a heading on screen, the tree narrowing, Mermaid producing SVG,
+an edit surviving a save and a navigation — so it fails when a user would see
+something wrong rather than when an internal value changes. It runs unattended
+and is part of CI, which is what `tools/pw/` cannot be.
+
+It cannot see anything *below* the host boundary: REST contracts, permissions,
+the SDK handshake, CDN paths. That is what layers 2 and 3 are for. When you add
+a feature above the boundary, add a case here; when you add one below it, extend
+`tools/pw/verify.mjs`.
+
+The VS Code extension has the equivalent (`npm run test:vscode`), driving a real
+VS Code window — see "Two hosts, one UI".
+
 ### 2. The dev extension — real Azure DevOps, working-tree code, no publishing
 
 A private extension (`powerwiki-dev`) whose manifest sets

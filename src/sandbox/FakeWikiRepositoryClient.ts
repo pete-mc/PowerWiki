@@ -42,7 +42,11 @@ export class FakeWikiRepositoryClient implements WikiRepositoryClient {
         id: "sandbox-wiki",
         name: "Sandbox.wiki",
         repositoryId: "sandbox-repo",
-        version: "wikiMaster"
+        version: "wikiMaster",
+        // A plausible remote so the "Clone wiki in VS Code" action — which is
+        // only offered when the wiki reports one — is reachable in the sandbox
+        // and therefore testable.
+        remoteUrl: "https://dev.azure.com/sandbox/Sandbox/_git/Sandbox.wiki"
       }
     ];
 

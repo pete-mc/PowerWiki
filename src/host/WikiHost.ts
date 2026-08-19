@@ -58,6 +58,12 @@ export interface WikiHostCapabilities {
   /** Shareable absolute deep links to a page/heading. */
   readonly permalinks: boolean;
   /**
+   * Offers to hand the wiki over to VS Code — clone the repository, install the
+   * VS Code extension. Only meaningful from the Azure DevOps hub; inside VS Code
+   * the user is already there.
+   */
+  readonly vsCodeHandoff: boolean;
+  /**
    * PDF export, which works by rendering the pages into the document and
    * calling `window.print()`. A VS Code webview provides no print pipeline, so
    * the option is withheld there rather than offered and doing nothing.
@@ -161,6 +167,9 @@ export interface WikiHost {
    * can just do, and in one of the two hosts it silently is not.
    */
   saveExportedFile(fileName: string, blob: Blob): Promise<void>;
+
+  /** Opens a URL outside the app: a new browser tab, or the OS handler. */
+  openExternal(url: string): void;
 
   /** Absolute shareable URL for a route hash, or undefined when unsupported. */
   buildPageUrl(pageHash: string, anchor?: string): string | undefined;

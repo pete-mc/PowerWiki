@@ -37,6 +37,17 @@ jobs:
       - name: Build extension assets
         run: npm run build
 
+      # End-to-end, in a real browser, against the local sandbox: the same App
+      # the hub mounts, behind the same WikiHost interface, with an in-memory
+      # wiki. Covers the shell, tree, rendering, editors, search and export —
+      # everything above the host boundary, which is most of what changes.
+      - name: End-to-end UI tests (Azure DevOps UI)
+        run: npx playwright install --with-deps chromium && npm run test:e2e
+
+      # The VS Code extension driven in a real VS Code window.
+      - name: End-to-end UI tests (VS Code)
+        run: xvfb-run -a npm run test:vscode
+
       # Package the real artefact on every run. Previously the build output was
       # discarded, so manifest and packaging errors only surfaced at release time,
       # when a bad version number is already spent. This also gives a .vsix that

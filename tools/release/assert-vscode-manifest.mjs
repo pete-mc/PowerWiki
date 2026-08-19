@@ -19,6 +19,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { decodePng } from "../media/png.mjs";
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const EXPECTED_PUBLISHER = "dataversepowertools";
@@ -65,6 +67,8 @@ if (manifest.icon) {
   const iconPath = path.join(REPO_ROOT, "vscode", manifest.icon);
   if (!fs.existsSync(iconPath)) {
     problems.push(`icon "${manifest.icon}" does not exist at ${iconPath}`);
+  } else {
+    problems.push(...iconProblems(iconPath));
   }
 }
 
@@ -72,6 +76,50 @@ for (const required of ["README.md", "CHANGELOG.md", "LICENSE"]) {
   if (!fs.existsSync(path.join(REPO_ROOT, "vscode", required))) {
     problems.push(`vscode/${required} is missing; the Marketplace listing renders it`);
   }
+}
+
+/**
+ * An icon must carry its own background.
+ *
+ * 0.1.1 shipped the brand logo as-is: a near-black glyph on transparency. It
+ * looked right on the Marketplace's white page and was invisible in the VS Code
+ * Extensions view, which is dark for most people. Nothing in the toolchain
+ * noticed, because a transparent PNG is a perfectly valid PNG — so check it
+ * here, where a version number is about to be spent.
+ */
+function iconProblems(iconPath) {
+  let image;
+  try {
+    image = decodePng(fs.readFileSync(iconPath));
+  } catch (error) {
+    return [`icon could not be read: ${error.message}`];
+  }
+
+  const found = [];
+  if (image.width < 128 || image.height < 128) {
+    found.push(`icon is ${image.width}x${image.height}; the Marketplace wants at least 128x128`);
+  }
+
+  let transparent = 0;
+  let total = 0;
+  for (let y = 0; y < image.height; y += 8) {
+    for (let x = 0; x < image.width; x += 8) {
+      total += 1;
+      if (image.data[(y * image.width + x) * 4 + 3] < 250) {
+        transparent += 1;
+      }
+    }
+  }
+
+  if (transparent / total > 0.02) {
+    found.push(
+      `icon is ${Math.round((transparent / total) * 100)}% transparent, so it borrows the ` +
+        "theme's background and disappears in dark themes. Run " +
+        "`node tools/media/make-vscode-icon.mjs`."
+    );
+  }
+
+  return found;
 }
 
 if (problems.length > 0) {

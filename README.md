@@ -1,7 +1,8 @@
 # PowerWiki
 
 [![CI](https://github.com/pete-mc/PowerWiki/actions/workflows/ci.yml/badge.svg)](https://github.com/pete-mc/PowerWiki/actions/workflows/ci.yml)
-[![Marketplace](https://img.shields.io/badge/Marketplace-PowerWiki-0078d4)](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki)
+[![Azure DevOps](https://img.shields.io/badge/Azure%20DevOps-PowerWiki-0078d4)](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki)
+[![VS Code](https://img.shields.io/badge/VS%20Code-ADO%20PowerWiki-007acc)](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki-vscode)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 PowerWiki is an Azure DevOps extension that adds a **Power Wiki** menu experience alongside the default Azure DevOps Wiki while continuing to use the standard Azure DevOps Wiki repositories as the source of truth.
@@ -317,8 +318,15 @@ The one exception is a hash run followed immediately by a digit: `#1234` stays a
 
 ## Using PowerWiki in VS Code
 
-PowerWiki also ships as a VS Code extension that works entirely off a cloned wiki
-repository — no sign-in, no PAT. The built-in Explorer is the page tree.
+PowerWiki also ships as **[ADO PowerWiki for VS Code](https://marketplace.visualstudio.com/items?itemName=dataversepowertools.powerwiki-vscode)**, which works
+entirely off a cloned wiki repository — no sign-in, no PAT. The built-in Explorer
+is the page tree.
+
+```bash
+code --install-extension dataversepowertools.powerwiki-vscode
+```
+
+Or build it from source:
 
 ```bash
 npm run build:vscode      # bundle the extension and webview into vscode/dist

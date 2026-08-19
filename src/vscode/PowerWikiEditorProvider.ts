@@ -26,7 +26,8 @@ const VS_CODE_CAPABILITIES: WikiHostCapabilities = {
   wikiSelector: false,
   search: true,
   permalinks: false,
-  printToPdf: false
+  printToPdf: false,
+  vsCodeHandoff: false
 };
 
 /** What a webview last reported it was showing. Exposed for the UI tests. */
@@ -269,6 +270,11 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
               void vscode.env.openExternal(target);
             }
           });
+        return undefined;
+      }
+
+      case "openExternal": {
+        await vscode.env.openExternal(vscode.Uri.parse(String(request.args[0])));
         return undefined;
       }
 

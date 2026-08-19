@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.10
+
+Version numbers now track the Azure DevOps extension, so a given version means
+the same PowerWiki in both places.
+
+- Renamed to **ADO PowerWiki for VS Code**, so it is distinguishable from the
+  Azure DevOps extension of the same name.
+- New icon. The old one was the brand logo as-is — a near-black glyph on
+  transparency — which was invisible against the VS Code Extensions view in any
+  dark theme. It now carries its own background.
+- Links to the Azure DevOps extension from the Marketplace listing.
+
+## 0.1.2 (unreleased)
+
+- Renamed to **ADO PowerWiki for VS Code**, so it is distinguishable from the
+  Azure DevOps extension of the same name.
+- New icon. The old one was the brand logo as-is — a near-black glyph on
+  transparency — which was invisible against the VS Code Extensions view in any
+  dark theme. It now carries its own background. `tools/media/make-vscode-icon.mjs`
+  generates it, and the release refuses to publish a transparent one.
+
 ## 0.1.1
 
 - Pages reuse the editor tab instead of opening a new one each time, and a page

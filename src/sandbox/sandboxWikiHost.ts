@@ -22,7 +22,8 @@ export class SandboxWikiHost implements WikiHost {
     wikiSelector: true,
     search: true,
     permalinks: false,
-    printToPdf: true
+    printToPdf: true,
+    vsCodeHandoff: true
   };
 
   public readonly searchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
@@ -49,6 +50,10 @@ export class SandboxWikiHost implements WikiHost {
 
   public loadImageDataUrl(url: string): Promise<string> {
     return Promise.resolve(url);
+  }
+
+  public openExternal(url: string): void {
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   public saveExportedFile(fileName: string, blob: Blob): Promise<void> {

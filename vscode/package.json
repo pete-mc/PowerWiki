@@ -1,8 +1,8 @@
 {
   "name": "powerwiki-vscode",
-  "displayName": "PowerWiki",
+  "displayName": "ADO PowerWiki for VS Code",
   "description": "Browse, search and edit a cloned Azure DevOps wiki in VS Code, with PowerWiki's Markdown, Mermaid and draw.io rendering.",
-  "version": "0.1.1",
+  "version": "1.3.10",
   "publisher": "dataversepowertools",
   "license": "MIT",
   "repository": {
