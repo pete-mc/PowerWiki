@@ -43,10 +43,11 @@ export class FakeWikiRepositoryClient implements WikiRepositoryClient {
         name: "Sandbox.wiki",
         repositoryId: "sandbox-repo",
         version: "wikiMaster",
-        // A plausible remote so the "Clone wiki in VS Code" action — which is
-        // only offered when the wiki reports one — is reachable in the sandbox
-        // and therefore testable.
-        remoteUrl: "https://dev.azure.com/sandbox/Sandbox/_git/Sandbox.wiki"
+        // What the Wiki API actually returns: the wiki's *web* URL, which git
+        // cannot clone. Kept realistic on purpose — a fixture holding a `_git`
+        // URL here would let the clone action regress to using this field
+        // without any test noticing.
+        remoteUrl: "https://dev.azure.com/sandbox/11111111-2222-3333-4444-555555555555/_wiki/wikis/66666666-7777-8888-9999-000000000000"
       }
     ];
 
@@ -196,6 +197,11 @@ export class FakeWikiRepositoryClient implements WikiRepositoryClient {
         gitItemPath: "/Home.md"
       }
     ];
+  }
+
+  async getRepositoryCloneUrl(): Promise<string | undefined> {
+    await this.tick();
+    return "https://dev.azure.com/sandbox/Sandbox/_git/Sandbox.wiki";
   }
 
   async getWikis(): Promise<WikiSummary[]> {

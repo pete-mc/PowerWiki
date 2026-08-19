@@ -32,6 +32,17 @@ export interface WikiRepositoryClient {
   getChildPages(wikiId: string, parentPath: string): Promise<WikiPageSummary[]>;
   /** Raw bytes of a file in the wiki's Git repository, used by export. */
   getItemBytes(repositoryId: string, repoPath: string): Promise<ArrayBuffer>;
+  /**
+   * The Git clone URL of the wiki's backing repository, or undefined when the
+   * host cannot determine one.
+   *
+   * Deliberately not `WikiSummary.remoteUrl`: that field is the wiki's *web*
+   * URL from the Wiki API (`.../_wiki/wikis/<wikiId>`), which git cannot clone
+   * — it follows the redirect to a sign-in page and fails with "unable to
+   * update url base from redirection". The clone URL is a property of the
+   * repository, and has to be asked for as one.
+   */
+  getRepositoryCloneUrl(repositoryId: string): Promise<string | undefined>;
   getPage(wikiId: string, path: string): Promise<WikiPage>;
   /** The page's Markdown as it was at a specific commit, for history compare. */
   getPageContentAtCommit(

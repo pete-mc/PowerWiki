@@ -249,6 +249,32 @@ async function runSuite(page) {
       labels.some((label) => /Clone wiki in VS Code/i.test(label)),
       `no clone entry; menu was: ${labels.join(", ")}`
     );
+
+    // 1.3.10 shipped this action pointing at the wiki's *web* URL
+    // (`.../_wiki/wikis/<guid>`), which git cannot clone — it follows the
+    // redirect to a sign-in page and dies with "unable to update url base from
+    // redirection". Assert the handler actually hands over a Git URL.
+    const cloneUrl = await page.evaluate(async () => {
+      const opened = [];
+      const original = window.open;
+      window.open = (url) => {
+        opened.push(String(url));
+        return null;
+      };
+      const items = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
+      items.find((item) => /Clone wiki in VS Code/i.test(item.textContent ?? ""))?.click();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      window.open = original;
+      return opened[0] ?? "";
+    });
+
+    assert(
+      cloneUrl.startsWith("vscode://vscode.git/clone?url="),
+      `clone action opened an unexpected URL: ${cloneUrl}`
+    );
+    const target = decodeURIComponent(cloneUrl.split("url=")[1] ?? "");
+    assert(/\/_git\//.test(target), `clone URL is not a Git URL: ${target}`);
+    assert(!/\/_wiki\//.test(target), `clone URL points at the wiki web UI: ${target}`);
     await closeHeaderMenu(page);
   });
 }

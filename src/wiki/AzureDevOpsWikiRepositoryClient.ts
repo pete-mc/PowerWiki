@@ -265,6 +265,18 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
 
   public constructor(private readonly projectName: string) {}
 
+  public async getRepositoryCloneUrl(repositoryId: string): Promise<string | undefined> {
+    try {
+      const repository = await this.gitClient.getRepository(repositoryId, this.projectName);
+      return repository.remoteUrl ?? undefined;
+    } catch {
+      // Reading the repository needs `vso.code`, which an organization may not
+      // have consented to. Returning undefined hides the clone action rather
+      // than offering one that cannot work.
+      return undefined;
+    }
+  }
+
   public async getWikis(): Promise<WikiSummary[]> {
     const wikis = await this.wikiClient.getAllWikis(this.projectName);
 

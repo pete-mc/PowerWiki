@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.11
+
+- Fixed **Clone wiki in VS Code** (in the Azure DevOps extension), which handed
+  git the wiki's *web* URL. Git followed the redirect to a sign-in page and
+  failed with `unable to update url base from redirection`. The clone URL is now
+  read from the repository itself, and the action is hidden when there is not
+  one.
+
 ## 1.3.10
 
 Version numbers now track the Azure DevOps extension, so a given version means

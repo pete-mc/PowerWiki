@@ -27,7 +27,7 @@ import type {
 } from "../wiki/WikiComment";
 import type { WikiAttachment, WikiPage, WikiPageSummary, WikiSummary } from "../wiki/WikiPage";
 import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
-import { logFile, showFileAtCommit } from "./git";
+import { logFile, runGit, showFileAtCommit } from "./git";
 import {
   applyOrder,
   formatOrderFile,
@@ -110,6 +110,29 @@ export class GitWikiRepositoryClient implements WikiRepositoryClient {
         mappedPath: "/"
       }))
     );
+  }
+
+  /**
+   * The clone URL is whatever this working tree was cloned from.
+   *
+   * Nothing in VS Code needs it — the repository is already on disk — but the
+   * interface is shared, and answering honestly is cheaper than a stub that
+   * lies.
+   */
+  public async getRepositoryCloneUrl(repositoryId: string): Promise<string | undefined> {
+    const wiki = this.wikiFor(repositoryId);
+    if (!wiki.repositoryPath) {
+      return undefined;
+    }
+
+    try {
+      const url = await runGit(wiki.repositoryPath, ["remote", "get-url", "origin"]);
+      return url.trim() || undefined;
+    } catch {
+      // No remote, or not a work tree: a wiki can be perfectly usable locally
+      // without either.
+      return undefined;
+    }
   }
 
   // --- reading pages ------------------------------------------------------

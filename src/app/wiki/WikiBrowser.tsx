@@ -359,6 +359,10 @@ export function WikiBrowser({
   const [splitRatio, setSplitRatio] = useState(56);
   // Non-empty means the nav rail is showing search results instead of the tree.
   const [treeFilter, setTreeFilter] = useState("");
+  // The wiki repository's Git clone URL, resolved from the repository rather
+  // than taken from the wiki's web URL (see getRepositoryCloneUrl). Undefined
+  // until it resolves, or when this host cannot determine one.
+  const [cloneUrl, setCloneUrl] = useState<string>();
 
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
@@ -883,14 +887,14 @@ export function WikiBrowser({
     // Code the user is already there — and the clone entry needs the wiki's
     // repository URL, which an on-prem or unusual host may not report.
     if (capabilities.vsCodeHandoff) {
-      if (activeWiki?.remoteUrl) {
+      // Only once a real clone URL is known: an entry that hands git a URL it
+      // cannot clone is worse than no entry.
+      if (cloneUrl) {
         actions.push({
           id: "clone-in-vscode",
           label: "Clone wiki in VS Code",
           onClick: () =>
-            host.openExternal(
-              `vscode://vscode.git/clone?url=${encodeURIComponent(activeWiki.remoteUrl ?? "")}`
-            ),
+            host.openExternal(`vscode://vscode.git/clone?url=${encodeURIComponent(cloneUrl)}`),
         });
       }
 
@@ -917,7 +921,33 @@ export function WikiBrowser({
     return () => {
       onHeaderMenuActionsChange?.([]);
     };
-  }, [activePage, activeWiki?.remoteUrl, cancelEditing, capabilities.follow, capabilities.vsCodeHandoff, followBusy, followSubscriptionId, host, isEditing, onHeaderMenuActionsChange, startEditing, toggleFollow]);
+  }, [activePage, cancelEditing, capabilities.follow, capabilities.vsCodeHandoff, cloneUrl, followBusy, followSubscriptionId, host, isEditing, onHeaderMenuActionsChange, startEditing, toggleFollow]);
+
+  // Resolve the clone URL once per wiki, not per menu open.
+  useEffect(() => {
+    const repositoryId = activeWiki?.repositoryId;
+    if (!capabilities.vsCodeHandoff || !wikiClient || !repositoryId) {
+      setCloneUrl(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    setCloneUrl(undefined);
+    wikiClient
+      .getRepositoryCloneUrl(repositoryId)
+      .then((url) => {
+        if (!cancelled) {
+          setCloneUrl(url);
+        }
+      })
+      .catch(() => {
+        // Leave it unset; the action simply is not offered.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWiki?.repositoryId, capabilities.vsCodeHandoff, wikiClient]);
 
   // Loads a page by path, trying hyphen/space variants, and (optionally) syncs
   // the URL hash. This is the single entry point for all navigation:
