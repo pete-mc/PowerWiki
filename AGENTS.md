@@ -324,6 +324,27 @@ a feature above the boundary, add a case here; when you add one below it, extend
 The VS Code extension has the equivalent (`npm run test:vscode`), driving a real
 VS Code window — see "Two hosts, one UI".
 
+**What the VS Code suite still cannot do, and what has already been ruled out.**
+An extension-host test cannot reach inside a webview's DOM, so it can only assert
+on what the webview *reports* (the `ScreenReporter` in
+`src/vscode/webview/main.tsx`). That is enough to observe rendering, and not
+enough to *drive* input — which is why the draw.io round trip, the rich-text
+editor and the Word save dialog have no coverage (tracked as AB#602).
+
+The obvious escape — attach Playwright over the Chrome DevTools Protocol and
+treat the webview as a frame — was investigated and does not work as expected:
+
+- **`@vscode/test-electron`'s `runTests` silently drops
+  `--remote-debugging-port`.** It is not forwarded to Electron, the port never
+  opens, and the only symptom is `ECONNREFUSED`. Option 2 cannot piggyback on the
+  existing harness; it would need its own launcher.
+- Launching the `code` binary directly *does* open the port and Playwright
+  connects — but no webview was reachable from it: no `<iframe>` in the workbench
+  DOM, and `Target.getTargets` plus `Target.setAutoAttach` surfaced only workers.
+
+Don't spend the afternoon rediscovering that. A test-only command channel into
+the webview is the realistic route.
+
 ### 2. The dev extension — real Azure DevOps, working-tree code, no publishing
 
 A private extension (`powerwiki-dev`) whose manifest sets
@@ -342,6 +363,33 @@ npm run dev:extension      # serves dist/ over HTTPS, rebuilding on change
 ```
 
 Re-run the workflow only if the manifest, scopes, or `baseUri` change.
+
+**And when you do, the publish is not enough — the organization keeps running the
+copy it already installed.** `powerwiki-dev` sat at 1.3.8.2 across two successful
+publishes. The extension-management API will not force it either:
+
+- `PATCH .../installedextensionsbyname/<publisher>/<extension>` → **405**
+- `POST .../installedextensionsbyname/<publisher>/<extension>/<version>` → **409
+  `ExtensionAlreadyInstalledException`**
+
+What works is to remove it and install it again:
+
+```
+DELETE .../_apis/extensionmanagement/installedextensionsbyname/dataversepowertools/powerwiki-dev
+POST   .../_apis/extensionmanagement/installedextensionsbyname/dataversepowertools/powerwiki-dev
+```
+
+after which it picks up the newest published version. Propagation is not instant
+in any case — a canary took 15–20 minutes to move on its own after a successful
+publish — so wait before concluding a publish failed.
+
+**The failure mode is silent, which is why this is worth knowing.** `baseUri`
+means the hub loads your working tree happily, so the code is current; only the
+*contributions* come from the installed manifest. A newly added contribution
+therefore simply does not appear, with nothing broken-looking anywhere: no error,
+no stale-version banner, just a menu entry or a tab that is missing. If something
+you added to the manifest is not showing up, check the installed version before
+you debug the code.
 `npm run publish:dev` does the same thing locally and stays available for anyone
 who already holds a publisher token.
 

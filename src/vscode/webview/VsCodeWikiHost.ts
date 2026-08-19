@@ -13,7 +13,6 @@
 
 import type {
   WikiHost,
-  WikiHostCapabilities,
   WikiHostContext,
   WikiHostDialogs,
   WikiHostNavigation
@@ -23,27 +22,12 @@ import type { WikiSummary } from "../../wiki/WikiPage";
 import type { WikiRepositoryClient } from "../../wiki/WikiRepositoryClient";
 import type { WikiSearchOutcome } from "../../wiki/wikiSearch";
 import type { InitMessage } from "../protocol";
+import { VS_CODE_CAPABILITIES } from "../capabilities";
 import type { ExtensionBridge } from "./rpcClient";
 
 export class VsCodeWikiHost implements WikiHost {
-  public readonly capabilities: WikiHostCapabilities = {
-    comments: false,
-    follow: false,
-    workItems: false,
-    mentions: false,
-    pageTree: false,
-    // Only the work item form lists linked pages instead of the tree.
-    linkedPages: false,
-    wikiSelector: false,
-    search: true,
-    permalinks: false,
-    // PDF export goes through `window.print()`, and a webview has no print
-    // pipeline. Word export still works; it produces bytes, which the extension
-    // can write to disk.
-    printToPdf: false,
-    // Already in VS Code; offering to open it there would be absurd.
-    vsCodeHandoff: false
-  };
+  public readonly capabilities = VS_CODE_CAPABILITIES;
+
 
   public readonly context: WikiHostContext;
   public readonly wikiClient: WikiRepositoryClient;
