@@ -486,10 +486,15 @@ export function WikiBrowser({
   );
   const pageLinks = useMemo<readonly WikiPageLink[]>(
     () =>
-      pageList
+      // Prefer the whole-wiki list once the background prefetch has landed.
+      // `pageList` only holds what the tree has expanded, which is enough for
+      // inserting a link near where you are working but not for the work item
+      // rail's Add: there you are picking any page in the wiki, and most of them
+      // have never been expanded.
+      (allPages && allPages.wikiId === activeWikiId ? allPages.pages : pageList)
         .map((page) => ({ path: page.path, title: pageTitleFromPath(page.path) }))
         .sort((a, b) => a.path.localeCompare(b.path)),
-    [pageList]
+    [activeWikiId, allPages, pageList]
   );
   const hasUnsavedChanges = Boolean(activePage && isEditing && draftContent !== activePage.content);
   // Async because the confirmation belongs to the host: a VS Code webview
