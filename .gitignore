@@ -11,6 +11,11 @@ mcps
 tools/pw/artifacts/
 tools/serve/.cert/
 screenshots/
+# ...but the Marketplace screenshots are content, not artefacts. The rule above
+# is unanchored, so it swallows media/screenshots too and a new store image gets
+# silently dropped from a commit — which is exactly what happened to the work
+# item screenshot in 1.4.0.
+!media/screenshots/
 .claude/settings.local.json
 
 # Machine-specific agent notes; AGENTS.md is the tracked source of truth.
