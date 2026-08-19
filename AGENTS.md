@@ -410,9 +410,12 @@ and they are separate listings with separate version histories:
 | Azure DevOps hub | `dataversepowertools.powerwiki` | a `v*` tag → `release.yml` |
 | VS Code | `dataversepowertools.powerwiki-vscode` | a `vscode-v*` tag → `release-vscode.yml` |
 
-**The tag prefix is load-bearing.** Tagging the VS Code extension `v0.1.1` would
-trigger the *Azure DevOps* release instead, against manifests that do not match
-the tag. Use `vscode-v<version>`, matching `vscode/package.json`.
+**The tag prefix is load-bearing, in both directions.** Tagging the VS Code
+extension `v0.1.1` would trigger the *Azure DevOps* release instead, against
+manifests that do not match the tag. Less obviously, `vscode-v0.1.1` *starts
+with a v*, so the hub's original `v*` filter matched it too and fired both
+workflows — which is why `release.yml` now matches **`v[0-9]*`**. Do not loosen
+that back to `v*`. Use `vscode-v<version>`, matching `vscode/package.json`.
 `tools/release/assert-vscode-manifest.mjs` runs before anything is uploaded and
 refuses a version mismatch, a wrong publisher, or — the expensive mistake — the
 hub extension's id, which would replace a listing 20+ organizations update from.

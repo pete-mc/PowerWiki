@@ -9,6 +9,9 @@ name: Release (VS Code)
 #
 #   v1.3.10        -> dataversepowertools.powerwiki         (Azure DevOps)
 #   vscode-v0.1.1  -> dataversepowertools.powerwiki-vscode  (VS Code)
+#
+# `release.yml` matches `v[0-9]*`, not `v*`, precisely so that `vscode-v0.1.1`
+# — which does start with a v — does not also fire it. Do not loosen that.
 on:
   push:
     tags:
