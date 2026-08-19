@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { ExportImage } from "../../export/types";
 import type { PageRenderOptions } from "../../export/renderPageHtml";
+import { TEMPLATE_PLACEHOLDER_TOKEN, readWordTemplate, type WordTemplate } from "../../export/wordTemplate";
 import type { WikiPageTreeNode } from "../../wiki/WikiPageTree";
 import { ChevronIcon } from "./WikiPageIcons";
 
@@ -29,11 +30,18 @@ interface WikiExportDialogProps {
    * doing nothing.
    */
   readonly allowPdf: boolean;
+  /**
+   * Fetches the wiki's house Word template, or null when it has none. Probed
+   * when the dialog opens so the option is only offered if it would work.
+   */
+  readonly loadProjectTemplate?: () => Promise<ArrayBuffer | null>;
   readonly onClose: () => void;
 }
 
 type Scope = "single" | "multi";
 type Format = "word" | "pdf";
+/** Which Word styling to export with. */
+type TemplateChoice = "default" | "project" | "file";
 
 export function WikiExportDialog({
   currentPage,
@@ -44,6 +52,7 @@ export function WikiExportDialog({
   renderOptions,
   onSaveFile,
   allowPdf,
+  loadProjectTemplate,
   onClose,
 }: WikiExportDialogProps) {
   const [format, setFormat] = useState<Format>("word");
@@ -51,6 +60,30 @@ export function WikiExportDialog({
   const [selected, setSelected] = useState<readonly string[]>([currentPage.path]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [templateChoice, setTemplateChoice] = useState<TemplateChoice>("default");
+  const [uploadedTemplate, setUploadedTemplate] = useState<File>();
+  const [hasProjectTemplate, setHasProjectTemplate] = useState(false);
+
+  // Offer the project template only once it is known to exist, so a wiki
+  // without one shows a choice that does nothing.
+  useEffect(() => {
+    if (!loadProjectTemplate) {
+      return;
+    }
+    let cancelled = false;
+    void loadProjectTemplate().then(
+      (data) => {
+        if (!cancelled && data) {
+          setHasProjectTemplate(true);
+          setTemplateChoice("project");
+        }
+      },
+      () => undefined
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [loadProjectTemplate]);
 
   const titleByPath = useMemo(() => {
     const map = new Map<string, string>();
@@ -100,6 +133,22 @@ export function WikiExportDialog({
       setError("Select at least one page.");
       return;
     }
+    if (format === "word" && templateChoice === "file" && !uploadedTemplate) {
+      setError("Choose a template file.");
+      return;
+    }
+
+    /** The chosen Word styling, or undefined for PowerWiki's own. */
+    async function resolveTemplate(): Promise<WordTemplate | undefined> {
+      if (templateChoice === "project" && loadProjectTemplate) {
+        const data = await loadProjectTemplate();
+        return data ? await readWordTemplate(data) : undefined;
+      }
+      if (templateChoice === "file" && uploadedTemplate) {
+        return await readWordTemplate(await uploadedTemplate.arrayBuffer());
+      }
+      return undefined;
+    }
 
     setBusy(true);
     setError(undefined);
@@ -114,7 +163,7 @@ export function WikiExportDialog({
         const { exportPagesToWord } = await import("../../export/exportWord");
         const fileName =
           (exportPages.length === 1 ? sanitizeFileName(exportPages[0].title) : "PowerWiki export") + ".docx";
-        await exportPagesToWord(exportPages, renderOptions, loadImage, fileName, onSaveFile);
+        await exportPagesToWord(exportPages, renderOptions, loadImage, fileName, onSaveFile, await resolveTemplate());
       } else {
         const { exportPagesToPdf } = await import("../../export/exportPdf");
         await exportPagesToPdf(exportPages, renderOptions);
@@ -151,6 +200,49 @@ export function WikiExportDialog({
             </label>
           ) : null}
         </div>
+
+        {format === "word" ? (
+          <div className="wiki-export-scope wiki-export-template">
+            <label>
+              <input
+                checked={templateChoice === "default"}
+                disabled={busy}
+                onChange={() => setTemplateChoice("default")}
+                type="radio"
+              />
+              PowerWiki styling
+            </label>
+            {hasProjectTemplate ? (
+              <label>
+                <input
+                  checked={templateChoice === "project"}
+                  disabled={busy}
+                  onChange={() => setTemplateChoice("project")}
+                  type="radio"
+                />
+                Project template
+              </label>
+            ) : null}
+            <label>
+              <input
+                checked={templateChoice === "file"}
+                disabled={busy}
+                onChange={() => setTemplateChoice("file")}
+                type="radio"
+              />
+              Template file
+            </label>
+            {templateChoice === "file" ? (
+              <input
+                accept=".docx,.dotx"
+                aria-label="Word template file"
+                disabled={busy}
+                onChange={(event) => setUploadedTemplate(event.target.files?.[0])}
+                type="file"
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="wiki-export-scope">
           <label>
@@ -200,7 +292,11 @@ export function WikiExportDialog({
         <div className="wiki-export-actions">
           <span className="wiki-export-note">
             Markdown, tables, work items, and Mermaid are rendered.
-            {format === "word" ? " Headings become Word heading styles." : " Opens the browser print dialog."}
+            {format !== "word"
+              ? " Opens the browser print dialog."
+              : templateChoice === "default"
+                ? " Headings become Word heading styles."
+                : ` Put ${TEMPLATE_PLACEHOLDER_TOKEN} in the template where the pages should go; without it only its styles are used.`}
           </span>
           <button disabled={busy} onClick={onClose} type="button">Cancel</button>
           <button className="wiki-export-primary" disabled={busy} onClick={() => void handleExport()} type="button">

@@ -19,6 +19,7 @@ import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
 import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
 import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
+import { PROJECT_TEMPLATE_WIKI_PATH } from "../../export/wordTemplate";
 import { joinRepositoryPath } from "../../wiki/repositoryItemPath";
 import { WikiAttachmentsDialog } from "./WikiAttachmentsDialog";
 import { WikiExportDialog } from "./WikiExportDialog";
@@ -783,6 +784,21 @@ export function WikiBrowser({
     },
     [activeWiki, wikiClient]
   );
+
+  // A wiki can carry a house Word template so every export from the project
+  // looks the same instead of depending on who ran it. Having none is the
+  // normal case, so a miss here is not an error worth surfacing.
+  const loadProjectWordTemplate = useCallback(async (): Promise<ArrayBuffer | null> => {
+    if (!wikiClient || !activeWiki?.repositoryId) {
+      return null;
+    }
+    try {
+      const repoPath = joinRepositoryPath(activeWiki.mappedPath, PROJECT_TEMPLATE_WIKI_PATH);
+      return await wikiClient.getItemBytes(activeWiki.repositoryId, repoPath);
+    } catch {
+      return null;
+    }
+  }, [activeWiki, wikiClient]);
 
   const applySplitRatioFromPointer = useCallback((clientX: number) => {
     const shell = splitShellRef.current;
@@ -2390,6 +2406,7 @@ export function WikiBrowser({
           currentPage={{ path: activePage.path, title: pageTitleFromPath(activePage.path) }}
           loadImage={loadExportImage}
           loadPageContent={loadPageContent}
+          loadProjectTemplate={loadProjectWordTemplate}
           onClose={() => setExportOpen(false)}
           onExpandNode={(path) => void handleNodeExpand(path)}
           renderOptions={{

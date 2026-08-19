@@ -226,6 +226,18 @@ async function runSuite(page) {
     const text = await page.locator(".wiki-export-dialog").innerText();
     assert(/Word/i.test(text), "Word export was not offered");
     assert(/PDF/i.test(text), "PDF export was not offered");
+
+    // Word styling can come from the customer's own template (AB#593). The file
+    // picker appears only once "Template file" is chosen, so it does not clutter
+    // the common case.
+    assert(/PowerWiki styling/i.test(text), "the Word template choice was not offered");
+    assert(
+      (await page.locator('.wiki-export-template input[type="file"]').count()) === 0,
+      "the template file picker showed before it was chosen"
+    );
+    await page.locator(".wiki-export-template label", { hasText: "Template file" }).locator("input").check();
+    await page.waitForSelector('.wiki-export-template input[type="file"]', { timeout: 10_000 });
+
     await page.locator(".wiki-export-dialog .wiki-export-close").click();
     await page.waitForSelector(".wiki-export-dialog", { state: "detached", timeout: 10_000 });
   });
