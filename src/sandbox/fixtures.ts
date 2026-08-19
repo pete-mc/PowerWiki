@@ -44,6 +44,8 @@ See [Markdown reference](/Guides/Markdown-reference) and
     path: "/Guides",
     content: `# Guides
 
+See also [List - Firewall rules](/Guides/List-%2D-Firewall-rules).
+
 A parent page, here so renaming and moving a subtree is easy to exercise.
 `
   },
@@ -140,6 +142,14 @@ Term separated by a horizontal rule:
 
 *Emphasis*, **strong**, \`inline code\`, and ~~strikethrough~~.
 `
+  },
+  {
+    path: "/Guides/List - Firewall rules",
+    content: `# List - Firewall rules
+
+A page whose title contains a hyphen with spaces around it. Azure DevOps stores
+that as \`List-%2D-Firewall-rules\`, and a link to it used to 404 (GitHub #29).
+`,
   },
   {
     path: "/Release-process",

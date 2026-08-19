@@ -208,6 +208,20 @@ function safeDecode(value: string): string {
  * Relative links resolve against the current page path using standard URL
  * semantics (e.g. from "/A/B", "C" -> "/A/C", "../D" -> "/D").
  */
+/**
+ * Resolves a link's href against the current page, to an absolute wiki path.
+ *
+ * Returns the path **still percent-encoded**, and that is the point. Azure
+ * DevOps escapes a literal hyphen in a page title as `%2D`, because in a stored
+ * file name a hyphen means a space — "List - Firewall rules" is written
+ * `List-%2D-Firewall-rules`. Decoding here collapsed that escape into an
+ * ordinary hyphen, and by the time anything tried to work out which hyphens had
+ * been spaces the information was gone: every such link 404'd (GitHub #29).
+ *
+ * So this does one job — relative to absolute — and leaves working out which
+ * spelling of the path names a page to the caller, which is the only place that
+ * can try more than one.
+ */
 function resolveInternalPath(href: string, currentPath: string): string | null {
   if (!href || href.startsWith("#") || href.startsWith("//") || HAS_SCHEME.test(href)) {
     return null;
@@ -215,8 +229,7 @@ function resolveInternalPath(href: string, currentPath: string): string | null {
 
   try {
     const base = "http://wiki" + encodeURI(currentPath.startsWith("/") ? currentPath : `/${currentPath}`);
-    const resolved = new URL(href, base);
-    return safeDecode(resolved.pathname);
+    return new URL(href, base).pathname;
   } catch {
     return null;
   }

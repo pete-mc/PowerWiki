@@ -43,7 +43,7 @@ import {
   parentPagePath,
   relativePathToPagePath,
   splitPagePath
-} from "./wikiPathEncoding";
+} from "../wiki/wikiPathEncoding";
 
 const ORDER_FILE = ".order";
 const ATTACHMENTS_DIRECTORY = ".attachments";

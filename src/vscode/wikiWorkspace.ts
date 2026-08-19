@@ -12,7 +12,7 @@ import { GitWikiRepositoryClient, type WikiFileWriter } from "./GitWikiRepositor
 import { searchLocalWiki, type SearchablePage } from "./localWikiSearch";
 import type { WikiSearchOutcome } from "../wiki/wikiSearch";
 import { discoverWikis, type DiscoveredWiki } from "./wikiDiscovery";
-import { relativePathToPagePath } from "./wikiPathEncoding";
+import { relativePathToPagePath } from "../wiki/wikiPathEncoding";
 
 export const CONFIGURATION_SECTION = "powerwiki";
 

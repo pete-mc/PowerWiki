@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1
+
+- Fixed links to pages whose title contains a hyphen surrounded by spaces —
+  "List - Firewall rules" — which could not be opened
+  ([#29](https://github.com/pete-mc/PowerWiki/issues/29)). Azure DevOps escapes
+  such a hyphen as `%2D`, and the link resolver decoded that before working out
+  which hyphens had been spaces, so the escape was lost.
+
 ## 1.4.0
 
 Shared with the Azure DevOps extension 1.4.0.

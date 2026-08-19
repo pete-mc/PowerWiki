@@ -25,5 +25,5 @@ AGENTS.local.md
 # VS Code extension build output and downloaded test runtimes
 vscode/dist/
 vscode/*.vsix
-.vscode-test/
+.vscode-test
 tools/e2e/artifacts/

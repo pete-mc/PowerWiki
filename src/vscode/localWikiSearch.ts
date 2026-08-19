@@ -8,7 +8,7 @@
 // highlighted as segments so nothing goes near innerHTML.
 
 import type { WikiSearchHit, WikiSearchOutcome, WikiSearchSegment } from "../wiki/wikiSearch";
-import { pageTitle } from "./wikiPathEncoding";
+import { pageTitle } from "../wiki/wikiPathEncoding";
 
 export interface SearchablePage {
   readonly path: string;

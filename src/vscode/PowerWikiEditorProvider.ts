@@ -14,7 +14,7 @@ import type { ExtensionMessage, RpcRequest, StateMessage, WebviewMessage } from 
 import { BINARY_WIKI_METHODS } from "./protocol";
 import { VS_CODE_CAPABILITIES } from "./capabilities";
 import { closeTextTabsFor, openWikiPage } from "./pageEditors";
-import { pagePathToRelativePath } from "./wikiPathEncoding";
+import { pagePathToRelativePath } from "../wiki/wikiPathEncoding";
 import type { WikiWorkspace } from "./wikiWorkspace";
 
 

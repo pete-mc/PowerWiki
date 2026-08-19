@@ -119,7 +119,29 @@ async function runSuite(page) {
     assert(/Diagrams/i.test(heading), `unexpected heading: ${heading}`);
   });
 
+  // GitHub #29: a link to a page whose title contains a hyphen surrounded by
+  // spaces. Azure DevOps stores that title as `List-%2D-Firewall-rules`, and
+  // resolving the link used to destroy the `%2D` escape and 404.
+  await test("follows a link to a page whose title contains a hyphen (GitHub #29)", async () => {
+    await openPage(page, "Guides", "/Guides");
+
+    await page.locator(".markdown-preview a", { hasText: "List - Firewall rules" }).first().click();
+
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".powerwiki-content")?.getAttribute("data-powerwiki-page-path") ===
+        "/Guides/List - Firewall rules",
+      undefined,
+      { timeout: 20_000 }
+    );
+
+    const heading = await page.locator(".markdown-preview h1").first().innerText();
+    assert(/List - Firewall rules/.test(heading), `unexpected heading: ${heading}`);
+  });
+
   await test("Mermaid diagrams render as SVG, not as a code block", async () => {
+    await expandTree(page, "Guides");
+    await openPage(page, "Diagrams", "/Guides/Diagrams");
     await page.waitForSelector(".markdown-preview svg", { timeout: 60_000 });
     const svgCount = await page.locator(".markdown-preview svg").count();
     assert(svgCount >= 2, `expected both diagrams to render, found ${svgCount} svg`);
@@ -168,6 +190,8 @@ async function runSuite(page) {
   });
 
   await test("a page can be edited and saved, and the preview shows the change", async () => {
+    await expandTree(page, "Guides");
+    await openPage(page, "Diagrams", "/Guides/Diagrams");
     await clickMenuItem(page, "Edit page");
     await page.waitForSelector(".wiki-editor-shell", { timeout: 60_000 });
 

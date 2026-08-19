@@ -21,6 +21,7 @@ import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
 import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
 import { PROJECT_TEMPLATE_WIKI_PATH } from "../../export/wordTemplate";
 import { joinRepositoryPath } from "../../wiki/repositoryItemPath";
+import { relativePathToPagePath } from "../../wiki/wikiPathEncoding";
 import { WikiAttachmentsDialog } from "./WikiAttachmentsDialog";
 import { WikiExportDialog } from "./WikiExportDialog";
 import { WikiLinkedPagesRail } from "./WikiLinkedPagesRail";
@@ -280,13 +281,42 @@ function resolveAzureDevOpsImagePath(src: string): string | undefined {
  * page "/Ecosystem/Current State"). We therefore try the path as-authored
  * first, then a hyphen-to-space variant so both link styles resolve.
  */
-function pagePathCandidates(rawPath: string): string[] {
+/**
+ * The paths to try for a link, best guess first.
+ *
+ * A wiki link can be written three ways, and only the author knows which they
+ * meant: as the page title (`/Getting Started`), URL-encoded (`/Getting%20Started`),
+ * or as the file name Azure DevOps stores it under (`/Getting-Started`). So each
+ * is offered in turn until one loads.
+ *
+ * The third form is where this used to go wrong (GitHub #29). In a file name a
+ * space is a hyphen, so a title that genuinely *contains* a hyphen has it
+ * escaped as `%2D` — "List - Firewall rules" is stored as
+ * `List-%2D-Firewall-rules`. Running `decodeURIComponent` over that first turns
+ * the escape into a plain hyphen, and the space substitution then cannot tell it
+ * apart from the two real ones: the page becomes "List   Firewall rules" and
+ * every such link 404s. The two substitutions have to happen in one pass, which
+ * is what `fileSegmentToPageSegment` does.
+ */
+export function pagePathCandidates(rawPath: string): string[] {
   const decoded = safeDecode(rawPath);
   const candidates = [decoded];
+
+  // The file-name reading, decoded correctly. Second rather than first so a
+  // link that already names the page literally still wins — a page really
+  // called "Well-known" should not be beaten to it by "Well known".
+  const asFileName = relativePathToPagePath(rawPath.replace(/^\/+/, ""));
+  if (!candidates.includes(asFileName)) {
+    candidates.push(asFileName);
+  }
+
+  // Last resort: every hyphen was a space. Kept because it is what older links
+  // written by hand rely on.
   const spaced = decoded.replace(/-/g, " ");
-  if (spaced !== decoded) {
+  if (!candidates.includes(spaced)) {
     candidates.push(spaced);
   }
+
   return candidates;
 }
 

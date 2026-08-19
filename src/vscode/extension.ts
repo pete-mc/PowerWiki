@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 
 import { closeTextTabsFor, openWikiPage } from "./pageEditors";
 import { PowerWikiEditorProvider } from "./PowerWikiEditorProvider";
-import { pagePathToRelativePath } from "./wikiPathEncoding";
+import { pagePathToRelativePath } from "../wiki/wikiPathEncoding";
 import { CONFIGURATION_SECTION, WikiWorkspace } from "./wikiWorkspace";
 
 /** Exposed to the integration tests, which need the real provider and workspace. */
