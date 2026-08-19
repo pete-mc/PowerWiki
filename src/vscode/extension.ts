@@ -99,6 +99,16 @@ class ExplorerHandoff implements vscode.Disposable {
     this.subscription = vscode.window.onDidChangeActiveTextEditor((editor) => {
       void this.handle(editor);
     });
+
+    // Also whatever is *already* open.
+    //
+    // `onDidChangeActiveTextEditor` only fires on a change, and by the time this
+    // extension activates the window has usually finished restoring: the editor
+    // that was open last session is active, and no change event is ever coming.
+    // Without this, reopening a workspace — the most ordinary way anyone arrives
+    // at VS Code — left the wiki page as raw Markdown until you switched to
+    // another tab and back. Same for `code page.md` from a shell.
+    void this.handle(vscode.window.activeTextEditor);
   }
 
   /** Lets the next text editor for this file through untouched. */

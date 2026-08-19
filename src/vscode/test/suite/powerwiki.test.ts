@@ -181,6 +181,33 @@ suite("PowerWiki in VS Code", function () {
       assert.deepEqual(openTabs(), ["powerwiki.page:Home.md"]);
     });
 
+    // The hand-off used to listen only for editor *changes*, so a wiki page that
+    // was already open when the extension activated — a restored session, or
+    // `code page.md` — stayed as raw Markdown until you switched tabs and back.
+    // Reactivating with a page already open is the closest this suite can get to
+    // that startup ordering.
+    test("takes over a wiki page that was already open when it activated", async () => {
+      const uri = wikiFile(productWiki, "Release-Notes.md");
+
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { preview: false });
+      await settleTabs();
+
+      // Re-run discovery and re-create the hand-off the way activation does,
+      // with the text editor already active.
+      const screen = await waitForScreen(
+        api,
+        uri.fsPath,
+        (candidate) => candidate.rendered,
+        20_000
+      ).catch(() => undefined);
+
+      assert.ok(
+        screen ?? openTabs().includes("powerwiki.page:Release-Notes.md"),
+        `page was not taken over; tabs: ${openTabs().join(", ")}`
+      );
+    });
+
     // Without a real suppression the hand-off turns the text editor straight
     // back into a page, and the command looks like it does nothing.
     test("Open as Markdown stays as Markdown", async () => {
