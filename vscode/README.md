@@ -60,6 +60,14 @@ Only Markdown *inside a detected wiki* is handed to PowerWiki; every other `.md`
 file in the workspace opens as text as usual. **PowerWiki: Open as Markdown**
 (also in the editor title bar) shows the raw source of the page you are on.
 
+## Which tab a page opens in
+
+Pages follow VS Code's own convention rather than inventing one. A single
+Explorer click opens the page in the reusable **preview** tab, so browsing a
+wiki — clicking through the tree, following links between pages — leaves one
+tab, not a trail of them. Double-clicking, or starting to edit, makes the tab
+permanent, and a page that is already open is revealed rather than opened again.
+
 ## Saving
 
 Saving writes the file. It does **not** commit — that stays with your normal Git

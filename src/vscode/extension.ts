@@ -3,6 +3,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import { closeTextTabsFor, openWikiPage } from "./pageEditors";
 import { PowerWikiEditorProvider } from "./PowerWikiEditorProvider";
 import { pagePathToRelativePath } from "./wikiPathEncoding";
 import { CONFIGURATION_SECTION, WikiWorkspace } from "./wikiWorkspace";
@@ -29,12 +30,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<PowerW
     })
   );
 
+  // The hand-off needs to know when "Open as Markdown" ran, so that it does not
+  // immediately undo it; sharing one object is what keeps the two in step.
+  const handoff = new ExplorerHandoff(workspace);
+  context.subscriptions.push(handoff);
+
   context.subscriptions.push(
     vscode.commands.registerCommand("powerwiki.openPage", (uri?: vscode.Uri) =>
       openWithPowerWiki(uri ?? vscode.window.activeTextEditor?.document.uri)
     ),
     vscode.commands.registerCommand("powerwiki.openAsText", (uri?: vscode.Uri) =>
-      openAsText(uri)
+      openAsText(uri, handoff)
     ),
     vscode.commands.registerCommand("powerwiki.openHome", (wikiRoot?: string) =>
       openHome(workspace, wikiRoot)
@@ -46,8 +52,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<PowerW
       );
     })
   );
-
-  context.subscriptions.push(registerExplorerHandoff(workspace));
 
   // Drives the `powerwiki.hasWiki` context key, which is what keeps the
   // commands out of the palette in a window with no wiki in it.
@@ -70,14 +74,43 @@ export function deactivate(): void {}
  *
  * The custom editor is registered with `priority: option`, so VS Code opens
  * Markdown as text by default — hijacking every `.md` file in every project
- * would be indefensible. Instead, when a text editor opens a file that is
- * inside a *detected wiki*, it is handed over to PowerWiki. That is what makes
- * the Explorer the page tree, without taking over anything else.
+ * would be indefensible. Instead, when a text editor opens a file inside a
+ * *detected wiki*, it is handed over to PowerWiki. That is what makes the
+ * Explorer the page tree without taking over anything else.
+ *
+ * The hand-off is the fiddly part, because it reacts to an event that its own
+ * work causes:
+ *
+ *   * opening the custom editor changes the active editor, which fires this
+ *     again for the same file — so an in-flight file is ignored, and the flag
+ *     is *checked* rather than consumed (a guard that clears itself on the
+ *     first read protects nothing);
+ *   * the text editor VS Code already opened stays open beside the new one
+ *     unless it is closed, which is the "it opened twice" people notice first;
+ *   * "Open as Markdown" opens a text editor deliberately, so it has to be
+ *     able to say "not this one" — otherwise it bounces straight back.
  */
-function registerExplorerHandoff(workspace: WikiWorkspace): vscode.Disposable {
-  const handedOver = new Set<string>();
+class ExplorerHandoff implements vscode.Disposable {
+  private readonly inFlight = new Set<string>();
+  private readonly allowAsText = new Set<string>();
+  private readonly subscription: vscode.Disposable;
 
-  return vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+  public constructor(private readonly workspace: WikiWorkspace) {
+    this.subscription = vscode.window.onDidChangeActiveTextEditor((editor) => {
+      void this.handle(editor);
+    });
+  }
+
+  /** Lets the next text editor for this file through untouched. */
+  public allowText(uri: vscode.Uri): void {
+    this.allowAsText.add(uri.fsPath);
+  }
+
+  public dispose(): void {
+    this.subscription.dispose();
+  }
+
+  private async handle(editor: vscode.TextEditor | undefined): Promise<void> {
     if (!editor || editor.document.languageId !== "markdown") {
       return;
     }
@@ -87,29 +120,42 @@ function registerExplorerHandoff(workspace: WikiWorkspace): vscode.Disposable {
       return;
     }
 
-    const fsPath = editor.document.uri.fsPath;
-    const wiki = workspace.findWikiForFile(fsPath);
-    if (!wiki || !workspace.pagePathForFile(wiki, fsPath)) {
+    const uri = editor.document.uri;
+    const fsPath = uri.fsPath;
+
+    if (this.allowAsText.delete(fsPath) || this.inFlight.has(fsPath)) {
       return;
     }
 
-    // "Open as Markdown" works by opening the text editor deliberately, so a
-    // one-shot exemption is what stops this from immediately undoing it.
-    if (handedOver.delete(fsPath)) {
+    const wiki = this.workspace.findWikiForFile(fsPath);
+    if (!wiki || !this.workspace.pagePathForFile(wiki, fsPath)) {
       return;
     }
 
-    handedOver.add(fsPath);
+    this.inFlight.add(fsPath);
     try {
-      await vscode.commands.executeCommand(
-        "vscode.openWith",
-        editor.document.uri,
-        PowerWikiEditorProvider.viewType
-      );
+      // Inherit the text editor's own preview state, so a single Explorer click
+      // (preview) still yields a reusable tab and a double click (permanent)
+      // still yields a permanent one.
+      const opened = await openWikiPage(uri, { pin: !isPreviewTab(uri) });
+      if (opened) {
+        await closeTextTabsFor(uri);
+      }
     } finally {
-      handedOver.delete(fsPath);
+      this.inFlight.delete(fsPath);
     }
-  });
+  }
+}
+
+function isPreviewTab(uri: vscode.Uri): boolean {
+  return vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .some(
+      (tab) =>
+        tab.input instanceof vscode.TabInputText &&
+        tab.input.uri.toString() === uri.toString() &&
+        tab.isPreview
+    );
 }
 
 async function openWithPowerWiki(uri: vscode.Uri | undefined): Promise<void> {
@@ -118,11 +164,16 @@ async function openWithPowerWiki(uri: vscode.Uri | undefined): Promise<void> {
     return;
   }
 
-  await vscode.commands.executeCommand("vscode.openWith", uri, PowerWikiEditorProvider.viewType);
+  // Deliberately *not* pinned. Which tab a page lands in is VS Code's own
+  // convention — single click previews, double click and editing make it
+  // permanent — and it should not depend on whether the page was reached from
+  // the context menu, a command, or a link inside another page.
+  await openWikiPage(uri);
+  await closeTextTabsFor(uri);
 }
 
 /** The escape hatch: read or edit the page's raw Markdown. */
-async function openAsText(uri: vscode.Uri | undefined): Promise<void> {
+async function openAsText(uri: vscode.Uri | undefined, handoff: ExplorerHandoff): Promise<void> {
   const target = uri ?? vscode.window.tabGroups.activeTabGroup.activeTab?.input;
   const resolved =
     target instanceof vscode.Uri
@@ -134,6 +185,9 @@ async function openAsText(uri: vscode.Uri | undefined): Promise<void> {
     return;
   }
 
+  // Without this the hand-off sees the text editor open and immediately turns
+  // it back into a PowerWiki page, so the command appears to do nothing.
+  handoff.allowText(resolved);
   await vscode.commands.executeCommand("vscode.openWith", resolved, "default");
 }
 

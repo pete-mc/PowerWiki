@@ -2,7 +2,7 @@
   "name": "powerwiki-vscode",
   "displayName": "PowerWiki",
   "description": "Browse, search and edit a cloned Azure DevOps wiki in VS Code, with PowerWiki's Markdown, Mermaid and draw.io rendering.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "dataversepowertools",
   "license": "MIT",
   "repository": {
@@ -101,7 +101,7 @@
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Folders to treat as wiki roots, absolute or relative to the first workspace folder. When set, these replace automatic discovery — use it when a wiki is nested deeper than `#powerwiki.discoveryDepth#` or does not look like one."
+          "markdownDescription": "Folders to treat as wiki roots, absolute or relative to the first workspace folder. When set, these replace automatic discovery \u2014 use it when a wiki is nested deeper than `#powerwiki.discoveryDepth#` or does not look like one."
         },
         "powerwiki.discoveryDepth": {
           "type": "number",

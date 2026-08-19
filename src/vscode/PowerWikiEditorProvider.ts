@@ -12,6 +12,7 @@ import * as vscode from "vscode";
 import type { WikiHostCapabilities, WikiHostContext } from "../host/WikiHost";
 import type { ExtensionMessage, RpcRequest, StateMessage, WebviewMessage } from "./protocol";
 import { BINARY_WIKI_METHODS } from "./protocol";
+import { closeTextTabsFor, openWikiPage } from "./pageEditors";
 import { pagePathToRelativePath } from "./wikiPathEncoding";
 import type { WikiWorkspace } from "./wikiWorkspace";
 
@@ -112,6 +113,14 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
         }
 
         if (message.type === "state") {
+          // A preview tab is replaced by the next page opened in it. PowerWiki's
+          // draft lives in the webview, not in the TextDocument, so the tab is
+          // not "dirty" and VS Code has no way to know there is anything to
+          // lose — pin it ourselves the moment editing starts, which is what
+          // VS Code does for a document the user has typed into.
+          if (message.editing && !editing && panel.active) {
+            void vscode.commands.executeCommand("workbench.action.keepEditor");
+          }
           editing = message.editing;
           const screen: EditorScreen = { ...message, documentPath: document.uri.fsPath };
           this.screens.set(document.uri.fsPath, screen);
@@ -273,15 +282,21 @@ export class PowerWikiEditorProvider implements vscode.CustomTextEditorProvider 
     }
   }
 
-  /** Opens another page of the same wiki in a PowerWiki editor. */
+  /**
+   * Opens another page of the same wiki, following a link.
+   *
+   * Browsing, so it reuses the preview tab rather than leaving a trail of
+   * permanent ones — and reveals the page if it is already open somewhere.
+   */
   private async openPage(wikiId: string, pagePath: string): Promise<void> {
     const target = vscode.Uri.file(path.join(wikiId, `${pagePathToRelativePath(pagePath)}.md`));
 
-    try {
-      await vscode.commands.executeCommand("vscode.openWith", target, PowerWikiEditorProvider.viewType);
-    } catch {
-      void vscode.window.showWarningMessage(`PowerWiki could not open ${pagePath}.`);
+    if (await openWikiPage(target)) {
+      await closeTextTabsFor(target);
+      return;
     }
+
+    void vscode.window.showWarningMessage(`PowerWiki could not open ${pagePath}.`);
   }
 
   private buildHtml(webview: vscode.Webview): string {

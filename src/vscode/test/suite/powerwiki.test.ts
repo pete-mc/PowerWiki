@@ -16,6 +16,8 @@ import {
   closeAllEditors,
   getApi,
   openPage,
+  openTabs,
+  settleTabs,
   waitForScreen,
   wikiFile,
   wikiRootFor
@@ -138,6 +140,63 @@ suite("PowerWiki in VS Code", function () {
     });
   });
 
+  // Browsing a wiki is browsing, not accumulating windows. These are the
+  // regressions behind "pages open twice and always in a new tab".
+  suite("which tab a page opens in", () => {
+    test("opening a page from the Explorer leaves one tab, not a text tab beside it", async () => {
+      const uri = wikiFile(productWiki, "Home.md");
+
+      // What clicking the file in the Explorer does: VS Code opens it as text,
+      // and the hand-off takes it from there.
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { preview: true });
+      await waitForScreen(api, uri.fsPath, (screen) => screen.rendered);
+      await settleTabs();
+
+      assert.deepEqual(openTabs(), ["powerwiki.page:Home.md"]);
+    });
+
+    test("following links reuses the preview tab instead of stacking tabs", async () => {
+      await openPage(api, wikiFile(productWiki, "Home.md"));
+
+      for (const relativePath of ["Home/Getting-Started.md", "Release-Notes.md"]) {
+        const target = wikiFile(productWiki, relativePath);
+        const waiter = waitForScreen(api, target.fsPath, (screen) => screen.rendered);
+        await vscode.commands.executeCommand("powerwiki.openPage", target);
+        await waiter;
+      }
+      await settleTabs();
+
+      assert.deepEqual(openTabs(), ["powerwiki.page:Release-Notes.md"]);
+    });
+
+    test("re-opening a page already on screen does not make a second tab", async () => {
+      const uri = wikiFile(productWiki, "Home.md");
+      await openPage(api, uri);
+
+      await vscode.commands.executeCommand("powerwiki.openPage", uri);
+      await vscode.commands.executeCommand("powerwiki.openPage", uri);
+      await settleTabs();
+
+      assert.deepEqual(openTabs(), ["powerwiki.page:Home.md"]);
+    });
+
+    // Without a real suppression the hand-off turns the text editor straight
+    // back into a page, and the command looks like it does nothing.
+    test("Open as Markdown stays as Markdown", async () => {
+      const uri = wikiFile(productWiki, "Home.md");
+      await openPage(api, uri);
+
+      await vscode.commands.executeCommand("powerwiki.openAsText", uri);
+      await settleTabs();
+
+      assert.ok(
+        openTabs().includes("text:Home.md"),
+        `expected a text tab, got: ${openTabs().join(", ")}`
+      );
+    });
+  });
+
   suite("navigating", () => {
     // This is what makes the Explorer the page tree: following a link opens the
     // target's *file*, so VS Code's own model of "where you are" stays correct.
@@ -146,7 +205,7 @@ suite("PowerWiki in VS Code", function () {
 
       const target = wikiFile(productWiki, "Home/Getting-Started.md");
       const waiter = waitForScreen(api, target.fsPath, (screen) => screen.rendered);
-      await vscode.commands.executeCommand("vscode.openWith", target, "powerwiki.page");
+      await vscode.commands.executeCommand("powerwiki.openPage", target);
       const screen = await waiter;
 
       assert.equal(screen.pagePath, "/Home/Getting Started");

@@ -44,7 +44,10 @@ export async function openPage(
   predicate: (screen: EditorScreen) => boolean = (screen) => screen.rendered
 ): Promise<EditorScreen> {
   const waiter = waitForScreen(api, uri.fsPath, predicate);
-  await vscode.commands.executeCommand("vscode.openWith", uri, "powerwiki.page");
+  // Through the command, not `vscode.openWith` directly: the command is how a
+  // user gets here, and it is what decides which tab the page lands in. A raw
+  // openWith would bypass that and quietly pin every page the tests open.
+  await vscode.commands.executeCommand("powerwiki.openPage", uri);
   return await waiter;
 }
 
@@ -88,6 +91,33 @@ export function waitForScreen(
 
 export async function closeAllEditors(): Promise<void> {
   await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+}
+
+/** Every open tab, across groups, as `<viewType|text>:<file name>`. */
+export function openTabs(): string[] {
+  return vscode.window.tabGroups.all.flatMap((group) =>
+    group.tabs.map((tab) => {
+      const input = tab.input;
+      if (input instanceof vscode.TabInputCustom) {
+        return `${input.viewType}:${path.basename(input.uri.fsPath)}`;
+      }
+      if (input instanceof vscode.TabInputText) {
+        return `text:${path.basename(input.uri.fsPath)}`;
+      }
+      return `other:${tab.label}`;
+    })
+  );
+}
+
+/**
+ * Waits for the tab list to settle.
+ *
+ * Opening an editor and closing the text tab it replaced are separate
+ * operations, so a count read immediately after `openPage` can catch the
+ * moment when both are open.
+ */
+export async function settleTabs(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
 export function wikiRootFor(api: PowerWikiApi, name: string): string {
