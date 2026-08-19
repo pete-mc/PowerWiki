@@ -13,9 +13,10 @@
 ## Why teams switch
 
 - 🧜 **Today's Mermaid, today's Markdown.** Mermaid v11 (architecture, kanban, sankey, xy-chart, mindmap, timeline and more), GitHub-style callouts, KaTeX math, syntax-highlighted code — instead of the frozen renderers bundled with Azure DevOps.
-- 📤 **Export to Word and PDF.** Turn one page — or an ordered set of pages — into a real `.docx` with native Word heading styles and equations, or a print-perfect PDF. Diagrams, query tables, and images included.
+- 📤 **Export to Word and PDF — in your own template.** Turn one page, or an ordered set of pages, into a real `.docx` carrying your corporate cover page, headers, footers and styles, or a print-perfect PDF. Diagrams, query tables, and images included.
 - 🕑 **Never lose the thread.** Page history with side-by-side diffs and one-click restore, follow pages for change notifications, and safe renames that fix inbound links for you.
 - 🧩 **Azure Boards, live on the page.** `#1234` becomes a rich work item badge; `::: query-table <id> :::` embeds live query results — and both stay readable as plain text in the built-in wiki.
+- 🔗 **Your wiki, inside the work item.** A **Power Wiki** tab sits beside Details and History on every work item, showing the wiki pages linked to it — read *and* edit them without leaving the item.
 - ✍️ **An editor you'll actually enjoy.** Monaco (the VS Code editor) with a `/` command palette, keyboard shortcuts, page-link and attachment pickers, autosaved drafts, and a WYSIWYG mode with in-context table editing.
 
 ## Reading, upgraded
@@ -51,6 +52,18 @@
 
 ![The draw.io editor open inside PowerWiki with a deployment topology diagram, shape library, and the diagram name field](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.3.1/1786109673786/media/screenshots/powerwiki-drawio.png)
 
+## Documentation where the work happens
+
+Wiki pages are linked to work items using Azure DevOps' own **Wiki Page** links — the ones already on the work item's Links tab. PowerWiki just makes them useful.
+
+- **A real tab on the work item form**, beside Details, History and Links, marked with the PowerWiki logo.
+- **The full page, not a preview.** Mermaid, math, callouts, work item badges and query tables all render, and the page can be **edited and saved** right there.
+- **The rail lists this item's linked pages**, so a work item with several documents is one click between them.
+- **Link a page with Add** — search the wiki, pick a page, done. The link is added to the open work item and kept when you save it, exactly like any other change.
+- **No new permissions.** Linking goes through the work item form itself, so PowerWiki still asks only for read access to work items and your organisation does not have to re-approve anything.
+
+![The Power Wiki tab on an Azure DevOps work item, listing the item's linked wiki pages beside the rendered page](https://raw.githubusercontent.com/pete-mc/PowerWiki/v1.4.0/media/screenshots/powerwiki-workitem.png)
+
 ## History and stewardship
 
 - **Page history** from Git: browse revisions, compare side by side (changes per revision or against current), and restore any version through the normal save path.
@@ -63,6 +76,7 @@
 ## Export that looks like you spent all day on it
 
 - **Word (.docx)**: Markdown headings become real Word heading styles (navigation pane ready), equations become native editable Word math, Mermaid renders as crisp images, and tables/images/query results come across.
+- **Your own Word template.** Put `{{PowerWikiContent}}` where the pages belong and the export keeps everything around it — cover page, headers, footers, page setup and styles. A template without that marker still lends its fonts and heading styles. Upload one per export, or drop a `powerwiki-template.docx` into the wiki's `.attachments` so the whole project exports the same way.
 - **PDF**: full-fidelity print with selectable text.
 - Export one page, or select and order any set of pages from a tree into a single document.
 

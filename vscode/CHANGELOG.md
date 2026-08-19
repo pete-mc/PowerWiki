@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0
+
+Shared with the Azure DevOps extension 1.4.0.
+
+- **Word export can use your own template.** Put `{{PowerWikiContent}}` in a
+  `.docx` where the pages belong and the export keeps its cover page, headers,
+  footers and styles around them; a template without that marker still lends its
+  fonts and heading styles. Choose one per export, or commit
+  `/.attachments/powerwiki-template.docx` to the wiki as the project default.
+- Fixed the draw.io editor appearing to hang on save. The diagram was stored
+  immediately; the wait was a wiki-wide scan for other pages using it, which now
+  runs after the editor closes.
+- Fixed a diagram's image not refreshing on the page after editing it.
+
+The **Power Wiki tab on the work item form**, also new in 1.4.0, is Azure DevOps
+only — there are no work items in VS Code.
+
 ## 1.3.11
 
 - Fixed **Clone wiki in VS Code** (in the Azure DevOps extension), which handed

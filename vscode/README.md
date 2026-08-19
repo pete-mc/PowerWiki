@@ -27,7 +27,7 @@ it opens as a rendered page instead of raw text.
 | Attachments | Insert, list, and **replace** — a local file has none of the API's create-only limits |
 | Diagrams | draw.io round-trips, storing revisions in `.attachments` |
 | History | `git log --follow`, so a renamed page keeps its whole history |
-| Export | Word (.docx), saved through a file dialog |
+| Export | Word (.docx), saved through a file dialog — optionally through your own Word template |
 
 ## What is missing, and why
 

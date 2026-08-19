@@ -150,11 +150,59 @@ The current implementation provides a working Power Wiki experience:
 - Attachment management: browse and insert existing attachments with image previews.
 - Inbound-link updates on page rename/move, with a preview/confirm dialog.
 - Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML. The Word path rasterizes each diagram through a canvas, so it renders Mermaid with plain SVG text labels — an SVG containing a `<foreignObject>` (Mermaid's default HTML labels) taints the canvas and cannot be turned into an image. PDF/print embeds the SVG directly and keeps the HTML labels.
+- Word export through a customer's own template, chosen per export or stored once per wiki. See [Word export templates](#word-export-templates).
+- A **Power Wiki** tab on the work item form listing that item's linked wiki pages, with full rendering and editing. See [Power Wiki on the work item form](#power-wiki-on-the-work-item-form).
 - draw.io diagrams: draw one with the editor's **Diagram** button (or `/Diagram`), and reopen any stored diagram from the **Edit diagram** button — on hover in the preview, or in the zoom overlay's toolbar. See [draw.io diagrams](#drawio-diagrams).
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
 - Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki.
 - Supports the Azure DevOps image-size suffix, `![alt](image.png =500x250)`.
 - Resizable page tree rail (drag its edge, double-click to reset), and an editor that fills the available height.
+
+## Word export templates
+
+Word exports can carry a customer's own styling instead of PowerWiki's. Two
+mechanisms, and which applies is decided by the template's contents rather than
+by asking the user, because they deliver different amounts:
+
+| Template contains | What you get |
+| --- | --- |
+| `{{PowerWikiContent}}` | The pages are patched into that spot in the real `.docx`, so its cover page, headers, footers and page setup survive around them |
+| no marker | The template's `styles.xml` is applied to a generated document, so headings and body text adopt its fonts — its layout cannot come across |
+
+Pick a template per export, or commit one to the wiki as
+`/.attachments/powerwiki-template.docx` and every export from that project
+offers it as the default.
+
+The fallback is load-bearing rather than a nicety. `docx`'s `patchDocument`
+does **not** fail on a template with no placeholder — it returns the template
+with the content silently dropped, which would export a cover page and nothing
+else. PowerWiki detects the placeholder itself first, stripping markup before
+matching because Word splits a typed token across runs whenever formatting or a
+spell-check boundary falls inside it.
+
+## Power Wiki on the work item form
+
+A `ms.vss-work-web.work-item-form-page` contribution puts a **Power Wiki** tab
+beside Details, History and Links. It is a full page tab, so it gets the whole
+form area — the same `WikiBrowser` as the hub, rendering and editing at full
+size.
+
+The only differences are declared as host capabilities: the rail lists the work
+item's linked pages instead of the page tree (`linkedPages`), and the wiki
+picker, full-text search, and VS Code hand-off are off.
+
+Links are Azure DevOps' own — an `ArtifactLink` relation whose `attributes.name`
+is `Wiki Page`, the same links the work item's Links tab shows. Note the URL
+only *looks* slash-separated: everything after `vstfs:///Wiki/WikiPage/` is a
+single URL-encoded `projectId/wikiId/pagePath`, so parsing must decode before
+splitting or it breaks on the first nested page.
+
+**This needs no additional scope.** Reading and adding links go through
+`IWorkItemFormService`, which acts on the open form as the signed-in user rather
+than through the extension's REST token, so `vso.work` stays read-only and no
+installed organization has to re-authorize. Adding leaves the form dirty instead
+of saving, so an accidental link is discarded like any other unsaved change.
+Removing links is left to the work item's own Links tab, which already owns it.
 
 ## Theming
 
