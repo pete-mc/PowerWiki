@@ -4,6 +4,10 @@ const path = require("path");
 module.exports = (_env, argv) => ({
   entry: {
     powerwiki: path.resolve(__dirname, "src/extension/main.tsx"),
+    // The Power Wiki tab on the work item form. Its own entry rather than a
+    // route inside the hub bundle: the work item form loads it in a separate
+    // iframe, so it is a separate page.
+    "powerwiki-workitem": path.resolve(__dirname, "src/extension/workItem.tsx"),
     // The local sandbox (src/sandbox/main.tsx) runs the UI against an in-memory
     // wiki with no Azure DevOps SDK. It is a development tool, so it is left out
     // of production builds entirely and never reaches the packaged extension —

@@ -27,12 +27,21 @@ import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
 import type {
   FollowProvider,
   IdentityProvider,
+  LinkedPagesProvider,
   WikiHost,
   WikiHostCapabilities,
   WikiHostContext,
   WikiHostNavigation,
   WorkItemProvider
 } from "./WikiHost";
+import { WorkItemFormLinkedPages } from "./workItemFormLinkedPages";
+
+/**
+ * Which Azure DevOps surface this host is serving. The hub is the full wiki
+ * experience; the work item form is the same UI narrowed to one item's linked
+ * pages.
+ */
+export type AzureDevOpsSurface = "hub" | "workItem";
 
 const HOST_NAVIGATION_SERVICE_ID = "ms.vss-features.host-navigation-service";
 
@@ -40,7 +49,7 @@ const HOST_NAVIGATION_SERVICE_ID = "ms.vss-features.host-navigation-service";
 // stalled host degrades to hash-based navigation rather than hanging.
 const HOST_NAVIGATION_TIMEOUT_MS = 3000;
 
-export async function createAzureDevOpsWikiHost(): Promise<WikiHost> {
+export async function createAzureDevOpsWikiHost(surface: AzureDevOpsSurface = "hub"): Promise<WikiHost> {
   await SDK.init({ loaded: false });
   await SDK.ready();
 
@@ -59,15 +68,18 @@ export async function createAzureDevOpsWikiHost(): Promise<WikiHost> {
 
   SDK.notifyLoadSucceeded();
 
-  return new AzureDevOpsWikiHost({
-    organizationIsHosted: host.isHosted,
-    organizationName: host.name,
-    projectName: webContext.project?.name,
-    projectId: webContext.project?.id,
-    userDisplayName: user.displayName,
-    userId: user.id,
-    contributionId
-  });
+  return new AzureDevOpsWikiHost(
+    {
+      organizationIsHosted: host.isHosted,
+      organizationName: host.name,
+      projectName: webContext.project?.name,
+      projectId: webContext.project?.id,
+      userDisplayName: user.displayName,
+      userId: user.id,
+      contributionId
+    },
+    surface
+  );
 }
 
 class AzureDevOpsWikiHost implements WikiHost {
@@ -78,21 +90,31 @@ class AzureDevOpsWikiHost implements WikiHost {
   public readonly identity: IdentityProvider;
   public readonly wikiClient: WikiRepositoryClient;
   public readonly workItems?: WorkItemProvider;
+  public readonly linkedPages?: LinkedPagesProvider;
   public readonly searchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
 
-  public constructor(context: WikiHostContext) {
+  public constructor(context: WikiHostContext, surface: AzureDevOpsSurface = "hub") {
     this.context = context;
+    const onWorkItem = surface === "workItem";
     this.capabilities = {
       comments: true,
       follow: true,
       workItems: Boolean(context.projectName),
       mentions: true,
-      pageTree: true,
-      wikiSelector: true,
-      search: Boolean(context.organizationName && context.projectName),
+      // On a work item the rail lists that item's linked pages instead of the
+      // whole wiki: the tree is the wrong navigation when the wiki is being
+      // read in the context of one work item, and there is far less room.
+      pageTree: !onWorkItem,
+      linkedPages: onWorkItem,
+      // The wiki a page belongs to is a property of each link, so there is
+      // nothing for a picker to choose between.
+      wikiSelector: !onWorkItem,
+      search: !onWorkItem && Boolean(context.organizationName && context.projectName),
       permalinks: true,
       printToPdf: true,
-      vsCodeHandoff: true
+      // Handing the wiki over to VS Code belongs to the full hub, not to a tab
+      // inside a work item.
+      vsCodeHandoff: !onWorkItem
     };
 
     // The hub always has a project; the type says otherwise only because the
@@ -106,6 +128,10 @@ class AzureDevOpsWikiHost implements WikiHost {
     this.follow = new WikiFollowClient();
     this.identity = new AzureDevOpsIdentityClient();
     this.workItems = new AzureDevOpsHostWorkItems(context);
+
+    if (onWorkItem && context.projectId) {
+      this.linkedPages = new WorkItemFormLinkedPages(context.projectId);
+    }
 
     // Content search runs against the Azure DevOps Search service, which indexes
     // the same wikis the built-in search covers — the alternative, downloading

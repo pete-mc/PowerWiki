@@ -51,6 +51,13 @@ export interface WikiHostCapabilities {
   readonly mentions: boolean;
   /** PowerWiki's own page-tree rail. VS Code turns this off: the Explorer is the tree. */
   readonly pageTree: boolean;
+  /**
+   * The rail lists the wiki pages linked to a work item rather than the page
+   * tree. Only the work item form does this: there the wiki is being read in the
+   * context of one work item, which makes its links the useful navigation and
+   * the whole tree the wrong one. Mutually exclusive with `pageTree`.
+   */
+  readonly linkedPages: boolean;
   /** The wiki picker. Off where the host already chose the wiki (a VS Code editor tab). */
   readonly wikiSelector: boolean;
   /** Full-text search across pages. */
@@ -96,6 +103,35 @@ export interface FollowProvider {
   unfollow(subscriptionId: string): Promise<void>;
 }
 
+/** A wiki page linked to a work item. */
+export interface LinkedWikiPage {
+  readonly projectId: string;
+  readonly wikiId: string;
+  /** Wiki-relative page path, e.g. "/PowerWiki Showcase/Mermaid Gallery". */
+  readonly path: string;
+  /** The link's own comment, if the person who made it left one. */
+  readonly comment?: string;
+}
+
+/**
+ * The wiki pages linked to the work item currently on screen.
+ *
+ * Present only on the work item form surface. Adding goes through the host's
+ * form service rather than the REST API, so it needs no write scope: the link
+ * is added to the open form and the user saves the work item as usual.
+ */
+export interface LinkedPagesProvider {
+  list(): Promise<readonly LinkedWikiPage[]>;
+  /**
+   * Links a page to the open work item. Leaves the form dirty rather than
+   * saving, so linking is undone by discarding the work item like any other
+   * unsaved change.
+   */
+  add(page: { readonly wikiId: string; readonly path: string }): Promise<void>;
+  /** Opens the work item's own Links tab, where links can be removed. */
+  openLinksTab(): Promise<void>;
+}
+
 export interface WorkItemProvider {
   getWorkItemBadgeDetails(id: number): Promise<WorkItemBadgeDetails>;
   getQueryTable(queryId: string): Promise<QueryTableResult>;
@@ -139,6 +175,7 @@ export interface WikiHost {
   readonly workItems?: WorkItemProvider;
   readonly identity?: IdentityProvider;
   readonly follow?: FollowProvider;
+  readonly linkedPages?: LinkedPagesProvider;
 
   /** Resolves once the host's route service is ready, or undefined if it has none. */
   getNavigation(): Promise<WikiHostNavigation | undefined>;

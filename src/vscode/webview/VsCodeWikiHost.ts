@@ -32,6 +32,8 @@ export class VsCodeWikiHost implements WikiHost {
     workItems: false,
     mentions: false,
     pageTree: false,
+    // Only the work item form lists linked pages instead of the tree.
+    linkedPages: false,
     wikiSelector: false,
     search: true,
     permalinks: false,

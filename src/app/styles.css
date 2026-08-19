@@ -3085,3 +3085,164 @@ button.wiki-move-option:hover {
   border-color: var(--pw-accent) !important;
   color: var(--pw-on-accent, #ffffff) !important;
 }
+
+/* The work item form's rail: this item's linked wiki pages instead of the page
+   tree. It reuses .powerwiki-nav for placement and chrome, so only the contents
+   are styled here. Colours come from the same theme variables as everything
+   else — the tab must follow the Azure DevOps theme it is embedded in. */
+.powerwiki-linked-rail {
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.powerwiki-linked-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 0 12px 4px;
+}
+
+.powerwiki-linked-title {
+  color: var(--pw-text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.powerwiki-linked-add,
+.powerwiki-linked-manage {
+  background: none;
+  border: 1px solid var(--pw-border);
+  border-radius: 2px;
+  color: var(--pw-accent);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 2px 8px;
+}
+
+.powerwiki-linked-add:hover,
+.powerwiki-linked-manage:hover {
+  background: var(--pw-hover);
+}
+
+.powerwiki-linked-manage {
+  align-self: flex-start;
+  margin: 4px 12px;
+}
+
+.powerwiki-linked-picker {
+  border-bottom: 1px solid var(--pw-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 12px 8px;
+}
+
+.powerwiki-linked-picker input {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  border-radius: 2px;
+  color: var(--pw-text);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 4px 6px;
+}
+
+.powerwiki-linked-candidates {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.powerwiki-linked-candidate {
+  background: none;
+  border: none;
+  color: var(--pw-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  overflow: hidden;
+  padding: 4px 6px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.powerwiki-linked-candidate:hover {
+  background: var(--pw-hover);
+}
+
+/* Tinted like the search snippets rather than the browser's yellow, which reads
+   as an error against a dark theme. */
+.powerwiki-linked-candidate mark {
+  background: var(--pw-selected);
+  border-radius: 2px;
+  color: inherit;
+  padding: 0 1px;
+}
+
+.powerwiki-linked-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.powerwiki-linked-item {
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  color: var(--pw-text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+  font-size: inherit;
+  gap: 2px;
+  padding: 6px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.powerwiki-linked-item:hover {
+  background: var(--pw-hover);
+}
+
+.powerwiki-linked-item.active {
+  background: var(--pw-selected);
+  border-left-color: var(--pw-accent);
+  font-weight: 600;
+}
+
+.powerwiki-linked-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.powerwiki-linked-item-note {
+  color: var(--pw-text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.powerwiki-linked-empty,
+.powerwiki-linked-hint {
+  color: var(--pw-text-secondary);
+  font-size: 12px;
+  margin: 4px 12px;
+}
+
+.powerwiki-linked-error {
+  color: var(--pw-error, #a4262c);
+  font-size: 12px;
+  margin: 4px 12px;
+}

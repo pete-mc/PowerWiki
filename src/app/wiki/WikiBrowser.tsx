@@ -12,7 +12,7 @@ import {
   newDiagramName,
   nextDiagramName,
 } from "../../drawio/drawioDiagram";
-import type { WikiHost, WikiHostNavigation } from "../../host/WikiHost";
+import type { LinkedWikiPage, WikiHost, WikiHostNavigation } from "../../host/WikiHost";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "../../wiki/WikiComment";
@@ -23,6 +23,7 @@ import { PROJECT_TEMPLATE_WIKI_PATH } from "../../export/wordTemplate";
 import { joinRepositoryPath } from "../../wiki/repositoryItemPath";
 import { WikiAttachmentsDialog } from "./WikiAttachmentsDialog";
 import { WikiExportDialog } from "./WikiExportDialog";
+import { WikiLinkedPagesRail } from "./WikiLinkedPagesRail";
 import { WikiHistoryDialog } from "./WikiHistoryDialog";
 import { WikiLinkUpdateDialog, type InboundLinkUpdate } from "./WikiLinkUpdateDialog";
 import { toExportImage } from "../../export/imageMeta";
@@ -411,6 +412,10 @@ export function WikiBrowser({
   // and the name filter can match a page nobody has opened. Paths only, no
   // content, so the cost scales with page count rather than wiki size.
   const [allPages, setAllPages] = useState<{ pages: readonly WikiPageSummary[]; wikiId: string }>();
+  // The work item form's rail: this item's linked pages rather than the tree.
+  const [linkedPages, setLinkedPages] = useState<readonly LinkedWikiPage[]>([]);
+  const [linkedPagesLoading, setLinkedPagesLoading] = useState(false);
+  const [linkedPagesError, setLinkedPagesError] = useState<string>();
   // Which wiki the prefetch has already been started for. A ref rather than
   // state on purpose: an in-flight flag kept in state would be a dependency of
   // the effect that sets it, so the effect would re-run, its cleanup would fire,
@@ -1696,6 +1701,42 @@ export function WikiBrowser({
     [moveDialogPath, pageList, performMove]
   );
 
+  // The work item's linked pages, re-read after each link so the rail matches
+  // the form. This goes through the host's form service rather than the REST
+  // API, which is why it needs no work-item write scope.
+  const refreshLinkedPages = useCallback(async () => {
+    if (!host.linkedPages) {
+      return;
+    }
+    setLinkedPagesLoading(true);
+    setLinkedPagesError(undefined);
+    try {
+      setLinkedPages(await host.linkedPages.list());
+    } catch (failure: unknown) {
+      setLinkedPagesError(formatError(failure));
+    } finally {
+      setLinkedPagesLoading(false);
+    }
+  }, [host]);
+
+  useEffect(() => {
+    if (capabilities.linkedPages) {
+      void refreshLinkedPages();
+    }
+  }, [capabilities.linkedPages, refreshLinkedPages]);
+
+  const handleLinkPage = useCallback(
+    async (path: string) => {
+      if (!host.linkedPages || !activeWikiId) {
+        throw new Error("PowerWiki is still loading this wiki. Try again in a moment.");
+      }
+      await host.linkedPages.add({ wikiId: activeWikiId, path });
+      await refreshLinkedPages();
+      void handlePageSelected(path);
+    },
+    [activeWikiId, handlePageSelected, host, refreshLinkedPages]
+  );
+
   const treeActions = useMemo<WikiPageTreeActions>(
     () => ({
       onAddSubPage: (path) => void handleCreatePage(path),
@@ -2059,6 +2100,19 @@ export function WikiBrowser({
           has one of its own turns it off wholesale rather than emptying it. In
           VS Code that host is the Explorer: the pages are files, so a second
           tree beside it would be a duplicate that could disagree. */}
+      {capabilities.linkedPages ? (
+        <WikiLinkedPagesRail
+          activePath={activePage?.path}
+          allPages={pageLinks}
+          error={linkedPagesError}
+          loading={linkedPagesLoading}
+          onAdd={handleLinkPage}
+          onManage={host.linkedPages ? () => void host.linkedPages?.openLinksTab() : undefined}
+          onSelect={(path) => void handlePageSelected(path)}
+          pages={linkedPages}
+        />
+      ) : null}
+
       {capabilities.pageTree ? (
       <aside
         aria-label="Wiki pages"
