@@ -1,0 +1,155 @@
+// Webview entry point for the VS Code host.
+//
+// Compare with `src/extension/main.tsx` (the hub) and `src/sandbox/main.tsx`:
+// all three build a `WikiHost` and render the same `App`. That is the entire
+// per-host cost of the UI.
+
+import { useEffect } from "react";
+import { createRoot } from "react-dom/client";
+
+import { App } from "../../app/App";
+import { setMonacoBaseUrl } from "../../app/wiki/monacoLoader";
+import { ErrorBoundary } from "../../app/ErrorBoundary";
+import type { InitMessage } from "../protocol";
+import { ExtensionBridge } from "./rpcClient";
+import { VsCodeWikiHost } from "./VsCodeWikiHost";
+
+import "../../app/styles.css";
+import "./vscodeTheme.css";
+
+const rootElement = document.getElementById("root");
+
+if (!rootElement) {
+  throw new Error("PowerWiki root element was not found.");
+}
+
+const bridge = new ExtensionBridge();
+const root = createRoot(rootElement);
+
+root.render(
+  <ErrorBoundary label="PowerWiki">
+    <App status="loading" />
+  </ErrorBoundary>
+);
+
+// Only after the listener above exists, or the init message lands nowhere.
+bridge.onMessage((message) => {
+  if (message.type === "init") {
+    mount(message);
+    return;
+  }
+
+  if (message.type === "reload" && lastInit) {
+    // The file changed outside PowerWiki. Remount rather than reloading the
+    // document: a webview reload would re-fetch the bundle, re-download Monaco
+    // and lose the extension's message channel mid-flight, where remounting
+    // just makes the app read the page again. The extension only sends this
+    // when no edit is in progress, so nothing unsaved is lost.
+    mount(lastInit);
+  }
+});
+
+bridge.signalReady();
+
+let lastInit: InitMessage | undefined;
+let mountGeneration = 0;
+
+function mount(init: InitMessage): void {
+  lastInit = init;
+  mountGeneration += 1;
+  document.documentElement.classList.add("powerwiki-vscode-root");
+  setMonacoBaseUrl(init.monacoBaseUrl);
+  const host = new VsCodeWikiHost(bridge, init);
+
+  // The key forces a fresh mount, which is what makes a remount re-read the
+  // page instead of reusing the component state that holds the old content.
+  root.render(
+    <ErrorBoundary key={mountGeneration} label="PowerWiki">
+      <ScreenReporter />
+      <App host={host} logoUrl={init.logoUrl} status="ready" />
+    </ErrorBoundary>
+  );
+}
+
+/**
+ * Reports what the webview is showing back to the extension host.
+ *
+ * Two callers, both of which need it: the extension suppresses an external-file
+ * reload while an edit is in progress, and the UI tests assert on this rather
+ * than on webview DOM — an extension-host test process cannot reach inside a
+ * webview, so the rendered result has to be reported out to be observed at all.
+ *
+ * It reads the real rendered DOM rather than component state on purpose: a test
+ * that asserts "the heading rendered" should fail if rendering breaks, not pass
+ * because a state field was set.
+ */
+function ScreenReporter() {
+  useEffect(() => {
+    const shell = document.querySelector(".powerwiki-shell");
+    if (!shell) {
+      return;
+    }
+
+    // Adding the class here rather than in the shared component keeps the
+    // VS Code-only header trimming out of the hub's markup.
+    shell.classList.add("powerwiki-vscode");
+
+    let lastPayload = "";
+    const report = () => {
+      const content = document.querySelector(".powerwiki-content");
+      const headings = [...(content?.querySelectorAll("h1, h2, h3, h4, h5, h6") ?? [])]
+        // Headings carry a permalink anchor whose text is "#"; that is chrome,
+        // not the heading, and reporting it would make every assertion about a
+        // heading depend on how the permalink is rendered.
+        .map((heading) => (heading.textContent ?? "").replace(/[#¶]\s*$/, "").trim())
+        .filter(Boolean);
+
+      const contentImages = [...(content?.querySelectorAll("img") ?? [])];
+      const payload = {
+        editing: Boolean(document.querySelector(".wiki-editor-shell")),
+        headings,
+        pagePath: document.querySelector<HTMLElement>("[data-powerwiki-page-path]")?.dataset
+          .powerwikiPagePath,
+        title: document.querySelector(".powerwiki-header-title h1")?.textContent ?? undefined,
+        rendered: Boolean(content?.querySelector(".markdown-preview")),
+        error: document.querySelector('[role="alert"]')?.textContent ?? undefined,
+        chrome: {
+          pageTree: Boolean(document.querySelector(".powerwiki-nav-tree")),
+          wikiSelector: Boolean(document.querySelector(".wiki-selector")),
+          commentsToggle: Boolean(document.querySelector(".wiki-byline-comments")),
+          workItems: document.querySelectorAll(".powerwiki-work-item-badge").length,
+          // A title span only appears once the work item's details have been
+          // loaded, so its absence is what "inert" actually looks like in the
+          // DOM — the badge itself is always painted, with just the id.
+          enrichedWorkItems: document.querySelectorAll(".powerwiki-work-item-title").length,
+          inertMentions: document.querySelectorAll(".powerwiki-mention-unresolved").length,
+          images: contentImages.length,
+          loadedImages: contentImages.filter((image) => image.complete && image.naturalWidth > 0).length
+        }
+      };
+
+      const serialized = JSON.stringify(payload);
+      if (serialized !== lastPayload) {
+        lastPayload = serialized;
+        bridge.postState(payload);
+      }
+    };
+
+    report();
+    const observer = new MutationObserver(report);
+    observer.observe(shell, { childList: true, subtree: true, characterData: true });
+
+    // An image finishes decoding *after* the DOM stops changing, so a mutation
+    // observer alone would report every image as not-yet-loaded, forever.
+    shell.addEventListener("load", report, true);
+    shell.addEventListener("error", report, true);
+
+    return () => {
+      observer.disconnect();
+      shell.removeEventListener("load", report, true);
+      shell.removeEventListener("error", report, true);
+    };
+  }, []);
+
+  return null;
+}

@@ -44,6 +44,17 @@ The current implementation follows the Microsoft Azure DevOps web extension stru
 
 The manifest contributes Power Wiki as a project-level hub group and also under the Azure DevOps project Overview menu. It intentionally does not replace or hide the default Azure DevOps Wiki, so teams can choose either experience.
 
+### Two hosts
+
+The same UI also runs as a **VS Code extension** (`vscode/`) against a cloned wiki
+repository, with no Azure DevOps connection at all. Both hosts render the same
+React app; everything host-specific sits behind one interface,
+`WikiHost` (`src/host/WikiHost.ts`), which the Azure DevOps hub, VS Code, and the
+local sandbox each implement. Nothing under `src/app/`, `src/rendering/`, or
+`src/export/` imports a host SDK, so a feature is written once and appears in
+both. See [`vscode/README.md`](vscode/README.md) for what a local clone can and
+cannot do, and `AGENTS.md` for the boundary rules.
+
 ### Permissions
 
 The extension requests these scopes in `vss-extension.json`:
@@ -297,9 +308,33 @@ The one exception is a hash run followed immediately by a digit: `#1234` stays a
 - `src/rendering/` contains Markdown, Mermaid, and sanitization boundaries.
 - `src/drawio/` contains the draw.io embed protocol client, editor dialog, and diagram naming/reference rules.
 - `src/wiki/` contains wiki repository/page/comment abstractions and Azure DevOps API access.
+- `src/host/` contains the `WikiHost` interface both hosts implement, and the Azure DevOps implementation.
+- `src/vscode/` contains the VS Code extension: wiki discovery, the filesystem/Git repository client, the custom editor, and the webview host.
+- `vscode/` contains the VS Code extension manifest and its build output.
 - `src/workItems/` contains Azure Boards work item and query access used by Markdown enhancements.
 - `vss-extension.json` defines the Azure DevOps extension metadata and contributions.
 - `overview.md` provides Marketplace package details.
+
+## Using PowerWiki in VS Code
+
+PowerWiki also ships as a VS Code extension that works entirely off a cloned wiki
+repository — no sign-in, no PAT. The built-in Explorer is the page tree.
+
+```bash
+npm run build:vscode      # bundle the extension and webview into vscode/dist
+npm run package:vscode    # produce vscode/powerwiki-vscode.vsix
+code --install-extension vscode/powerwiki-vscode.vsix
+npm run test:vscode       # UI tests in a real VS Code window
+```
+
+It is published separately from the Azure DevOps extension, as
+`dataversepowertools.powerwiki-vscode`, by pushing a **`vscode-v*`** tag — not a
+`v*` tag, which releases the Azure DevOps hub extension. See `AGENTS.md` for the
+tag and token rules.
+
+Comments, follow, work item enrichment and `@mention` resolution need Azure
+DevOps itself, so they are absent there rather than present and broken.
+[`vscode/README.md`](vscode/README.md) has the details.
 
 ## Publishing
 

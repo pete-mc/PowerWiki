@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "build:vscode",
+      "problemMatcher": "$tsc",
+      "group": "build",
+      "label": "npm: build:vscode"
+    },
+    {
+      "type": "npm",
+      "script": "dev:vscode",
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch",
+      "label": "npm: dev:vscode"
+    }
+  ]
+}

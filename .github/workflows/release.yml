@@ -2,10 +2,17 @@ name: Release
 
 # Tagging a version publishes it. The tag is the trigger, so the manifest
 # versions must already match the tag (checked below before anything ships).
+#
+# `v[0-9]*` rather than `v*` on purpose: this repository also releases the VS
+# Code extension, tagged `vscode-v0.1.1`, and that *starts with a v* — so `v*`
+# matched it and started this workflow too. Requiring a digit after the v is
+# what keeps the two releases apart. (The tag/manifest check below would have
+# failed the run before publishing anything, but a release workflow that fires
+# on another extension's tag is a trap waiting for the day that check moves.)
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*"
 
 permissions:
   contents: read

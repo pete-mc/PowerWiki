@@ -21,6 +21,14 @@ interface WikiExportDialogProps {
   readonly loadImage: (src: string, pagePath: string) => Promise<ExportImage | null>;
   /** Options for rendering enriched HTML for the PDF export. */
   readonly renderOptions: PageRenderOptions;
+  /** Delivers the finished file. Hosts differ; see WikiHost.saveExportedFile. */
+  readonly onSaveFile: (fileName: string, blob: Blob) => Promise<void>;
+  /**
+   * Whether PDF export is offered. It works by printing the document, which a
+   * VS Code webview cannot do, so the option is hidden rather than shown and
+   * doing nothing.
+   */
+  readonly allowPdf: boolean;
   readonly onClose: () => void;
 }
 
@@ -34,6 +42,8 @@ export function WikiExportDialog({
   loadPageContent,
   loadImage,
   renderOptions,
+  onSaveFile,
+  allowPdf,
   onClose,
 }: WikiExportDialogProps) {
   const [format, setFormat] = useState<Format>("word");
@@ -104,7 +114,7 @@ export function WikiExportDialog({
         const { exportPagesToWord } = await import("../../export/exportWord");
         const fileName =
           (exportPages.length === 1 ? sanitizeFileName(exportPages[0].title) : "PowerWiki export") + ".docx";
-        await exportPagesToWord(exportPages, renderOptions, loadImage, fileName);
+        await exportPagesToWord(exportPages, renderOptions, loadImage, fileName, onSaveFile);
       } else {
         const { exportPagesToPdf } = await import("../../export/exportPdf");
         await exportPagesToPdf(exportPages, renderOptions);
@@ -134,10 +144,12 @@ export function WikiExportDialog({
             <input checked={format === "word"} disabled={busy} onChange={() => setFormat("word")} type="radio" />
             Word (.docx)
           </label>
-          <label>
-            <input checked={format === "pdf"} disabled={busy} onChange={() => setFormat("pdf")} type="radio" />
-            PDF (print)
-          </label>
+          {allowPdf ? (
+            <label>
+              <input checked={format === "pdf"} disabled={busy} onChange={() => setFormat("pdf")} type="radio" />
+              PDF (print)
+            </label>
+          ) : null}
         </div>
 
         <div className="wiki-export-scope">

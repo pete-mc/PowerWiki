@@ -20,6 +20,19 @@ declare global {
 
 let monacoLoadPromise: Promise<MonacoApi> | undefined;
 
+/**
+ * Where Monaco's AMD build lives, as a URL prefix without a trailing slash.
+ *
+ * The hub serves it from the bundle's own folder, so a relative path works
+ * there. A VS Code webview has an opaque origin and resolves nothing relative,
+ * so it has to be told the `vscode-resource` URI instead.
+ */
+let monacoBaseUrl = "vs";
+
+export function setMonacoBaseUrl(baseUrl: string): void {
+  monacoBaseUrl = baseUrl.replace(/\/+$/, "");
+}
+
 export function loadMonaco(): Promise<MonacoApi> {
   if (window.monaco) {
     return Promise.resolve(window.monaco);
@@ -35,7 +48,7 @@ export function loadMonaco(): Promise<MonacoApi> {
     const script = document.createElement("script");
     script.async = true;
     script.dataset.powerwikiMonacoLoader = "true";
-    script.src = "vs/loader.js";
+    script.src = `${monacoBaseUrl}/loader.js`;
     script.onload = () => configureAndLoadMonaco(resolve, reject);
     script.onerror = () => reject(new Error("Unable to load Monaco editor assets."));
     document.head.appendChild(script);
@@ -50,7 +63,7 @@ function configureAndLoadMonaco(resolve: (monaco: MonacoApi) => void, reject: (e
     return;
   }
 
-  window.require.config({ paths: { vs: "vs" } });
+  window.require.config({ paths: { vs: monacoBaseUrl } });
   window.require(["vs/editor/editor.main"], () => {
     if (window.monaco) {
       resolve(window.monaco);

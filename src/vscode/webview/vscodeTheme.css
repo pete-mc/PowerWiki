@@ -1,0 +1,60 @@
+/*
+ * PowerWiki inside VS Code.
+ *
+ * The app's own tokens (`--pw-*` in src/app/styles.css) already read from the
+ * Azure DevOps theme variables the hub injects, with fallbacks. So rather than
+ * duplicating the token layer for a second host, this defines *those same
+ * variable names* in terms of VS Code's — one indirection, and the app's
+ * stylesheet is untouched. Add a token in styles.css and it themes correctly in
+ * both hosts with no change here.
+ */
+:root {
+  --background-color: var(--vscode-editor-background, #1f1f1f);
+  --callout-background-color: var(--vscode-editor-background, #1f1f1f);
+  --text-primary-color: var(--vscode-foreground, #cccccc);
+  --text-secondary-color: var(--vscode-descriptionForeground, #9d9d9d);
+  --text-disabled-color: var(--vscode-disabledForeground, #888888);
+  --communication-foreground: var(--vscode-textLink-foreground, #4daafc);
+  --font-family-monospace: var(--vscode-editor-font-family, Consolas, "Courier New", monospace);
+}
+
+body {
+  /* The hub is transparent over Azure DevOps' own backdrop; a webview has no
+     backdrop of its own, so it has to paint one. */
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
+}
+
+/* VS Code's controls are flatter and denser than Azure DevOps'. Matching them
+   here rather than in styles.css keeps the hub's appearance untouched. */
+button {
+  border-radius: 2px;
+}
+
+input,
+select,
+textarea {
+  background: var(--vscode-input-background);
+  border-radius: 2px;
+  color: var(--vscode-input-foreground);
+}
+
+::selection {
+  background: var(--vscode-editor-selectionBackground);
+}
+
+/*
+ * The page tree is the VS Code Explorer, so the header's job shrinks to search
+ * and the page-actions menu. The brand block and the big page title would just
+ * repeat the editor tab, so they are hidden rather than removed from the shared
+ * component — the hub still wants them.
+ */
+.powerwiki-shell.powerwiki-vscode .powerwiki-brand,
+.powerwiki-shell.powerwiki-vscode .powerwiki-header-title h1 {
+  display: none;
+}
+
+.powerwiki-shell.powerwiki-vscode .powerwiki-header {
+  padding-bottom: 4px;
+  padding-top: 4px;
+}

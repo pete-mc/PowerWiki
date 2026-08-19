@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { AzureDevOpsHostContext } from "../extension/azureDevOpsHost";
-import type { SearchTransport } from "../wiki/wikiSearch";
-import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
+import type { WikiHost } from "../host/WikiHost";
 import type { HeaderMenuAction } from "./HeaderMenuAction";
 import { WikiPageByline, type WikiPageBylineProps } from "./wiki/WikiPageByline";
 import { WikiBrowser } from "./wiki/WikiBrowser";
@@ -10,15 +8,21 @@ import packageMetadata from "../../package.json";
 
 interface AppProps {
   readonly error?: unknown;
-  readonly hostContext?: AzureDevOpsHostContext;
-  /** Injected by the local sandbox; the extension entry leaves it unset. */
-  readonly searchTransport?: SearchTransport;
+  /**
+   * Everything host-specific (see `src/host/WikiHost.ts`). Absent while the host
+   * is still initialising or has failed, which is what `status` reports.
+   */
+  readonly host?: WikiHost;
+  /**
+   * Where the PowerWiki logo is served from. The hub resolves it relative to the
+   * bundle; a VS Code webview needs an explicit `vscode-resource` URI, because
+   * relative paths there resolve against the webview's own opaque origin.
+   */
+  readonly logoUrl?: string;
   readonly status: "failed" | "loading" | "ready";
-  /** Injected by the local sandbox; the extension entry leaves it unset. */
-  readonly wikiClient?: WikiRepositoryClient;
 }
 
-export function App({ error, hostContext, searchTransport, status, wikiClient }: AppProps) {
+export function App({ error, host, logoUrl = "../media/logo_new.png", status }: AppProps) {
   const headerMenuRef = useRef<HTMLDivElement>(null);
   const [headerMenuActions, setHeaderMenuActions] = useState<readonly HeaderMenuAction[]>([]);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
@@ -78,7 +82,7 @@ export function App({ error, hostContext, searchTransport, status, wikiClient }:
         <div className="powerwiki-header-right">
           <div className="powerwiki-header-right-stack">
             <div className="powerwiki-brand" aria-label={`PowerWiki version ${packageMetadata.version}`}>
-              <img alt="" src="../media/logo_new.png" />
+              <img alt="" src={logoUrl} />
               <div>
                 <strong>PowerWiki</strong>
                 <span>Version {packageMetadata.version}</span>
@@ -153,21 +157,16 @@ export function App({ error, hostContext, searchTransport, status, wikiClient }:
           <p>{formatError(error)}</p>
         </section>
       ) : (
-        <WikiBrowser
-          contributionId={hostContext?.contributionId}
-          onHeaderMenuActionsChange={setHeaderMenuActions}
-          onPageBylineChange={setPageByline}
-          onPageTitleChange={handlePageTitleChange}
-          organizationIsHosted={hostContext?.organizationIsHosted}
-          organizationName={hostContext?.organizationName}
-          projectId={hostContext?.projectId}
-          projectName={hostContext?.projectName}
-          onSearchQueryChange={setSearchQuery}
-          searchQuery={searchQuery}
-          searchTransport={searchTransport}
-          userId={hostContext?.userId}
-          wikiClient={wikiClient}
-        />
+        host ? (
+          <WikiBrowser
+            host={host}
+            onHeaderMenuActionsChange={setHeaderMenuActions}
+            onPageBylineChange={setPageByline}
+            onPageTitleChange={handlePageTitleChange}
+            onSearchQueryChange={setSearchQuery}
+            searchQuery={searchQuery}
+          />
+        ) : null
       )}
     </main>
   );

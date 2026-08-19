@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PowerWiki: VS Code extension",
+      "type": "extensionHost",
+      "request": "launch",
+      // The manifest lives in vscode/; the bundles it points at are built by
+      // the preLaunchTask below.
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/vscode"],
+      "outFiles": ["${workspaceFolder}/vscode/dist/**/*.js"],
+      "preLaunchTask": "npm: build:vscode"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "../app/App";
 import { ErrorBoundary } from "../app/ErrorBoundary";
 import { FakeWikiRepositoryClient } from "./FakeWikiRepositoryClient";
+import { SandboxWikiHost } from "./sandboxWikiHost";
 import { createFakeWikiSearchTransport } from "./fakeWikiSearch";
 import { SANDBOX_PAGES } from "./fixtures";
 
@@ -65,11 +66,6 @@ const hostContext = {
 
 createRoot(rootElement).render(
   <ErrorBoundary label="PowerWiki sandbox">
-    <App
-      hostContext={hostContext}
-      searchTransport={searchTransport}
-      status="ready"
-      wikiClient={wikiClient}
-    />
+    <App host={new SandboxWikiHost(hostContext, wikiClient, searchTransport)} status="ready" />
   </ErrorBoundary>
 );

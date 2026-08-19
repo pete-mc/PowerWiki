@@ -1,16 +1,10 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import * as SDK from "azure-devops-extension-sdk";
-import {
-  WorkItemTrackingServiceIds,
-  type IWorkItemFormNavigationService
-} from "azure-devops-extension-api/WorkItemTracking";
 import type { HeaderMenuAction } from "../HeaderMenuAction";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { useThemeMode } from "../themeMode";
 import { MarkdownPreview, type WikiSubPage } from "../../rendering/MarkdownPreview";
 import { buildAttachmentName, fileToBase64, isImageFile, type AttachmentUploadResult } from "../../wiki/attachmentUpload";
-import { fetchAttachmentDataUrl, fetchAttachmentObjectUrl } from "../../wiki/attachmentImage";
 import { DrawioEditorDialog, type DrawioEditorTarget } from "../../drawio/DrawioEditorDialog";
 import {
   countDiagramReferences,
@@ -18,27 +12,21 @@ import {
   newDiagramName,
   nextDiagramName,
 } from "../../drawio/drawioDiagram";
-import { AzureDevOpsIdentityClient } from "../../identity/AzureDevOpsIdentityClient";
-import { AzureDevOpsWorkItemClient } from "../../workItems/AzureDevOpsWorkItemClient";
-import { AzureDevOpsWikiRepositoryClient } from "../../wiki/AzureDevOpsWikiRepositoryClient";
-import type { WikiRepositoryClient } from "../../wiki/WikiRepositoryClient";
-import { resolveWithinTimeout } from "./hostServiceTimeout";
+import type { WikiHost, WikiHostNavigation } from "../../host/WikiHost";
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "../../wiki/WikiComment";
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
 import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
-import { searchWiki, type SearchTransport, type WikiSearchOutcome } from "../../wiki/wikiSearch";
-import { azureDevOpsWikiSearchTransport } from "../../wiki/wikiSearchTransport";
 import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
+import { joinRepositoryPath } from "../../wiki/repositoryItemPath";
 import { WikiAttachmentsDialog } from "./WikiAttachmentsDialog";
 import { WikiExportDialog } from "./WikiExportDialog";
 import { WikiHistoryDialog } from "./WikiHistoryDialog";
-import { WikiFollowClient } from "../../wiki/followClient";
 import { WikiLinkUpdateDialog, type InboundLinkUpdate } from "./WikiLinkUpdateDialog";
 import { toExportImage } from "../../export/imageMeta";
 import type { ExportImage } from "../../export/types";
-import { buildHubPageUrl, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
+import { splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 import { StatusMessage } from "./StatusMessage";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
 import { WikiRichTextEditor } from "./WikiRichTextEditor";
@@ -56,20 +44,15 @@ import { WikiSelector } from "./WikiSelector";
 const PREFETCH_DELAY_MS = 1500;
 
 interface WikiBrowserProps {
-  readonly contributionId?: string;
+  /**
+   * Everything host-specific, behind one interface (see `src/host/WikiHost.ts`).
+   * The Azure DevOps hub and the VS Code extension each supply one; nothing in
+   * this component knows which it is looking at.
+   */
+  readonly host: WikiHost;
   readonly onHeaderMenuActionsChange?: (actions: readonly HeaderMenuAction[]) => void;
   readonly onPageBylineChange?: (byline: WikiPageBylineProps | undefined) => void;
   readonly onPageTitleChange?: (title: string | undefined) => void;
-  readonly organizationIsHosted?: boolean;
-  readonly organizationName?: string;
-  readonly projectId?: string;
-  readonly projectName?: string;
-  /**
-   * How a wiki search request reaches the network. Defaults to the real
-   * token-authenticated transport; the sandbox injects an in-memory one so the
-   * search box works with no organization and no SDK.
-   */
-  readonly searchTransport?: SearchTransport;
   /**
    * The full-text query, owned by the search bar in the header (see App). Its
    * results render into the content area, so the query has to cross from the
@@ -77,15 +60,6 @@ interface WikiBrowserProps {
    */
   readonly searchQuery?: string;
   readonly onSearchQueryChange?: (query: string) => void;
-  readonly userId?: string;
-  /**
-   * Wiki data access. Defaults to the real Azure DevOps REST client for the
-   * current project; the local sandbox injects an in-memory fake so the UI can
-   * run with no organization and no sign-in. Only this client is injectable —
-   * follow, work-item, and identity access go through host services that are
-   * absent outside a real hub, so those features degrade rather than being faked.
-   */
-  readonly wikiClient?: WikiRepositoryClient;
 }
 
 // The page-tree rail is user-resizable so long page names stay readable. The
@@ -113,13 +87,6 @@ type LoadState = "failed" | "loading" | "ready";
 type SaveState = "failed" | "idle" | "saving";
 type EditMode = "code" | "richText" | "splitCode";
 
-interface IHostNavigationService {
-  getHash(): Promise<string>;
-  setHash(hash: string): Promise<void>;
-  onHashChanged(callback: (hash: string) => void): void;
-  setDocumentTitle(title: string): void;
-}
-
 interface NavigationTarget {
   readonly pagePath: string;
   readonly wikiId?: string;
@@ -128,33 +95,10 @@ interface NavigationTarget {
   readonly anchor?: string;
 }
 
-const HOST_NAVIGATION_SERVICE_ID = "ms.vss-features.host-navigation-service";
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 // Matches the Azure DevOps table-of-subpages placeholder in page content so we
 // only fetch child pages for pages that actually use it.
 const TOSP_PLACEHOLDER = /\[\[_?TOSP_?\]\]/i;
-
-// A real host answers in milliseconds; this only has to be short enough that a
-// stalled host degrades to hash-based navigation rather than hanging.
-const HOST_NAVIGATION_TIMEOUT_MS = 3000;
-
-/**
- * The host navigation service, or undefined when the host does not supply one.
- *
- * `SDK.getService()` only *rejects* on an explicit failure. If the host handshake
- * never completes — which is the normal case outside a real hub iframe, such as
- * the local sandbox — the promise simply never settles. This call is on the
- * critical path to loading the wiki (see the `navigationReady` gate below), so an
- * unbounded await shows a permanent "Loading wiki." with no error and no way out,
- * even though the caller already knows how to fall back to `window.location.hash`.
- * Time out so that fallback is actually reachable.
- */
-function getNavigationService(): Promise<IHostNavigationService | undefined> {
-  return resolveWithinTimeout(
-    SDK.getService<IHostNavigationService>(HOST_NAVIGATION_SERVICE_ID),
-    HOST_NAVIGATION_TIMEOUT_MS
-  );
-}
 
 function safeDecode(value: string): string {
   try {
@@ -245,7 +189,7 @@ function buildNavigationHash(wiki: WikiSummary | undefined, pagePath: string, wi
   return `/wikis/${encodeURIComponent(wiki.name)}${encodedPath}`;
 }
 
-function setNavigationHash(navService: IHostNavigationService | undefined, hash: string): void {
+function setNavigationHash(navService: WikiHostNavigation | undefined, hash: string): void {
   if (navService) {
     void navService.setHash(hash);
     return;
@@ -287,42 +231,6 @@ function resolveWikiImagePath(src: string, currentPath: string): string | undefi
   } catch {
     return undefined;
   }
-}
-
-function buildGitItemUrl(wiki: WikiSummary, projectName: string, wikiPath: string): string | undefined {
-  if (!wiki.repositoryId || !wiki.remoteUrl) {
-    return undefined;
-  }
-
-  const remoteUrl = new URL(wiki.remoteUrl);
-  const repositoryPath = joinRepositoryPath(wiki.mappedPath, wikiPath);
-
-  // On dev.azure.com the remoteUrl path is /{org}/{project}/_git/{repo}, so the
-  // Items API URL must be /{org}/{project}/_apis/... On legacy visualstudio.com
-  // the org is the subdomain and the path starts with /{project}/_git/{repo},
-  // so no extra prefix is needed.
-  const pathSegments = remoteUrl.pathname.split("/").filter(Boolean);
-  const orgPrefix = remoteUrl.hostname === "dev.azure.com" && pathSegments.length > 0
-    ? `/${pathSegments[0]}`
-    : "";
-
-  const url = new URL(
-    `${remoteUrl.origin}${orgPrefix}/${encodeURIComponent(projectName)}/_apis/git/repositories/${encodeURIComponent(wiki.repositoryId)}/Items`
-  );
-  url.searchParams.set("path", repositoryPath);
-  url.searchParams.set("download", "true");
-  return url.toString();
-}
-
-function joinRepositoryPath(mappedPath: string | undefined, wikiPath: string): string {
-  const normalizedMappedPath = !mappedPath || mappedPath === "/" ? "" : trimSlashes(mappedPath);
-  const normalizedWikiPath = trimSlashes(wikiPath);
-  const combined = [normalizedMappedPath, normalizedWikiPath].filter(Boolean).join("/");
-  return `/${combined}`;
-}
-
-function trimSlashes(value: string): string {
-  return value.replace(/^\/+|\/+$/g, "");
 }
 
 // Azure DevOps serves some wiki attachments (images pasted into the editor) as
@@ -373,20 +281,15 @@ function pagePathCandidates(rawPath: string): string[] {
 }
 
 export function WikiBrowser({
-  contributionId,
+  host,
   onHeaderMenuActionsChange,
   onPageBylineChange,
   onPageTitleChange,
-  organizationIsHosted,
-  organizationName,
-  projectId,
-  projectName,
   onSearchQueryChange,
-  searchQuery = "",
-  searchTransport,
-  userId,
-  wikiClient: injectedWikiClient
+  searchQuery = ""
 }: WikiBrowserProps) {
+  const { capabilities } = host;
+  const { projectId, userId } = host.context;
   const [activePage, setActivePage] = useState<WikiPage>();
   // Heading slug to scroll to once the active page renders (from an &anchor=
   // deep link or a heading permalink click). Cleared on ordinary navigation.
@@ -451,7 +354,7 @@ export function WikiBrowser({
 
   const hasUnsavedChangesRef = useRef(false);
   const savedNavigation = useRef<NavigationTarget | null>(null);
-  const navigationServiceRef = useRef<IHostNavigationService | undefined>(undefined);
+  const navigationServiceRef = useRef<WikiHostNavigation | undefined>(undefined);
   const contentRef = useRef<HTMLElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const splitShellRef = useRef<HTMLDivElement>(null);
@@ -466,34 +369,18 @@ export function WikiBrowser({
   // are echoes of our own setHash() calls, preventing navigation loops.
   const lastNavigatedPathRef = useRef<string | undefined>(undefined);
 
-  const wikiClient = useMemo(() => {
-    if (injectedWikiClient) {
-      return injectedWikiClient;
-    }
-    return projectName ? new AzureDevOpsWikiRepositoryClient(projectName) : undefined;
-  }, [injectedWikiClient, projectName]);
-  const followClient = useMemo(() => new WikiFollowClient(), []);
-  const workItemClient = useMemo(() => {
-    return projectName ? new AzureDevOpsWorkItemClient(projectName) : undefined;
-  }, [projectName]);
-  // Mentions resolve through a host service rather than a REST client, so this
-  // works in any project context.
-  const identityClient = useMemo(() => new AzureDevOpsIdentityClient(), []);
-  // Content search runs against the Azure DevOps Search service, which indexes
-  // the same wikis the built-in search covers — the alternative, downloading
-  // every page and searching in the browser, costs one request per page and does
-  // not scale. It needs the organization and project from the host context; with
-  // neither, the search box still matches page titles locally rather than
-  // failing.
-  const searchContent = useMemo(() => {
-    if (!organizationName || !projectName) {
-      return undefined;
-    }
-
-    const transport = searchTransport ?? azureDevOpsWikiSearchTransport;
-    return (searchText: string): Promise<WikiSearchOutcome> =>
-      searchWiki({ organizationName, projectName, searchText }, transport);
-  }, [organizationName, projectName, searchTransport]);
+  const wikiClient = host.wikiClient;
+  const dialogs = host.dialogs;
+  const followClient = host.follow;
+  const workItemClient = host.workItems;
+  const identityClient = host.identity;
+  // Undefined when the host cannot search at all (no organization context in the
+  // hub). The search box still matches page titles locally then, rather than
+  // failing outright.
+  const searchContent = host.searchContent;
+  // Attachment images are fetched through the host: the hub needs an access
+  // token for them, VS Code needs a webview URI for a file on disk.
+  const loadImageObjectUrl = useCallback((url: string) => host.loadImageObjectUrl(url), [host]);
   const activeWiki = useMemo(
     () => wikis.find((wiki) => wiki.id === activeWikiId),
     [activeWikiId, wikis]
@@ -587,9 +474,11 @@ export function WikiBrowser({
     [pageList]
   );
   const hasUnsavedChanges = Boolean(activePage && isEditing && draftContent !== activePage.content);
-  const confirmDiscardEdits = useCallback(() => {
-    return !hasUnsavedChangesRef.current || window.confirm("Discard unsaved page edits?");
-  }, []);
+  // Async because the confirmation belongs to the host: a VS Code webview
+  // cannot open a browser modal, so it asks VS Code to show one instead.
+  const confirmDiscardEdits = useCallback(async () => {
+    return !hasUnsavedChangesRef.current || (await dialogs.confirm("Discard unsaved page edits?"));
+  }, [dialogs]);
   const startEditing = useCallback(() => {
     if (!activePage) {
       return;
@@ -601,8 +490,8 @@ export function WikiBrowser({
     setSaveState("idle");
     setIsEditing(true);
   }, [activePage]);
-  const cancelEditing = useCallback(() => {
-    if (!confirmDiscardEdits()) {
+  const cancelEditing = useCallback(async () => {
+    if (!(await confirmDiscardEdits())) {
       return;
     }
 
@@ -779,10 +668,14 @@ export function WikiBrowser({
       return;
     }
 
+    if (!followClient) {
+      return;
+    }
+
     let cancelled = false;
     const target = { projectId, wikiId: activeWikiId, pageId: pageMeta.id, userId };
     followClient
-      .getFollowSubscription(target)
+      ?.getFollowSubscription(target)
       .then((subscriptionId) => {
         if (!cancelled) {
           setFollowSubscriptionId(subscriptionId ?? null);
@@ -797,7 +690,7 @@ export function WikiBrowser({
   }, [activeWikiId, followClient, pageMeta?.id, projectId, userId]);
 
   const toggleFollow = useCallback(async () => {
-    if (!projectId || !userId || !activeWikiId || !pageMeta?.id || followSubscriptionId === undefined) {
+    if (!followClient || !projectId || !userId || !activeWikiId || !pageMeta?.id || followSubscriptionId === undefined) {
       return;
     }
     setFollowBusy(true);
@@ -811,7 +704,7 @@ export function WikiBrowser({
         setFollowSubscriptionId(null);
       }
     } catch (followError: unknown) {
-      window.alert(`Could not update follow: ${formatError(followError)}`);
+      void dialogs.alert(`Could not update follow: ${formatError(followError)}`);
     } finally {
       setFollowBusy(false);
     }
@@ -946,7 +839,7 @@ export function WikiBrowser({
       return;
     }
 
-    onHeaderMenuActionsChange?.([
+    const actions: HeaderMenuAction[] = [
       {
         id: isEditing ? "cancel-edit" : "edit-page",
         label: isEditing ? "Cancel edit" : "Edit page",
@@ -965,12 +858,6 @@ export function WikiBrowser({
         onClick: () => setHistoryOpen(true),
       },
       {
-        id: "follow",
-        label: followSubscriptionId ? "Unfollow page" : "Follow page",
-        disabled: isEditing || followBusy || followSubscriptionId === undefined,
-        onClick: () => void toggleFollow(),
-      },
-      {
         id: "attachments",
         label: "Attachments…",
         disabled: isEditing,
@@ -982,12 +869,25 @@ export function WikiBrowser({
         disabled: isEditing,
         onClick: () => setExportOpen(true),
       },
-    ]);
+    ];
+
+    // Following is a notification subscription held by the service, so it only
+    // exists in the hub. Omit the entry rather than showing one that fails.
+    if (capabilities.follow) {
+      actions.splice(3, 0, {
+        id: "follow",
+        label: followSubscriptionId ? "Unfollow page" : "Follow page",
+        disabled: isEditing || followBusy || followSubscriptionId === undefined,
+        onClick: () => void toggleFollow(),
+      });
+    }
+
+    onHeaderMenuActionsChange?.(actions);
 
     return () => {
       onHeaderMenuActionsChange?.([]);
     };
-  }, [activePage, cancelEditing, followBusy, followSubscriptionId, isEditing, onHeaderMenuActionsChange, startEditing, toggleFollow]);
+  }, [activePage, cancelEditing, capabilities.follow, followBusy, followSubscriptionId, isEditing, onHeaderMenuActionsChange, startEditing, toggleFollow]);
 
   // Loads a page by path, trying hyphen/space variants, and (optionally) syncs
   // the URL hash. This is the single entry point for all navigation:
@@ -1054,7 +954,7 @@ export function WikiBrowser({
         await loadPageByPath(activePage.path, false);
       }
       if (failures.length > 0) {
-        window.alert(`Could not update links on: ${failures.join(", ")}`);
+        await dialogs.alert(`Could not update links on: ${failures.join(", ")}`);
       }
     } finally {
       setLinkUpdateBusy(false);
@@ -1069,13 +969,9 @@ export function WikiBrowser({
         return undefined;
       }
 
-      return buildHubPageUrl(
-        { organizationName, projectName, organizationIsHosted, contributionId },
-        buildNavigationHash(activeWiki, activePage.path, wikis),
-        slug
-      );
+      return host.buildPageUrl(buildNavigationHash(activeWiki, activePage.path, wikis), slug);
     },
-    [activePage, activeWiki, contributionId, organizationIsHosted, organizationName, projectName, wikis]
+    [activePage, activeWiki, host, wikis]
   );
 
   // Clicking a heading permalink scrolls to it and reflects the anchor in the
@@ -1109,7 +1005,8 @@ export function WikiBrowser({
       return;
     }
 
-    if (!confirmDiscardEdits()) {
+    void (async () => {
+    if (!(await confirmDiscardEdits())) {
       return;
     }
 
@@ -1131,11 +1028,12 @@ export function WikiBrowser({
     }
 
     void loadPageByPath(parsed.pagePath, false, parsed.anchor);
+    })();
   };
 
   useEffect(() => {
     async function initNavigation() {
-      const navService = await getNavigationService();
+      const navService = await host.getNavigation();
       navigationServiceRef.current = navService;
       const fallbackHash = window.location.hash;
       if (navService) {
@@ -1150,7 +1048,7 @@ export function WikiBrowser({
       setNavigationReady(true);
     }
     void initNavigation();
-  }, []);
+  }, [host]);
 
   // Reflect the active page's name in the host browser tab. The extension runs
   // in a cross-origin iframe, so setting document.title here has no effect on
@@ -1325,15 +1223,15 @@ export function WikiBrowser({
     onPageBylineChange?.({
       change: pageChange,
       changeLoading: pageChangeLoading,
-      commentCount: commentsLoading ? undefined : comments.length,
-      commentsOpen,
-      onToggleComments: () => setCommentsOpen((open) => !open),
+      commentCount: capabilities.comments && !commentsLoading ? comments.length : undefined,
+      commentsOpen: capabilities.comments ? commentsOpen : undefined,
+      onToggleComments: capabilities.comments ? () => setCommentsOpen((open) => !open) : undefined,
     });
 
     return () => {
       onPageBylineChange?.(undefined);
     };
-  }, [activePage, comments.length, commentsLoading, commentsOpen, isEditing, onPageBylineChange, pageChange, pageChangeLoading]);
+  }, [activePage, capabilities.comments, comments.length, commentsLoading, commentsOpen, isEditing, onPageBylineChange, pageChange, pageChangeLoading]);
 
   // Loads the direct children of the active page so a [[_TOSP_]] placeholder can
   // be filled in. Scoped to pages that actually use the placeholder to avoid an
@@ -1423,7 +1321,7 @@ export function WikiBrowser({
         setPageChangeLoading(false);
       }
 
-      if (!meta?.id) {
+      if (!meta?.id || !capabilities.comments) {
         setCommentsLoading(false);
         return;
       }
@@ -1446,7 +1344,7 @@ export function WikiBrowser({
 
     void loadPageDetails();
     return () => { cancelled = true; };
-  }, [activePage, activeWikiId, activeWiki?.repositoryId, activeWiki?.version, wikiClient]);
+  }, [activePage, activeWikiId, activeWiki?.repositoryId, activeWiki?.version, capabilities.comments, wikiClient]);
 
   const handleNodeExpand = useCallback(
     async (path: string): Promise<void> => {
@@ -1472,7 +1370,7 @@ export function WikiBrowser({
 
   const handlePageSelected = useCallback(
     async (path: string) => {
-      if (!confirmDiscardEdits()) {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
@@ -1486,8 +1384,8 @@ export function WikiBrowser({
   // open the page is the route a deep link already takes, so results behave the
   // same way as a pasted URL.
   const handleSearchResultSelected = useCallback(
-    (path: string, wikiName?: string) => {
-      if (!confirmDiscardEdits()) {
+    async (path: string, wikiName?: string) => {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
@@ -1551,11 +1449,11 @@ export function WikiBrowser({
 
   const handleCreatePage = useCallback(
     async (parentPath: string) => {
-      if (!wikiClient || !activeWikiId || !confirmDiscardEdits()) {
+      if (!wikiClient || !activeWikiId || !(await confirmDiscardEdits())) {
         return;
       }
 
-      const title = window.prompt("New page title")?.trim();
+      const title = (await dialogs.prompt("New page title"))?.trim();
       if (!title) {
         return;
       }
@@ -1567,10 +1465,10 @@ export function WikiBrowser({
         pendingEditPathRef.current = newPath;
         await loadPageByPath(newPath, true);
       } catch (createError: unknown) {
-        window.alert(`Could not create page: ${formatError(createError)}`);
+        void dialogs.alert(`Could not create page: ${formatError(createError)}`);
       }
     },
-    [activeWikiId, confirmDiscardEdits, loadPageByPath, reloadChildrenInto, wikiClient]
+    [activeWikiId, confirmDiscardEdits, dialogs, loadPageByPath, reloadChildrenInto, wikiClient]
   );
 
   const handleEditPage = useCallback(
@@ -1580,7 +1478,7 @@ export function WikiBrowser({
         return;
       }
 
-      if (!confirmDiscardEdits()) {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
@@ -1596,7 +1494,7 @@ export function WikiBrowser({
         return;
       }
 
-      if (!window.confirm(`Delete "${pageTitle(path)}" and any of its sub-pages?`)) {
+      if (!(await dialogs.confirm(`Delete "${pageTitle(path)}" and any of its sub-pages?`))) {
         return;
       }
 
@@ -1615,7 +1513,7 @@ export function WikiBrowser({
           }
         }
       } catch (deleteError: unknown) {
-        window.alert(`Could not delete page: ${formatError(deleteError)}`);
+        void dialogs.alert(`Could not delete page: ${formatError(deleteError)}`);
       }
     },
     [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, wikiClient]
@@ -1650,15 +1548,15 @@ export function WikiBrowser({
         // Offer to fix inbound links now pointing at the old path (#21 parity).
         void scanInboundLinks(sourcePath, newPath);
       } catch (moveError: unknown) {
-        window.alert(`Could not move page: ${formatError(moveError)}`);
+        void dialogs.alert(`Could not move page: ${formatError(moveError)}`);
       }
     },
     [activePage, activeWikiId, loadPageByPath, reloadChildrenInto, scanInboundLinks, wikiClient]
   );
 
   const handleOpenMoveDialog = useCallback(
-    (path: string) => {
-      if (!confirmDiscardEdits()) {
+    async (path: string) => {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
       setMoveDialogPath(path);
@@ -1671,18 +1569,18 @@ export function WikiBrowser({
   // sync just like a drag move does.
   const handleRenamePage = useCallback(
     async (path: string) => {
-      if (!confirmDiscardEdits()) {
+      if (!(await confirmDiscardEdits())) {
         return;
       }
 
       const currentName = path.split("/").filter(Boolean).at(-1) ?? path;
-      const nextName = window.prompt("Rename page", currentName)?.trim();
+      const nextName = (await dialogs.prompt("Rename page", currentName))?.trim();
       if (!nextName || nextName === currentName) {
         return;
       }
 
       if (nextName.includes("/")) {
-        window.alert('A page name cannot contain "/".');
+        await dialogs.alert('A page name cannot contain "/".');
         return;
       }
 
@@ -1695,7 +1593,7 @@ export function WikiBrowser({
         pageList.filter((page) => parentOfPath(page.path) === parent).length;
       await performMove(path, newPath, order);
     },
-    [confirmDiscardEdits, pageList, performMove]
+    [confirmDiscardEdits, dialogs, pageList, performMove]
   );
   // The header menu is built (via effect) before this handler is defined, so it
   // dispatches through a ref that always points at the current handler.
@@ -1732,13 +1630,9 @@ export function WikiBrowser({
       onNodeExpand: (path) => void handleNodeExpand(path),
       onPageSelected: (path) => void handlePageSelected(path),
       onRenamePage: (path) => void handleRenamePage(path),
-      getPageUrl: (path) =>
-        buildHubPageUrl(
-          { organizationName, projectName, organizationIsHosted, contributionId },
-          buildNavigationHash(activeWiki, path, wikis)
-        ),
+      getPageUrl: (path) => host.buildPageUrl(buildNavigationHash(activeWiki, path, wikis)),
     }),
-    [activeWiki, contributionId, handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, handleRenamePage, organizationIsHosted, organizationName, performMove, projectName, wikis]
+    [activeWiki, handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, handleRenamePage, host, performMove, wikis]
   );
 
   async function handleSavePage() {
@@ -1801,25 +1695,27 @@ export function WikiBrowser({
   );
   const resolveImageSrc = useCallback(
     (src: string, currentPath: string): string | undefined => {
-      if (!activeWiki || !projectName) {
+      if (!activeWiki) {
         return undefined;
       }
 
       const path = resolveWikiImagePath(src, currentPath);
       if (path) {
-        return buildGitItemUrl(activeWiki, projectName, path);
+        return host.buildAttachmentUrl(activeWiki, path);
       }
 
+      // Pages migrated from the built-in wiki carry absolute Azure DevOps
+      // attachment URLs. They still name a file in this repository, so map them
+      // back to a repository path and let the host serve it — that is what makes
+      // those images render off a local clone with no service to call.
       if (isAzureDevOpsUrl(src)) {
         const azureDevOpsPath = resolveAzureDevOpsImagePath(src);
-        return azureDevOpsPath
-          ? buildGitItemUrl(activeWiki, projectName, azureDevOpsPath)
-          : undefined;
+        return azureDevOpsPath ? host.buildAttachmentUrl(activeWiki, azureDevOpsPath) : undefined;
       }
 
       return undefined;
     },
-    [activeWiki, projectName]
+    [activeWiki, host]
   );
   /**
    * Repoints every reference to a diagram at its new revision.
@@ -1921,7 +1817,7 @@ export function WikiBrowser({
 
       setDiagramError(undefined);
       setDiagramStatus("Opening diagram…");
-      fetchAttachmentDataUrl(resolved)
+      host.loadImageDataUrl(resolved)
         .then((dataUrl) => {
           setDiagramStatus(undefined);
           // Opened only once the bytes are in hand: the editor loads its content
@@ -2019,49 +1915,38 @@ export function WikiBrowser({
     return () => window.clearTimeout(timer);
   }, [diagramStatus]);
 
-  const loadQueryTable = useCallback(
+  const loadQueryTableImpl = useCallback(
     async (queryId: string) => {
       if (!workItemClient) {
-        throw new Error("PowerWiki needs an Azure DevOps project context to load queries.");
+        throw new Error("Azure Boards query rendering is unavailable in this host.");
       }
 
-      const result = await workItemClient.getQueryTable(queryId);
-      return {
-        ...result,
-        nativeUrl: buildAzureDevOpsQueryUrl(organizationName, projectName, organizationIsHosted, queryId)
-      };
+      return workItemClient.getQueryTable(queryId);
     },
-    [organizationIsHosted, organizationName, projectName, workItemClient]
+    [workItemClient]
   );
-  const loadWorkItemBadge = useCallback(
+  const loadWorkItemBadgeImpl = useCallback(
     async (id: number) => {
       if (!workItemClient) {
-        throw new Error("PowerWiki needs an Azure DevOps project context to load work items.");
+        throw new Error("Work item details are unavailable in this host.");
       }
 
       return workItemClient.getWorkItemBadgeDetails(id);
     },
     [workItemClient]
   );
-  const loadMention = useCallback(
-    (id: string) => identityClient.getMentionIdentity(id),
+  // Undefined rather than a stub when the host has no identity service: the
+  // renderer's own fallback then leaves the mention inert instead of showing a
+  // chip that never resolves. Same for work items below.
+  const loadQueryTable = workItemClient ? loadQueryTableImpl : undefined;
+  const loadWorkItemBadge = workItemClient ? loadWorkItemBadgeImpl : undefined;
+  const loadMention = useMemo(
+    () => (identityClient ? (id: string) => identityClient.getMentionIdentity(id) : undefined),
     [identityClient]
   );
-  const openWorkItem = useCallback(
-    async (id: number) => {
-      try {
-        const navigationService = await SDK.getService<IWorkItemFormNavigationService>(
-          WorkItemTrackingServiceIds.WorkItemFormNavigationService
-        );
-        await navigationService.openWorkItem(id);
-      } catch {
-        const workItemUrl = buildAzureDevOpsWorkItemUrl(organizationName, projectName, organizationIsHosted, id);
-        if (workItemUrl) {
-          window.open(workItemUrl, "_blank", "noopener,noreferrer");
-        }
-      }
-    },
-    [organizationIsHosted, organizationName, projectName]
+  const openWorkItem = useMemo(
+    () => (workItemClient ? (id: number) => void workItemClient.openWorkItem(id) : undefined),
+    [workItemClient]
   );
 
   if (loadState === "failed") {
@@ -2075,6 +1960,11 @@ export function WikiBrowser({
 
   return (
     <>
+      {/* The rail is the whole page-navigation surface, so a host that already
+          has one of its own turns it off wholesale rather than emptying it. In
+          VS Code that host is the Explorer: the pages are files, so a second
+          tree beside it would be a duplicate that could disagree. */}
+      {capabilities.pageTree ? (
       <aside
         aria-label="Wiki pages"
         className={navCollapsed ? "powerwiki-nav collapsed" : "powerwiki-nav"}
@@ -2092,19 +1982,23 @@ export function WikiBrowser({
           </button>
         ) : (
           <>
-            <WikiSelector
+            {capabilities.wikiSelector ? (
+              <WikiSelector
               activeWikiId={activeWikiId}
               disabled={loadState === "loading"}
               onWikiSelected={(wikiId) => {
-                if (!confirmDiscardEdits()) {
-                  return;
-                }
+                void (async () => {
+                  if (!(await confirmDiscardEdits())) {
+                    return;
+                  }
 
-                savedNavigation.current = null;
-                setActiveWikiId(wikiId);
+                  savedNavigation.current = null;
+                  setActiveWikiId(wikiId);
+                })();
               }}
               wikis={wikis}
-            />
+              />
+            ) : null}
             <div className="powerwiki-nav-search">
               <input
                 aria-label="Filter pages by name"
@@ -2179,12 +2073,17 @@ export function WikiBrowser({
           </>
         )}
       </aside>
+      ) : null}
 
       {/* While editing the content area stops scrolling and becomes a flex
           column, so the editor (and the split preview beside it) fill the whole
           height the hub gives us instead of a fixed viewport fraction. */}
       <article
         className={activePage && isEditing ? "powerwiki-content editing" : "powerwiki-content"}
+        // Which page is on screen, readable from the DOM. The VS Code host
+        // reports it back to the extension so an editor tab and its webview
+        // cannot disagree about what they are showing.
+        data-powerwiki-page-path={activePage?.path}
         ref={contentRef}
       >
         <ErrorBoundary key={activePage?.path ?? "no-page"} label="page">
@@ -2241,9 +2140,10 @@ export function WikiBrowser({
               <WikiRichTextEditor
                 currentPath={activePage.path}
                 disabled={saveState === "saving"}
+                onPrompt={dialogs.prompt}
                 onChange={setDraftContent}
                 onResolveImageSrc={resolveImageSrc}
-                onLoadImage={fetchAttachmentObjectUrl}
+                onLoadImage={loadImageObjectUrl}
                 onUploadAttachment={uploadAttachment}
                 value={draftContent}
               />
@@ -2290,13 +2190,15 @@ export function WikiBrowser({
                     onLoadWorkItemBadge={loadWorkItemBadge}
                     onLoadMention={loadMention}
                     onNavigate={(path) => {
-                      if (confirmDiscardEdits()) {
-                        void loadPageByPath(path, true);
-                      }
+                      void confirmDiscardEdits().then((confirmed) => {
+                        if (confirmed) {
+                          void loadPageByPath(path, true);
+                        }
+                      });
                     }}
-                    onOpenWorkItem={(id) => void openWorkItem(id)}
+                    onOpenWorkItem={openWorkItem}
                     onResolveImageSrc={resolveImageSrc}
-                    onLoadImage={fetchAttachmentObjectUrl}
+                    onLoadImage={loadImageObjectUrl}
                     onEditDiagram={handleEditDiagram}
                   />
                 </div>
@@ -2331,13 +2233,15 @@ export function WikiBrowser({
               onLoadWorkItemBadge={loadWorkItemBadge}
               onLoadMention={loadMention}
               onNavigate={(path) => {
-                if (confirmDiscardEdits()) {
-                  void loadPageByPath(path, true);
-                }
+                void confirmDiscardEdits().then((confirmed) => {
+                  if (confirmed) {
+                    void loadPageByPath(path, true);
+                  }
+                });
               }}
-              onOpenWorkItem={(id) => void openWorkItem(id)}
+              onOpenWorkItem={openWorkItem}
               onResolveImageSrc={resolveImageSrc}
-              onLoadImage={fetchAttachmentObjectUrl}
+              onLoadImage={loadImageObjectUrl}
               onEditDiagram={handleEditDiagram}
             />
           </>
@@ -2350,7 +2254,7 @@ export function WikiBrowser({
         </ErrorBoundary>
       </article>
 
-      {activePage && !isEditing && commentsOpen ? (
+      {capabilities.comments && activePage && !isEditing && commentsOpen ? (
         <WikiCommentsPanel
           comments={comments}
           error={commentsError}
@@ -2377,7 +2281,7 @@ export function WikiBrowser({
           loadAttachments={listWikiAttachments}
           onClose={() => setAttachmentsOpen(false)}
           resolveImageSrc={resolveImageSrc}
-          onLoadImage={fetchAttachmentObjectUrl}
+          onLoadImage={loadImageObjectUrl}
         />
       ) : null}
 
@@ -2421,6 +2325,8 @@ export function WikiBrowser({
 
       {exportOpen && activePage ? (
         <WikiExportDialog
+          allowPdf={capabilities.printToPdf}
+          onSaveFile={(fileName, blob) => host.saveExportedFile(fileName, blob)}
           currentPage={{ path: activePage.path, title: pageTitleFromPath(activePage.path) }}
           loadImage={loadExportImage}
           loadPageContent={loadPageContent}
@@ -2438,32 +2344,6 @@ export function WikiBrowser({
       ) : null}
     </>
   );
-}
-
-function buildAzureDevOpsQueryUrl(
-  organizationName: string | undefined,
-  projectName: string | undefined,
-  isHosted: boolean | undefined,
-  queryId: string
-): string | undefined {
-  if (!organizationName || !projectName || !isHosted) {
-    return undefined;
-  }
-
-  return `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}/_queries/query/${encodeURIComponent(queryId)}/`;
-}
-
-function buildAzureDevOpsWorkItemUrl(
-  organizationName: string | undefined,
-  projectName: string | undefined,
-  isHosted: boolean | undefined,
-  id: number
-): string | undefined {
-  if (!organizationName || !projectName || !isHosted) {
-    return undefined;
-  }
-
-  return `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}/_workitems/edit/${id}/`;
 }
 
 function parentOfPath(path: string): string {

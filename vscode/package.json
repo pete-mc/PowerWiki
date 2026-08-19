@@ -1,0 +1,141 @@
+{
+  "name": "powerwiki-vscode",
+  "displayName": "PowerWiki",
+  "description": "Browse, search and edit a cloned Azure DevOps wiki in VS Code, with PowerWiki's Markdown, Mermaid and draw.io rendering.",
+  "version": "0.1.1",
+  "publisher": "dataversepowertools",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pete-mc/PowerWiki.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "wiki",
+    "azure devops",
+    "markdown",
+    "mermaid"
+  ],
+  "icon": "icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "powerwiki.page",
+        "displayName": "PowerWiki",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "powerwiki.openPage",
+        "title": "Open in PowerWiki",
+        "category": "PowerWiki"
+      },
+      {
+        "command": "powerwiki.openAsText",
+        "title": "Open as Markdown",
+        "category": "PowerWiki"
+      },
+      {
+        "command": "powerwiki.openHome",
+        "title": "Open Wiki Home",
+        "category": "PowerWiki"
+      },
+      {
+        "command": "powerwiki.refreshWikis",
+        "title": "Rescan Workspace for Wikis",
+        "category": "PowerWiki"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "powerwiki.openPage",
+          "when": "powerwiki.hasWiki && resourceExtname == .md"
+        },
+        {
+          "command": "powerwiki.openAsText",
+          "when": "powerwiki.hasWiki"
+        },
+        {
+          "command": "powerwiki.openHome",
+          "when": "powerwiki.hasWiki"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "powerwiki.openPage",
+          "when": "powerwiki.hasWiki && resourceExtname == .md",
+          "group": "navigation@10"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "powerwiki.openAsText",
+          "when": "activeCustomEditorId == powerwiki.page",
+          "group": "navigation@10"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PowerWiki",
+      "properties": {
+        "powerwiki.wikiRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Folders to treat as wiki roots, absolute or relative to the first workspace folder. When set, these replace automatic discovery \u2014 use it when a wiki is nested deeper than `#powerwiki.discoveryDepth#` or does not look like one."
+        },
+        "powerwiki.discoveryDepth": {
+          "type": "number",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 6,
+          "description": "How many folder levels below each workspace folder to search for a wiki. Higher values cost a longer scan when the window opens."
+        },
+        "powerwiki.includeMarkdownFolders": {
+          "type": "boolean",
+          "default": false,
+          "description": "Treat any folder containing Markdown as a wiki, not just those with a .order file or an .attachments folder. Off by default, because almost every repository has a docs folder."
+        },
+        "powerwiki.openWikiPagesInPowerWiki": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open Markdown files that belong to a detected wiki in PowerWiki instead of the text editor. Markdown elsewhere in the workspace is unaffected."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "npm run build --prefix .. && vsce package --no-dependencies --out powerwiki-vscode.vsix"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0"
+  },
+  "homepage": "https://github.com/pete-mc/PowerWiki/blob/main/vscode/README.md",
+  "bugs": {
+    "url": "https://github.com/pete-mc/PowerWiki/issues"
+  },
+  "pricing": "Free",
+  "galleryBanner": {
+    "color": "#1f1f1f",
+    "theme": "dark"
+  }
+}

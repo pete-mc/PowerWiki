@@ -5,8 +5,13 @@ export interface WikiPageBylineProps {
   readonly change?: WikiPageChange;
   readonly changeLoading?: boolean;
   readonly commentCount?: number;
-  readonly commentsOpen: boolean;
-  readonly onToggleComments: () => void;
+  /**
+   * Comment state, omitted entirely by hosts that have no comment service (a
+   * local clone has none — comments live in Azure DevOps, not in the files). The
+   * toggle is then absent rather than present and broken.
+   */
+  readonly commentsOpen?: boolean;
+  readonly onToggleComments?: () => void;
 }
 
 /**
@@ -35,17 +40,19 @@ export function WikiPageByline({
           <span>{when}</span>
         </span>
       </span>
-      <button
-        aria-label={commentsOpen ? "Hide comments" : "Show comments"}
-        aria-pressed={commentsOpen}
-        className={commentsOpen ? "wiki-byline-comments active" : "wiki-byline-comments"}
-        onClick={onToggleComments}
-        type="button"
-      >
-        <CommentIcon />
-        <span>Comments</span>
-        <span className="wiki-byline-comment-count">{commentCount ?? 0}</span>
-      </button>
+      {onToggleComments ? (
+        <button
+          aria-label={commentsOpen ? "Hide comments" : "Show comments"}
+          aria-pressed={commentsOpen}
+          className={commentsOpen ? "wiki-byline-comments active" : "wiki-byline-comments"}
+          onClick={onToggleComments}
+          type="button"
+        >
+          <CommentIcon />
+          <span>Comments</span>
+          <span className="wiki-byline-comment-count">{commentCount ?? 0}</span>
+        </button>
+      ) : null}
     </div>
   );
 }

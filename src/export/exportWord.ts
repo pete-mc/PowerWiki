@@ -32,12 +32,19 @@ const ORDERED_LEVELS = [0, 1, 2, 3, 4, 5].map((level) => ({
   style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
 }));
 
-/** Builds a .docx from the given pages and downloads it as fileName. */
+/**
+ * Builds a .docx from the given pages and hands it to `save`.
+ *
+ * Delivery is the caller's (host's) business: a browser starts a download, and
+ * a VS Code webview cannot — it has to send the bytes to the extension host,
+ * which asks where to put them.
+ */
 export async function exportPagesToWord(
   pages: readonly ExportPage[],
   renderOptions: PageRenderOptions,
   loadImage: LoadExportImage,
-  fileName: string
+  fileName: string,
+  save: (fileName: string, blob: Blob) => Promise<void>
 ): Promise<void> {
   const children: DocxBlock[] = [];
   const multi = pages.length > 1;
@@ -74,16 +81,5 @@ export async function exportPagesToWord(
   });
 
   const blob = await Packer.toBlob(document);
-  downloadBlob(blob, fileName);
-}
-
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  await save(fileName, blob);
 }
