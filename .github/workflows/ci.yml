@@ -41,11 +41,23 @@ jobs:
       # the hub mounts, behind the same WikiHost interface, with an in-memory
       # wiki. Covers the shell, tree, rendering, editors, search and export —
       # everything above the host boundary, which is most of what changes.
+      #
+      # `playwright-core install` rather than `playwright install --with-deps`:
+      # this repository depends on playwright-core, so `npx playwright` fetched a
+      # *different* package, and `--with-deps` then shelled out to apt — where it
+      # blocked for 59 minutes until the run was cancelled. The runner image
+      # already carries Chromium's system libraries, and installing through the
+      # pinned package gets the browser build that version expects.
+      #
+      # timeout-minutes because a hung step is worse than a failed one: the suite
+      # takes about 90 seconds, so anything approaching this is broken.
       - name: End-to-end UI tests (Azure DevOps UI)
-        run: npx playwright install --with-deps chromium && npm run test:e2e
+        timeout-minutes: 15
+        run: npx playwright-core install chromium && npm run test:e2e
 
       # The VS Code extension driven in a real VS Code window.
       - name: End-to-end UI tests (VS Code)
+        timeout-minutes: 15
         run: xvfb-run -a npm run test:vscode
 
       # Package the real artefact on every run. Previously the build output was
