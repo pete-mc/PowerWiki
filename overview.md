@@ -62,7 +62,7 @@ Wiki pages are linked to work items using Azure DevOps' own **Wiki Page** links 
 - **Link a page with Add** — search the wiki, pick a page, done. The link is added to the open work item and kept when you save it, exactly like any other change.
 - **No new permissions.** Linking goes through the work item form itself, so PowerWiki still asks only for read access to work items and your organisation does not have to re-approve anything.
 
-![The Power Wiki tab on an Azure DevOps work item, listing the item's linked wiki pages beside the rendered page](https://raw.githubusercontent.com/pete-mc/PowerWiki/v1.4.0/media/screenshots/powerwiki-workitem.png)
+![The Power Wiki tab on an Azure DevOps work item, listing the item's linked wiki pages beside the rendered page](https://raw.githubusercontent.com/pete-mc/PowerWiki/main/media/screenshots/powerwiki-workitem.png)
 
 ## History and stewardship
 

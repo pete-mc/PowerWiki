@@ -1232,9 +1232,20 @@ export function WikiBrowser({
         const savedAnchor = savedInThisWiki ? saved?.anchor : undefined;
         savedNavigation.current = null;
 
+        // On the work item form the landing page is the work item's first linked
+        // page, not the wiki's home page: the tab exists to show this item's
+        // documentation. It has to be resolved here rather than corrected
+        // afterwards — this effect sets the active page, so anything that
+        // navigated in parallel would simply be overwritten by it.
+        let linkedTarget: string | undefined;
+        if (capabilities.linkedPages && host.linkedPages) {
+          const links = await host.linkedPages.list().catch(() => []);
+          linkedTarget = links[0]?.path;
+        }
+
         // Resolve the initial/deep-linked page, trying hyphen/space variants,
         // then falling back to the wiki home page if the saved path is gone.
-        const targetPath = savedPath ?? chooseInitialPage(rootPages);
+        const targetPath = linkedTarget ?? savedPath ?? chooseInitialPage(rootPages);
         let initialPage: WikiPage | undefined;
 
         if (targetPath) {
@@ -1724,6 +1735,7 @@ export function WikiBrowser({
       void refreshLinkedPages();
     }
   }, [capabilities.linkedPages, refreshLinkedPages]);
+
 
   const handleLinkPage = useCallback(
     async (path: string) => {
