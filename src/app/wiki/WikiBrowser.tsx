@@ -1825,7 +1825,12 @@ export function WikiBrowser({
         const page = await wikiClient.getPage(activeWikiId, path);
         const rewritten = rewriteWikiLinks(page.content, oldPath, newPath);
         if (rewritten.count > 0) {
-          await wikiClient.savePage(activeWikiId, { ...page, content: rewritten.content });
+          const saved = await wikiClient.savePage(activeWikiId, { ...page, content: rewritten.content });
+          // The page on screen must be repointed in memory too, not just on the
+          // server. Each save writes a *new* attachment (the attachments API
+          // cannot overwrite), so a stale copy keeps rendering the old file and
+          // the diagram appears not to have changed at all.
+          setActivePage((current) => (current?.path === path ? saved : current));
           updated.push(path);
         }
       };
@@ -1961,17 +1966,31 @@ export function WikiBrowser({
         );
 
         if (oldPath) {
-          const updated = await replaceDiagramReferences(oldPath, attachment.path);
-          setDiagramStatus(
-            updated.length > 1
-              ? `Diagram updated on ${updated.length} pages.`
-              : "Diagram updated."
-          );
-        } else {
-          pendingDiagramRef.current?.({ name: attachment.name, path: attachment.path, isImage: true });
-          pendingDiagramRef.current = undefined;
-          setDiagramStatus("Diagram inserted.");
+          // The diagram is safely stored the moment the attachment is written.
+          // Repointing every page that references it is a wiki-wide scan that
+          // can run for a long time on a large wiki, so release the editor now
+          // and report the rest through the toast. Holding the modal open for
+          // the scan is what made a completed save look like a hang.
+          setDiagramTarget(undefined);
+          setDiagramBusy(false);
+          setDiagramStatus("Updating pages that use this diagram…");
+          try {
+            const updated = await replaceDiagramReferences(oldPath, attachment.path);
+            setDiagramStatus(
+              updated.length > 1
+                ? `Diagram updated on ${updated.length} pages.`
+                : "Diagram updated."
+            );
+          } catch (rewriteFailure: unknown) {
+            // The dialog has gone, so this can no longer be shown as its error.
+            setDiagramStatus(`Diagram saved, but updating pages failed: ${formatError(rewriteFailure)}`);
+          }
+          return;
         }
+
+        pendingDiagramRef.current?.({ name: attachment.name, path: attachment.path, isImage: true });
+        pendingDiagramRef.current = undefined;
+        setDiagramStatus("Diagram inserted.");
         setDiagramTarget(undefined);
       } catch (saveFailure: unknown) {
         setDiagramError(formatError(saveFailure));

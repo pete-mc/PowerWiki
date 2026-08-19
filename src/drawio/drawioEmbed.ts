@@ -142,6 +142,11 @@ export function startDrawioSession(options: DrawioSessionOptions): DrawioSession
       case "export":
         window.clearTimeout(exportTimer);
         if (payload.data) {
+          // Tell the editor the save landed. Without this it keeps its own
+          // "Saving…" spinner up and still considers the diagram modified —
+          // which previously only cleared when the dialog tore the iframe down,
+          // so any delay after the export looked like a hang.
+          post({ action: "status", message: "Saved", modified: false });
           options.onSave(payload.data);
         } else {
           options.onError("The draw.io editor returned an empty diagram.");
