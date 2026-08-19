@@ -46,8 +46,8 @@ jobs:
       - name: Verify the manifest matches the tag
         run: |
           TAG="${GITHUB_REF_NAME#vscode-v}"
-          echo "tag version: $TAG"
-          node tools/release/assert-vscode-manifest.mjs "$TAG"
+          echo "tag version: ${TAG%-pre}"
+          node tools/release/assert-vscode-manifest.mjs "${TAG%-pre}"
 
       - name: Typecheck and unit tests
         run: npm test
@@ -63,49 +63,63 @@ jobs:
 
       - name: Package
         run: |
+          VERSION="${GITHUB_REF_NAME#vscode-v}"
           cd vscode
           npx @vscode/vsce package --no-dependencies \
-            --out "../powerwiki-vscode-${GITHUB_REF_NAME#vscode-v}.vsix"
+            --out "../powerwiki-vscode-${VERSION%-pre}.vsix"
 
-      # 0.x is pre-release by semver convention, and this extension is a
-      # prototype. Marketplace users then have to opt in via "Switch to
-      # Pre-Release Version" rather than being upgraded into it by default.
+      # The channel is stated in the tag, not inferred from the version, so what
+      # a tag does is readable from the tag:
+      #
+      #   vscode-v0.2.0-pre  -> pre-release, opt-in
+      #   vscode-v0.2.0      -> the normal channel
+      #
+      # Deliberately not "0.x means pre-release": the pre-release channel is only
+      # useful once a stable version exists to keep people on. For an extension
+      # with no releases yet it would just mean nobody can install it the obvious
+      # way. The version in vscode/package.json is plain semver either way —
+      # the Marketplace will not take a prerelease identifier in it.
       - name: Decide the release channel
         id: channel
         run: |
           VERSION="${GITHUB_REF_NAME#vscode-v}"
-          if [ "${VERSION%%.*}" = "0" ]; then
+          if [ "$VERSION" != "${VERSION%-pre}" ]; then
             echo "flag=--pre-release" >> "$GITHUB_OUTPUT"
             echo "label=pre-release" >> "$GITHUB_OUTPUT"
           else
             echo "flag=" >> "$GITHUB_OUTPUT"
             echo "label=stable" >> "$GITHUB_OUTPUT"
           fi
+          echo "version=${VERSION%-pre}" >> "$GITHUB_OUTPUT"
 
       # Publish the exact artefact attached to the Release, so the downloadable
       # build and the Marketplace build are byte-identical.
+      # Reuses ADO_MARKETPLACE_PAT: it is a Marketplace publisher token for this
+      # publisher and already publishes a VS Code extension, so there is no
+      # second secret to create. VSCE_PAT overrides it if a dedicated token is
+      # ever preferred.
       - name: Publish to the Visual Studio Marketplace
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT || secrets.ADO_MARKETPLACE_PAT }}
         run: |
           if [ -z "$VSCE_PAT" ]; then
-            echo "::error::VSCE_PAT is not set. It needs Marketplace -> Manage scope and"
-            echo "::error::'All accessible organizations'. Add it under Settings -> Secrets"
-            echo "::error::and variables -> Actions. The ADO_MARKETPLACE_PAT used by"
-            echo "::error::release.yml has only Publish scope and will not work here."
+            echo "::error::No publisher token. Set ADO_MARKETPLACE_PAT (or VSCE_PAT) under"
+            echo "::error::Settings -> Secrets and variables -> Actions. It must be scoped to"
+            echo "::error::'All accessible organizations' — Marketplace APIs run outside any"
+            echo "::error::organization context, and an org-scoped token 401s."
             exit 1
           fi
           echo "Publishing as ${{ steps.channel.outputs.label }}"
           npx @vscode/vsce publish ${{ steps.channel.outputs.flag }} \
             --no-dependencies \
-            --packagePath "powerwiki-vscode-${GITHUB_REF_NAME#vscode-v}.vsix"
+            --packagePath "powerwiki-vscode-${{ steps.channel.outputs.version }}.vsix"
 
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "powerwiki-vscode-${GITHUB_REF_NAME#vscode-v}.vsix" \
-            --title "VS Code ${GITHUB_REF_NAME#vscode-}" \
+            "powerwiki-vscode-${{ steps.channel.outputs.version }}.vsix" \
+            --title "VS Code v${{ steps.channel.outputs.version }}" \
             --prerelease="${{ steps.channel.outputs.label == 'pre-release' }}" \
             --generate-notes

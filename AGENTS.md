@@ -420,21 +420,24 @@ that back to `v*`. Use `vscode-v<version>`, matching `vscode/package.json`.
 refuses a version mismatch, a wrong publisher, or — the expensive mistake — the
 hub extension's id, which would replace a listing 20+ organizations update from.
 
-**The tokens are not interchangeable.** `ADO_MARKETPLACE_PAT` has Marketplace →
-*Publish* scope, which `tfx-cli` accepts. `vsce` requires Marketplace →
-**Manage**, so the VS Code release uses a separate `VSCE_PAT` secret. Both need
-**All accessible organizations** — Marketplace APIs run outside any organization
-context, and an org-scoped token fails with a 401 that looks like a bad
-credential rather than a bad scope.
+**One token, both releases.** `ADO_MARKETPLACE_PAT` is a Marketplace publisher
+token for `dataversepowertools` and already publishes a VS Code extension, so
+the VS Code release reuses it; `VSCE_PAT` overrides it if a dedicated token is
+ever wanted. It must be scoped to **All accessible organizations** — Marketplace
+APIs run outside any organization context, and an org-scoped token fails with a
+401 that reads like a bad credential rather than a bad scope. (The board PAT in
+`ADO_MCP_PAT_B64` is org-scoped and cannot publish anything.)
 
 **There is no private VS Code extension.** The Azure DevOps side has
 `--share-with` for private dev and canary builds; the VS Code Marketplace has no
 equivalent, so publishing there is public and worldwide, and a version number can
 never be republished. The staging equivalents are a `.vsix` handed to a tester
-(`npm run package:vscode`, then `code --install-extension`) and, once published,
-the **pre-release channel** — `release-vscode.yml` publishes `0.x` versions with
-`--pre-release`, so Marketplace users must opt in rather than being upgraded into
-a prototype.
+(`npm run package:vscode`, then `code --install-extension`) and, once there is a
+stable release to fall back to, the **pre-release channel**: a tag ending `-pre`
+(`vscode-v0.2.0-pre`) publishes with `--pre-release`, so users must opt in rather
+than being upgraded into a prototype. The channel is in the tag rather than
+inferred from the version, because a pre-release-only extension has no obvious
+way to install it — the channel is worth using from the *second* release on.
 
 `npm run publish:vscode` is the manual fallback for a maintainer who already
 holds a publisher token; CI is preferred so the token never has to exist on a

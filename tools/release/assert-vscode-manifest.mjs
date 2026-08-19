@@ -82,8 +82,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-const preRelease = manifest.version.startsWith("0.");
-console.log(
-  `OK: ${manifest.publisher}.${manifest.name} ${manifest.version}` +
-    ` (${preRelease ? "pre-release" : "stable"})`
-);
+console.log(`OK: ${manifest.publisher}.${manifest.name} ${manifest.version}`);
