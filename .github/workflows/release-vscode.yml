@@ -1,0 +1,108 @@
+name: Release (VS Code)
+
+# Publishes the VS Code extension (`vscode/`) to the Visual Studio Marketplace.
+#
+# NOTE THE TAG PREFIX. `v*` belongs to the Azure DevOps hub extension and is
+# wired to release.yml; tagging this one `v1.2.3` would publish *that* extension
+# instead. The two extensions are separate listings with separate version
+# histories, so they get separate tags:
+#
+#   v1.3.10        -> dataversepowertools.powerwiki         (Azure DevOps)
+#   vscode-v0.1.1  -> dataversepowertools.powerwiki-vscode  (VS Code)
+on:
+  push:
+    tags:
+      - "vscode-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Package, test, publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release and upload the .vsix
+    # Referencing an environment lets required reviewers be added later
+    # (Settings -> Environments -> marketplace) so a tag alone cannot publish.
+    environment: marketplace
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The Marketplace refuses to republish a version, so an identity or
+      # version mismatch has to fail before anything is uploaded — not after.
+      - name: Verify the manifest matches the tag
+        run: |
+          TAG="${GITHUB_REF_NAME#vscode-v}"
+          echo "tag version: $TAG"
+          node tools/release/assert-vscode-manifest.mjs "$TAG"
+
+      - name: Typecheck and unit tests
+        run: npm test
+
+      - name: Build the extension
+        run: npm run build:vscode
+
+      # The UI suite drives a real VS Code window, which needs a display. This is
+      # the only gate that exercises the extension as a user meets it, so it runs
+      # before publishing rather than being left to a later CI run.
+      - name: UI tests
+        run: xvfb-run -a node vscode/dist/test/runTests.js
+
+      - name: Package
+        run: |
+          cd vscode
+          npx @vscode/vsce package --no-dependencies \
+            --out "../powerwiki-vscode-${GITHUB_REF_NAME#vscode-v}.vsix"
+
+      # 0.x is pre-release by semver convention, and this extension is a
+      # prototype. Marketplace users then have to opt in via "Switch to
+      # Pre-Release Version" rather than being upgraded into it by default.
+      - name: Decide the release channel
+        id: channel
+        run: |
+          VERSION="${GITHUB_REF_NAME#vscode-v}"
+          if [ "${VERSION%%.*}" = "0" ]; then
+            echo "flag=--pre-release" >> "$GITHUB_OUTPUT"
+            echo "label=pre-release" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            echo "label=stable" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Publish the exact artefact attached to the Release, so the downloadable
+      # build and the Marketplace build are byte-identical.
+      - name: Publish to the Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::VSCE_PAT is not set. It needs Marketplace -> Manage scope and"
+            echo "::error::'All accessible organizations'. Add it under Settings -> Secrets"
+            echo "::error::and variables -> Actions. The ADO_MARKETPLACE_PAT used by"
+            echo "::error::release.yml has only Publish scope and will not work here."
+            exit 1
+          fi
+          echo "Publishing as ${{ steps.channel.outputs.label }}"
+          npx @vscode/vsce publish ${{ steps.channel.outputs.flag }} \
+            --no-dependencies \
+            --packagePath "powerwiki-vscode-${GITHUB_REF_NAME#vscode-v}.vsix"
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "powerwiki-vscode-${GITHUB_REF_NAME#vscode-v}.vsix" \
+            --title "VS Code ${GITHUB_REF_NAME#vscode-}" \
+            --prerelease="${{ steps.channel.outputs.label == 'pre-release' }}" \
+            --generate-notes

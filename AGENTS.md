@@ -400,6 +400,43 @@ DevOps, rather than being the first time anyone has seen it.
 - A variant requests the same `scopes`, so installing it needs the same one-time
   admin consent.
 
+## Publishing the VS Code extension
+
+The repository now publishes **two extensions to the same Marketplace account**,
+and they are separate listings with separate version histories:
+
+| Extension | Id | Released by |
+| --- | --- | --- |
+| Azure DevOps hub | `dataversepowertools.powerwiki` | a `v*` tag → `release.yml` |
+| VS Code | `dataversepowertools.powerwiki-vscode` | a `vscode-v*` tag → `release-vscode.yml` |
+
+**The tag prefix is load-bearing.** Tagging the VS Code extension `v0.1.1` would
+trigger the *Azure DevOps* release instead, against manifests that do not match
+the tag. Use `vscode-v<version>`, matching `vscode/package.json`.
+`tools/release/assert-vscode-manifest.mjs` runs before anything is uploaded and
+refuses a version mismatch, a wrong publisher, or — the expensive mistake — the
+hub extension's id, which would replace a listing 20+ organizations update from.
+
+**The tokens are not interchangeable.** `ADO_MARKETPLACE_PAT` has Marketplace →
+*Publish* scope, which `tfx-cli` accepts. `vsce` requires Marketplace →
+**Manage**, so the VS Code release uses a separate `VSCE_PAT` secret. Both need
+**All accessible organizations** — Marketplace APIs run outside any organization
+context, and an org-scoped token fails with a 401 that looks like a bad
+credential rather than a bad scope.
+
+**There is no private VS Code extension.** The Azure DevOps side has
+`--share-with` for private dev and canary builds; the VS Code Marketplace has no
+equivalent, so publishing there is public and worldwide, and a version number can
+never be republished. The staging equivalents are a `.vsix` handed to a tester
+(`npm run package:vscode`, then `code --install-extension`) and, once published,
+the **pre-release channel** — `release-vscode.yml` publishes `0.x` versions with
+`--pre-release`, so Marketplace users must opt in rather than being upgraded into
+a prototype.
+
+`npm run publish:vscode` is the manual fallback for a maintainer who already
+holds a publisher token; CI is preferred so the token never has to exist on a
+developer machine.
+
 ## Publishing
 
 Publishing is the final step, after the change has been verified through the

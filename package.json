@@ -12,6 +12,7 @@
     "build:vscode": "webpack --config webpack.vscode.config.js --mode production",
     "dev:vscode": "webpack --config webpack.vscode.config.js --mode development --watch",
     "package:vscode": "npm run build:vscode && cd vscode && npx @vscode/vsce package --no-dependencies --out powerwiki-vscode.vsix",
+    "publish:vscode": "npm run build:vscode && node tools/release/assert-vscode-manifest.mjs $(node -p \"require('./vscode/package.json').version\") && cd vscode && npx @vscode/vsce publish --no-dependencies",
     "typecheck": "tsc --noEmit",
     "manifest:dev": "node tools/release/variant-manifest.mjs dev",
     "manifest:canary": "node tools/release/variant-manifest.mjs canary",

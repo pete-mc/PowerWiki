@@ -327,6 +327,11 @@ code --install-extension vscode/powerwiki-vscode.vsix
 npm run test:vscode       # UI tests in a real VS Code window
 ```
 
+It is published separately from the Azure DevOps extension, as
+`dataversepowertools.powerwiki-vscode`, by pushing a **`vscode-v*`** tag — not a
+`v*` tag, which releases the Azure DevOps hub extension. See `AGENTS.md` for the
+tag and token rules.
+
 Comments, follow, work item enrichment and `@mention` resolution need Azure
 DevOps itself, so they are absent there rather than present and broken.
 [`vscode/README.md`](vscode/README.md) has the details.

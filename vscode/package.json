@@ -22,7 +22,7 @@
     "markdown",
     "mermaid"
   ],
-  "icon": "dist/media/logo_new.png",
+  "icon": "icon.png",
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished"
@@ -128,5 +128,14 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^3.0.0"
+  },
+  "homepage": "https://github.com/pete-mc/PowerWiki/blob/main/vscode/README.md",
+  "bugs": {
+    "url": "https://github.com/pete-mc/PowerWiki/issues"
+  },
+  "pricing": "Free",
+  "galleryBanner": {
+    "color": "#1f1f1f",
+    "theme": "dark"
   }
 }
