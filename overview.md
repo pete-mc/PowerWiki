@@ -72,7 +72,9 @@ Wiki pages are linked to work items using Azure DevOps' own **Wiki Page** links 
 
 **No new permissions either way.** Linking goes through the work item form itself, and the reverse lookup is a read, so PowerWiki still asks only for read access to work items and your organisation does not have to re-approve anything.
 
-![The Power Wiki tab on an Azure DevOps work item, listing the item's linked wiki pages beside the rendered page](https://raw.githubusercontent.com/pete-mc/PowerWiki/main/media/screenshots/powerwiki-workitem.png)
+![The Power Wiki tab on an Azure DevOps work item, listing the item's three linked wiki pages with unlink buttons beside the rendered page](https://raw.githubusercontent.com/pete-mc/PowerWiki/main/media/screenshots/powerwiki-workitem.png)
+
+![A wiki page with the Linked work items panel open, showing the work items that link to it with open ones first and finished ones dimmed](https://raw.githubusercontent.com/pete-mc/PowerWiki/main/media/screenshots/powerwiki-linked-work-items.png)
 
 ## History and stewardship
 

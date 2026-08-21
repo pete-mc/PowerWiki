@@ -3,12 +3,18 @@
 // (`npm run pw:auth`): node tools/pw/capture-screenshots.mjs
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { launch, openWikiPage, sleep } from "./lib.mjs";
+import { hideVariantBuilds, launch, openWikiPage, sleep } from "./lib.mjs";
 
 const OUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "media", "screenshots");
 
 const { context, page } = await launch({ headless: true });
-const shot = (name) => page.screenshot({ path: path.join(OUT_DIR, name) });
+// Every shot hides the dev/canary hub entries first: they are installed here but
+// no customer has them, and three "Power Wiki" entries in the nav make the real
+// one look ambiguous.
+const shot = async (name) => {
+  await hideVariantBuilds(page);
+  return page.screenshot({ path: path.join(OUT_DIR, name) });
+};
 
 try {
   // 1. Split editor: code on the left, live preview on the right. Captured first
@@ -48,6 +54,18 @@ try {
   await sleep(2500);
   await shot("powerwiki-mermaid.png");
   console.log("captured mermaid");
+
+  // 3b. Linked work items panel, on the same gallery page. The count on the
+  //     byline is what opens it, and the panel needs the artifact query and the
+  //     work item type icons to come back before it is worth photographing.
+  await frame.getByRole("button", { name: "Show linked work items" }).click();
+  await frame.waitForSelector(".powerwiki-linked-work-items .powerwiki-work-item", { timeout: 60000 });
+  await frame.waitForSelector(".powerwiki-work-item-icon svg", { timeout: 30000 }).catch(() => {});
+  await sleep(1500);
+  await shot("powerwiki-linked-work-items.png");
+  console.log("captured linked work items");
+  await frame.click(".powerwiki-sidecar-close");
+  await sleep(300);
 
   // 4. Math.
   frame = await openWikiPage(page, "#/PowerWiki%20Showcase/Math%20with%20KaTeX");

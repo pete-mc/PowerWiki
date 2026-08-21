@@ -12,7 +12,7 @@
 // shows the build being released rather than the one already published.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { launch, powerWikiFrame, sleep } from "./lib.mjs";
+import { hideVariantBuilds, launch, powerWikiFrame, sleep } from "./lib.mjs";
 
 const ORG = process.env.PW_ORG ?? "dataversepowertools";
 const PROJECT = process.env.PW_PROJECT ?? "PowerWiki";
@@ -53,6 +53,10 @@ try {
   // Let Mermaid finish; the linked page is the diagram gallery.
   await frame.waitForSelector(".mermaid-rendered svg", { timeout: 120000 }).catch(() => {});
   await sleep(3000);
+
+  // No customer has the dev or canary builds, so their tabs do not belong in a
+  // store screenshot beside the real one.
+  console.log(`hid ${await hideVariantBuilds(page)} variant tab(s)`);
 
   await page.screenshot({ path: OUT });
   console.log(`captured ${OUT}`);

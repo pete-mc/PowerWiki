@@ -186,3 +186,44 @@ export async function readLoadedVersion(frame) {
     .$eval(".powerwiki-brand span", (el) => (el.textContent || "").replace(/[^0-9.]/g, ""))
     .catch(() => "");
 }
+
+/**
+ * Hides the maintainer's own dev and canary builds from the page before a
+ * marketplace screenshot.
+ *
+ * They are private extensions with different ids, shared only with this
+ * organization, so no customer has them — but they are installed here, which
+ * puts three "Power Wiki" entries in the project nav and three "Power Wiki" tabs
+ * on the work item form. A store screenshot showing those advertises something
+ * nobody can install and makes the real one look ambiguous.
+ *
+ * This is presentation only, and only for captures: it hides nodes in the page
+ * being photographed rather than changing what is installed. Disabling the
+ * extensions for real would be an organization-wide change affecting anyone else
+ * using them, to make a picture look right.
+ *
+ * Match on the visible label rather than an id: the contribution ids are
+ * generated per install, whereas the "(Dev)"/"(Canary)" suffixes are set by
+ * `tools/release/variant-manifest.mjs` and are the whole reason the variants are
+ * distinguishable in the first place.
+ */
+export async function hideVariantBuilds(page) {
+  const hidden = await page.evaluate(() => {
+    const isVariant = (element) => /\(Dev\)|\(Canary\)/.test((element.textContent || "").trim());
+    const selectors = [
+      "a.hub-group",        // project nav entry for a hub contribution
+      '[role="tab"]',       // work item form pivot
+    ];
+    let count = 0;
+    for (const selector of selectors) {
+      for (const element of document.querySelectorAll(selector)) {
+        if (isVariant(element)) {
+          element.style.display = "none";
+          count += 1;
+        }
+      }
+    }
+    return count;
+  });
+  return hidden;
+}
