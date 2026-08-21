@@ -8,6 +8,7 @@ import { QUERY_TABLE_ATTR, QUERY_TABLE_SELECTOR, WORK_ITEM_ATTR, WORK_ITEM_SELEC
 import { copyToClipboard } from "./clipboard";
 import { createMarkdownRenderer } from "./createMarkdownRenderer";
 import { addDiagramTools, DIAGRAM_EDIT_SELECTOR, DIAGRAM_SOURCE_ATTR } from "./diagramTools";
+import { appendInlineSvg } from "./inlineSvg";
 import { addCopyButtons, highlightCodeBlocks } from "./enhancePreview";
 import { renderMath } from "./mathRender";
 import { ZoomPanOverlay } from "./ZoomPanOverlay";
@@ -1001,14 +1002,6 @@ function htmlToPlainText(html: string): string {
 }
 
 /** Parses trusted first-party SVG icon markup and appends it, ignoring anything invalid. */
-function appendInlineSvg(host: HTMLElement, svg: string): void {
-  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
-  const element = doc.documentElement;
-  if (element && element.nodeName.toLowerCase() === "svg" && !doc.querySelector("parsererror")) {
-    host.appendChild(document.importNode(element, true));
-  }
-}
-
 /** An expand/collapse toggle for a tree row; collapsing hides its descendants. */
 function createTreeToggle(tableRow: HTMLElement, body: HTMLElement): HTMLButtonElement {
   const collapsed = tableRow.classList.contains("powerwiki-query-collapsed");

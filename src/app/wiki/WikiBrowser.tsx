@@ -16,6 +16,7 @@ import type { LinkedWikiPage, WikiHost, WikiHostNavigation } from "../../host/Wi
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "../../wiki/WikiComment";
+import type { LinkedWorkItemsResult } from "../../workItems/LinkedWorkItem";
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
 import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
 import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
@@ -33,6 +34,7 @@ import { splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 import { StatusMessage } from "./StatusMessage";
 import { WikiLinkedPagesPlaceholder } from "./WikiLinkedPagesPlaceholder";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
+import { WikiLinkedWorkItemsPanel } from "./WikiLinkedWorkItemsPanel";
 import { WikiRichTextEditor } from "./WikiRichTextEditor";
 import { WikiMovePageDialog } from "./WikiMovePageDialog";
 import type { WikiPageBylineProps } from "./WikiPageByline";
@@ -42,6 +44,9 @@ import { WikiSearchResults } from "./WikiSearchResults";
 import { filterWikiPageTree } from "./wikiTreeFilter";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
+
+/** Stable empty result, so clearing between pages is not a new object each time. */
+const NO_LINKED_WORK_ITEMS: LinkedWorkItemsResult = { items: [] };
 
 /* Long enough to stay clear of the initial load, short enough that the
    upgrade lands before most people reach for the filter. */
@@ -389,6 +394,10 @@ export function WikiBrowser({
   const [commentsError, setCommentsError] = useState<string>();
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [linkedWorkItems, setLinkedWorkItems] = useState<LinkedWorkItemsResult>(NO_LINKED_WORK_ITEMS);
+  const [linkedWorkItemsLoading, setLinkedWorkItemsLoading] = useState(false);
+  const [linkedWorkItemsError, setLinkedWorkItemsError] = useState<string>();
+  const [linkedWorkItemsOpen, setLinkedWorkItemsOpen] = useState(false);
   const [splitRatio, setSplitRatio] = useState(56);
   // Non-empty means the nav rail is showing search results instead of the tree.
   const [treeFilter, setTreeFilter] = useState("");
@@ -1387,6 +1396,19 @@ export function WikiBrowser({
     onPageTitleChange?.(activePage ? pageTitle(activePage.path) : undefined);
   }, [activePage, loadState, onPageTitleChange]);
 
+  // The two drawers share one grid column, so opening either closes the other.
+  // Narrowing the page to fit both would make the thing you came to read the
+  // smallest part of the screen.
+  const openComments = useCallback(() => {
+    setCommentsOpen((open) => !open);
+    setLinkedWorkItemsOpen(false);
+  }, []);
+
+  const openLinkedWorkItems = useCallback(() => {
+    setLinkedWorkItemsOpen((open) => !open);
+    setCommentsOpen(false);
+  }, []);
+
   useEffect(() => {
     if (!activePage || isEditing) {
       onPageBylineChange?.(undefined);
@@ -1398,13 +1420,33 @@ export function WikiBrowser({
       changeLoading: pageChangeLoading,
       commentCount: capabilities.comments && !commentsLoading ? comments.length : undefined,
       commentsOpen: capabilities.comments ? commentsOpen : undefined,
-      onToggleComments: capabilities.comments ? () => setCommentsOpen((open) => !open) : undefined,
+      onToggleComments: capabilities.comments ? openComments : undefined,
+      linkedWorkItemCount:
+        capabilities.linkedWorkItems && !linkedWorkItemsLoading ? linkedWorkItems.items.length : undefined,
+      linkedWorkItemsOpen: capabilities.linkedWorkItems ? linkedWorkItemsOpen : undefined,
+      onToggleLinkedWorkItems: capabilities.linkedWorkItems ? openLinkedWorkItems : undefined,
     });
 
     return () => {
       onPageBylineChange?.(undefined);
     };
-  }, [activePage, capabilities.comments, comments.length, commentsLoading, commentsOpen, isEditing, onPageBylineChange, pageChange, pageChangeLoading]);
+  }, [
+    activePage,
+    capabilities.comments,
+    capabilities.linkedWorkItems,
+    comments.length,
+    commentsLoading,
+    commentsOpen,
+    isEditing,
+    linkedWorkItems.items.length,
+    linkedWorkItemsLoading,
+    linkedWorkItemsOpen,
+    onPageBylineChange,
+    openComments,
+    openLinkedWorkItems,
+    pageChange,
+    pageChangeLoading,
+  ]);
 
   // Loads the direct children of the active page so a [[_TOSP_]] placeholder can
   // be filled in. Scoped to pages that actually use the placeholder to avoid an
@@ -1518,6 +1560,48 @@ export function WikiBrowser({
     void loadPageDetails();
     return () => { cancelled = true; };
   }, [activePage, activeWikiId, activeWiki?.repositoryId, activeWiki?.version, capabilities.comments, wikiClient]);
+
+  // The work items linking to this page.
+  //
+  // Loaded with the page rather than when the drawer opens, because the count is
+  // on the byline and a count that only appears after you click the thing it is
+  // meant to label is no use. For a page nothing links to this costs a single
+  // artifact query and no work item read at all.
+  useEffect(() => {
+    if (!activePage || !activeWikiId || !capabilities.linkedWorkItems || !workItemClient) {
+      setLinkedWorkItems(NO_LINKED_WORK_ITEMS);
+      setLinkedWorkItemsError(undefined);
+      setLinkedWorkItemsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLinkedWorkItems(NO_LINKED_WORK_ITEMS);
+    setLinkedWorkItemsError(undefined);
+    setLinkedWorkItemsLoading(true);
+
+    workItemClient
+      .getLinkedWorkItems({ wikiId: activeWikiId, path: activePage.path })
+      .then((result) => {
+        if (!cancelled) {
+          setLinkedWorkItems(result);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (!cancelled) {
+          setLinkedWorkItemsError(formatError(failure));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLinkedWorkItemsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePage?.path, activeWikiId, capabilities.linkedWorkItems, workItemClient]);
 
   const handleNodeExpand = useCallback(
     async (path: string): Promise<void> => {
@@ -2558,6 +2642,17 @@ export function WikiBrowser({
           onClose={() => setCommentsOpen(false)}
           onSubmit={handleAddComment}
           submitting={commentSubmitting}
+        />
+      ) : null}
+
+      {capabilities.linkedWorkItems && activePage && !isEditing && linkedWorkItemsOpen ? (
+        <WikiLinkedWorkItemsPanel
+          error={linkedWorkItemsError}
+          icons={linkedWorkItems.icons}
+          items={linkedWorkItems.items}
+          loading={linkedWorkItemsLoading}
+          onClose={() => setLinkedWorkItemsOpen(false)}
+          onOpen={(id) => void workItemClient?.openWorkItem(id)}
         />
       ) : null}
 

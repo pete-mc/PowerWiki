@@ -100,6 +100,16 @@ export function CommentIcon({ className }: IconProps) {
   );
 }
 
+/** Two links of a chain, for the work items linking to a page. */
+export function WorkItemLinkIcon({ className }: IconProps) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M6.5 9.5a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 0 0-3.54-3.54l-.9.9" />
+      <path d="M9.5 6.5a2.5 2.5 0 0 0-3.54 0l-2 2a2.5 2.5 0 0 0 3.54 3.54l.9-.9" />
+    </svg>
+  );
+}
+
 /** A waste-bin glyph, used for destructive actions such as unlinking a page. */
 export function TrashIcon({ className }: IconProps) {
   return (

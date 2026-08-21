@@ -648,7 +648,10 @@ body {
   font-weight: 600;
 }
 
-.powerwiki-comments {
+/* The right-hand drawer. Two panels use it — comments and linked work items —
+   and they share the one grid column, so only one is ever mounted. Named for
+   the slot rather than for either occupant. */
+.powerwiki-sidecar {
   background: var(--pw-surface);
   border-left: 1px solid var(--pw-border);
   box-sizing: border-box;
@@ -660,7 +663,7 @@ body {
   width: 320px;
 }
 
-.powerwiki-comments-header {
+.powerwiki-sidecar-header {
   align-items: center;
   border-bottom: 1px solid var(--pw-border);
   display: flex;
@@ -668,13 +671,13 @@ body {
   padding: 12px 8px 12px 16px;
 }
 
-.powerwiki-comments-header h2 {
+.powerwiki-sidecar-header h2 {
   font-size: var(--pw-font-size);
   font-weight: 600;
   margin: 0;
 }
 
-.powerwiki-comments-close {
+.powerwiki-sidecar-close {
   align-items: center;
   background: transparent;
   border: 0;
@@ -688,12 +691,12 @@ body {
   width: 30px;
 }
 
-.powerwiki-comments-close:hover {
+.powerwiki-sidecar-close:hover {
   background: var(--pw-hover);
   color: var(--pw-accent);
 }
 
-.powerwiki-comments-list {
+.powerwiki-sidecar-list {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -703,7 +706,7 @@ body {
   padding: 12px 16px;
 }
 
-.powerwiki-comments-status {
+.powerwiki-sidecar-status {
   color: var(--pw-text-secondary);
   margin: 0;
 }
@@ -784,6 +787,79 @@ body {
   border-color: var(--pw-border);
   color: var(--pw-disabled-text);
   cursor: default;
+}
+
+.powerwiki-work-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.powerwiki-work-item {
+  background: transparent;
+  border: 1px solid var(--pw-border);
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 4px;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.powerwiki-work-item:hover {
+  background: var(--pw-hover);
+  border-color: var(--pw-accent);
+}
+
+.powerwiki-work-item-head {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.powerwiki-work-item-icon,
+.powerwiki-work-item-icon svg {
+  height: 14px;
+  width: 14px;
+}
+
+.powerwiki-work-item-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.powerwiki-work-item-id {
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
+  font-weight: 600;
+}
+
+.powerwiki-work-item-state {
+  background: var(--pw-subtle);
+  border: 1px solid var(--pw-border);
+  border-radius: 999px;
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
+  /* Pushed to the trailing edge so it stays aligned however the title wraps. */
+  margin-left: auto;
+  padding: 1px 8px;
+}
+
+.powerwiki-work-item-title {
+  line-height: 1.35;
+}
+
+.powerwiki-work-item-assignee {
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
 }
 
 .wiki-editor-shell {
@@ -2541,7 +2617,7 @@ button.wiki-move-option:hover {
     display: none;
   }
 
-  .powerwiki-comments {
+  .powerwiki-sidecar {
     width: 260px;
   }
 

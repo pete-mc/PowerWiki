@@ -21,6 +21,7 @@ import type {
 import type { WikiSummary } from "../wiki/WikiPage";
 import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
 import type { WikiSearchOutcome } from "../wiki/wikiSearch";
+import type { LinkedWorkItemsResult } from "../workItems/LinkedWorkItem";
 
 /** Who and where we are. Both hosts fill in what they can; all of it is optional bar the name. */
 export interface WikiHostContext {
@@ -58,6 +59,13 @@ export interface WikiHostCapabilities {
    * the whole tree the wrong one. Mutually exclusive with `pageTree`.
    */
   readonly linkedPages: boolean;
+  /**
+   * The page can show which work items link to it. Read-only, and the mirror
+   * image of `linkedPages`: that lists a work item's pages, this lists a page's
+   * work items. On in the hub, where the wiki is what you are looking at; off on
+   * the work item form, where the work item is already on screen.
+   */
+  readonly linkedWorkItems: boolean;
   /** The wiki picker. Off where the host already chose the wiki (a VS Code editor tab). */
   readonly wikiSelector: boolean;
   /**
@@ -147,6 +155,22 @@ export interface LinkedPagesProvider {
 export interface WorkItemProvider {
   getWorkItemBadgeDetails(id: number): Promise<WorkItemBadgeDetails>;
   getQueryTable(queryId: string): Promise<QueryTableResult>;
+  /**
+   * The work items linking to a wiki page.
+   *
+   * Takes the page rather than an artifact URI: the `vstfs:///Wiki/WikiPage/...`
+   * format is Azure DevOps' own, and building it here would put a host's storage
+   * format above the interface. The host that understands it composes it.
+   *
+   * A read, so it costs no scope beyond the work item read access the badges
+   * already need. Writing a link is not offered for the opposite reason — the
+   * relation lives on the work item, so creating one needs `vso.work_write`.
+   */
+  getLinkedWorkItems(page: {
+    readonly wikiId: string;
+    readonly path: string;
+  }): Promise<LinkedWorkItemsResult>;
+
   /** Opens the work item in whatever UI the host has (a form, a browser tab). */
   openWorkItem(id: number): Promise<void>;
 }
