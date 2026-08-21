@@ -12,6 +12,7 @@ import {
 
 import type { LinkedWorkItem, LinkedWorkItemsResult } from "./LinkedWorkItem";
 import { workItemIdsForArtifactUri } from "./artifactUriQueryResult";
+import { orderLinkedWorkItems } from "./linkedWorkItemOrder";
 
 export interface QueryTableColumn {
   readonly name: string;
@@ -81,6 +82,7 @@ export class AzureDevOpsWorkItemClient {
   private fieldTypesPromise?: Promise<ReadonlyMap<string, FieldType>>;
   private typeIconsPromise?: Promise<ReadonlyMap<string, { icon: string; color: string }>>;
   private readonly iconSvgCache = new Map<string, Promise<string | undefined>>();
+  private readonly stateCategoryCache = new Map<string, Promise<ReadonlyMap<string, string>>>();
 
   public constructor(private readonly projectName: string) {}
 
@@ -124,9 +126,7 @@ export class AzureDevOpsWorkItemClient {
       WorkItemErrorPolicy.Omit
     );
 
-    // Newest first. The artifact query returns relation order, which is the
-    // order the links happened to be made in and means nothing to a reader.
-    const items: LinkedWorkItem[] = workItems.map((workItem) => ({
+    const bare = workItems.map((workItem) => ({
       id: workItem.id,
       assignedToName: fieldValue(workItem, "System.AssignedTo"),
       state: fieldValue(workItem, "System.State"),
@@ -134,13 +134,21 @@ export class AzureDevOpsWorkItemClient {
       type: fieldValue(workItem, "System.WorkItemType")
     }));
 
-    items.sort((left, right) => right.id - left.id);
-
     const typeNames = new Set(
-      items.map((item) => item.type).filter((type): type is string => Boolean(type))
+      bare.map((item) => item.type).filter((type): type is string => Boolean(type))
     );
 
-    return { icons: await this.resolveTypeIcons(typeNames), items };
+    const [icons, categories] = await Promise.all([
+      this.resolveTypeIcons(typeNames),
+      this.resolveStateCategories(typeNames)
+    ]);
+
+    const items: LinkedWorkItem[] = bare.map((item) => ({
+      ...item,
+      stateCategory: item.type && item.state ? categories.get(stateKey(item.type, item.state)) : undefined
+    }));
+
+    return { icons, items: orderLinkedWorkItems(items) };
   }
 
   public async getQueryTable(queryId: string): Promise<QueryTableResult> {
@@ -208,6 +216,40 @@ export class AzureDevOpsWorkItemClient {
       name: queryDefinition?.name,
       rows
     };
+  }
+
+  /**
+   * State category keyed by `<type>|<state>`, so a state name can be told apart
+   * from the same word in another type.
+   *
+   * Per type rather than the one-call `workitemstatecolor` endpoint, which is
+   * preview-only and refuses a GA api-version. A page links a handful of types,
+   * each is cached for the session, and the two lookups run alongside the icon
+   * fetch — so this is a second round trip, not a second wait.
+   *
+   * Best-effort, like the icons: without a category every item is treated as
+   * open, which loses the grouping rather than emptying the list.
+   */
+  private async resolveStateCategories(typeNames: ReadonlySet<string>): Promise<ReadonlyMap<string, string>> {
+    const categories = new Map<string, string>();
+
+    await Promise.all(
+      [...typeNames].map(async (typeName) => {
+        let states = this.stateCategoryCache.get(typeName);
+        if (!states) {
+          states = this.client
+            .getWorkItemTypeStates(this.projectName, typeName)
+            .then((values) => new Map(values.map((value) => [value.name, value.category])))
+            .catch(() => new Map<string, string>());
+          this.stateCategoryCache.set(typeName, states);
+        }
+        for (const [state, category] of await states) {
+          categories.set(stateKey(typeName, state), category);
+        }
+      })
+    );
+
+    return categories;
   }
 
   /** Inline SVG icon markup keyed by work item type name, best-effort. */
@@ -442,6 +484,10 @@ function decodeSvg(value: unknown): string | undefined {
     return new TextDecoder().decode(value as ArrayBufferView);
   }
   return undefined;
+}
+
+function stateKey(typeName: string, state: string): string {
+  return `${typeName}|${state}`;
 }
 
 function fieldValue(workItem: WorkItem, referenceName: string): string | undefined {

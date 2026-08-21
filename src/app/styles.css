@@ -818,6 +818,27 @@ body {
   border-color: var(--pw-accent);
 }
 
+/* Finished work is kept but stood down: still readable, no longer competing with
+   what is open. Opacity rather than a fixed grey, so it stays legible against
+   whatever background the host theme supplies. */
+.powerwiki-work-item.closed .powerwiki-work-item-title,
+.powerwiki-work-item.closed .powerwiki-work-item-assignee,
+.powerwiki-work-item.closed .powerwiki-work-item-icon {
+  opacity: 0.6;
+}
+
+.powerwiki-work-item.closed .powerwiki-work-item-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* Hovering restores it: if you are reaching for it, you want to read it. */
+.powerwiki-work-item.closed:hover .powerwiki-work-item-title,
+.powerwiki-work-item.closed:hover .powerwiki-work-item-assignee,
+.powerwiki-work-item.closed:hover .powerwiki-work-item-icon {
+  opacity: 1;
+}
+
 .powerwiki-work-item-head {
   align-items: center;
   display: flex;

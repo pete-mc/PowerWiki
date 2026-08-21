@@ -6,8 +6,9 @@ import type { LinkedWorkItem } from "../../workItems/LinkedWorkItem";
 import { WikiLinkedWorkItemsPanel } from "./WikiLinkedWorkItemsPanel";
 
 const ITEMS: readonly LinkedWorkItem[] = [
-  { id: 601, title: "Mermaid gallery is out of date", type: "Issue", state: "Active", assignedToName: "Ada" },
-  { id: 42, title: "Add a diagram", type: "Task", state: "Closed" }
+  { id: 601, title: "Mermaid gallery is out of date", type: "Issue", state: "Active",
+    stateCategory: "InProgress", assignedToName: "Ada" },
+  { id: 42, title: "Add a diagram", type: "Task", state: "Done", stateCategory: "Completed" }
 ];
 
 let container: HTMLDivElement | undefined;
@@ -73,6 +74,21 @@ describe("WikiLinkedWorkItemsPanel", () => {
 
     expect(element.querySelector(".powerwiki-work-item-icon script")).toBeNull();
     expect(element.querySelector(".powerwiki-work-item-icon")?.childNodes.length).toBe(0);
+  });
+
+  it("stands finished work down without hiding it", () => {
+    const element = render();
+    const rows = element.querySelectorAll(".powerwiki-work-item");
+
+    expect(rows[0].className).not.toContain("closed");
+    expect(rows[1].className).toContain("closed");
+    expect(rows[1].textContent).toContain("Add a diagram");
+  });
+
+  it("treats an unresolved state category as open", () => {
+    const element = render({ items: [{ id: 9, title: "No category", state: "Whatever" }] });
+
+    expect(element.querySelector(".powerwiki-work-item")?.className).not.toContain("closed");
   });
 
   it("says so when nothing links to the page", () => {

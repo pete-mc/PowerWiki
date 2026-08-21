@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 
 import { appendInlineSvg } from "../../rendering/inlineSvg";
 import type { LinkedWorkItem } from "../../workItems/LinkedWorkItem";
+import { isClosedWorkItem } from "../../workItems/linkedWorkItemOrder";
 import { CloseIcon } from "./WikiPageIcons";
 
 interface WikiLinkedWorkItemsPanelProps {
@@ -64,7 +65,9 @@ export function WikiLinkedWorkItemsPanel({
             {items.map((item) => (
               <li key={item.id}>
                 <button
-                  className="powerwiki-work-item"
+                  className={
+                    isClosedWorkItem(item) ? "powerwiki-work-item closed" : "powerwiki-work-item"
+                  }
                   onClick={() => onOpen(item.id)}
                   title={`Open ${item.type ?? "work item"} ${item.id}`}
                   type="button"

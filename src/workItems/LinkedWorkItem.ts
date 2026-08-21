@@ -17,6 +17,11 @@ export interface LinkedWorkItem {
   readonly title?: string;
   readonly type?: string;
   readonly state?: string;
+  /**
+   * The state's category — Proposed, InProgress, Resolved, Completed, Removed.
+   * Process-independent, unlike `state`, which every process names differently.
+   */
+  readonly stateCategory?: string;
   readonly assignedToName?: string;
 }
 
