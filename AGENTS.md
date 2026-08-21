@@ -257,14 +257,20 @@ never a place anyone links to. `buildPageUrl` is untouched, so the shareable lin
 to the page itself still works. `azureDevOpsWikiHostNavigation.test.ts` pins it,
 including that the hub still asks, so the check cannot pass vacuously.
 
+**The work item form iframe is not sandboxed at all, so `window.confirm` works
+there.** This was an open worry — a VS Code webview is sandboxed without
+`allow-modals`, where `confirm()` returns false *silently*, and nobody had
+checked whether the form page behaves the same way. Measured against the
+published 1.4.2 build: the extension iframe on the work item form carries **no
+`sandbox` attribute**, and clicking the rail's unlink button raises a real
+`confirm` (Playwright's `dialog` event fires with the button's own message). So
+`browserDialogs` is sound on this surface and no
+`IHostPageLayoutService.openMessageDialog` fallback is needed. Do not re-open
+this without a new measurement; the answer is a property of the host, not of our
+code.
+
 **What is still unverified about that surface:**
 
-- Whether the `work-item-form-page` iframe carries `allow-modals`. The hub's does
-  (`browserDialogs` works there); the form page's is a different host surface and
-  has never been checked. Without it `window.confirm` returns **false** silently,
-  which would make a confirm-guarded action — the rail's unlink button — look dead
-  rather than broken. `IHostPageLayoutService.openMessageDialog` is the supported
-  alternative.
 - Whether `openWorkItem()` called from *inside* a dialog stacks, replaces, or
   closes it. Undocumented. The one call that provably navigated the open form was
   the rail's old "Manage links…" button, on the item already on screen, and it is
