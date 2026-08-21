@@ -88,6 +88,44 @@ export class AzureDevOpsIdentityClient {
     };
   }
 
+  /**
+   * People and teams whose name starts with (or contains) `query`.
+   *
+   * Same service and same call as `getMentionIdentity`, minus the "uid" hint —
+   * that hint is what tells the picker the query is an identity id rather than a
+   * name, so omitting it is the whole difference between resolving a mention and
+   * searching for one.
+   *
+   * Groups are included so teams can be mentioned, which is what the built-in
+   * wiki offers. `normalizeIdentityName` strips the `[project]\` prefix Azure
+   * DevOps puts on group names, so a team reads as "@Team Name" in a sentence.
+   */
+  public async searchIdentities(query: string): Promise<readonly MentionIdentity[]> {
+    const term = query.trim();
+    if (!term) {
+      return [];
+    }
+
+    const service = await this.getService();
+    if (!service) {
+      throw new Error("The Azure DevOps identity service is unavailable.");
+    }
+
+    const matches = await service.searchIdentitiesAsync(term, ["user", "group"], ["ims", "source"]);
+    const identities: MentionIdentity[] = [];
+    for (const match of matches ?? []) {
+      // The mention format stores an id, so a match without one cannot be
+      // written and is dropped rather than offered and found to do nothing.
+      const id = match.localId ?? match.entityId;
+      const displayName = normalizeIdentityName(match.displayName);
+      if (!id || !displayName) {
+        continue;
+      }
+      identities.push({ id, displayName, uniqueName: match.signInAddress ?? match.mail });
+    }
+    return identities;
+  }
+
   private getCurrentUser(): { id?: string; displayName?: string } | undefined {
     try {
       return SDK.getUser();

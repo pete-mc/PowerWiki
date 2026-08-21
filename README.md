@@ -154,7 +154,7 @@ The current implementation provides a working Power Wiki experience:
 - A **Power Wiki** tab on the work item form listing that item's linked wiki pages, with full rendering, editing, linking and unlinking. In the other direction, a **Linked work items** panel on the page byline lists the work items that link to the page. See [Power Wiki on the work item form](#power-wiki-on-the-work-item-form).
 - draw.io diagrams: draw one with the editor's **Diagram** button (or `/Diagram`), and reopen any stored diagram from the **Edit diagram** button — on hover in the preview, or in the zoom overlay's toolbar. See [draw.io diagrams](#drawio-diagrams).
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
-- Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki.
+- Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki, and offers an **`@` picker** in both editors to write them. See [Mentions](#mentions).
 - Supports the Azure DevOps image-size suffix, `![alt](image.png =500x250)`.
 - Resizable page tree rail (drag its edge, double-click to reset), and an editor that fills the available height.
 
@@ -240,6 +240,44 @@ category cannot be resolved counts as open rather than being buried.
 It is deliberately read-only. Creating a link from the wiki side means writing to
 the work item, which needs `vso.work_write` — a scope every installed
 organization would have to re-consent to.
+
+## Mentions
+
+Azure DevOps stores an identity mention as `@<identity-guid>` and resolves the
+display name at render time. PowerWiki reads and writes that same format, so a
+mention is portable between the two wikis in both directions.
+
+**Searching costs no scope.** Both the lookup and the search go through
+`ms.vss-features.identity-service`, the contribution behind Azure DevOps' own
+people picker. The host runs them in the parent frame under the signed-in user's
+session, so the extension never needs `vso.identity` or `vso.graph` — asking for
+either would park the extension in "Pending review" until every installed
+organization's administrator re-approved it. The only difference between
+resolving a mention and searching for one is the `queryTypeHint`: `"uid"` treats
+the query as an identity id, omitting it treats it as a name.
+
+**Two editors, one trigger.** `matchMentionTrigger` (`src/app/wiki/mentionTrigger.ts`)
+decides what counts as a mention being typed, and both editors ask it, so the
+Markdown and rich text modes cannot disagree about when the picker opens. It
+requires an `@` at the start of a line or after whitespace, which is what stops
+`someone@example.com` opening a picker, and it declines inside an unclosed code
+span.
+
+**Monaco ends a completion session on an empty answer.** The `@` picker searches
+from the *first* character, which looks over-eager and is not a choice: a
+provider that returns `{ suggestions: [] }` is not asked again for that session,
+`incomplete: true` or not. A "wait until two characters" guard therefore kills
+the trigger rather than deferring it — the provider was observed firing for `@`
+and `@p` and never again. The result cache in `mentionCompletions.ts` is what
+keeps searching-from-one-character from costing a request per keystroke.
+
+**In the rich text editor a mention is atomic.** The chip carries
+`contenteditable="false"`, because without it the caret can sit inside the span —
+which is exactly where `Ctrl+End` lands when a mention ends the document — and
+anything typed there joins the chip. The Turndown rule then writes the chip out
+as its identity and the typed words are gone. `richTextTurndown.ts` is extracted
+from the component and tested for this reason: every rule in it decides what gets
+written back to the wiki file on save.
 
 ## Theming
 

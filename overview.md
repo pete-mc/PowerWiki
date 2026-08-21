@@ -42,6 +42,12 @@
 
 ![PowerWiki split editor with Monaco Markdown source, live preview, and the slash command palette](https://dataversepowertools.gallerycdn.vsassets.io/extensions/dataversepowertools/powerwiki/1.2.3/1783171403078/media/screenshots/powerwiki-editing.png)
 
+### Mention people and teams
+
+Type **`@`** and pick from your organisation's directory — the same people and teams the built-in wiki offers, searched through Azure DevOps' own identity picker. Works in both the Markdown and rich text editors, and mentions you already have render as names rather than raw ids.
+
+Stored exactly as the built-in wiki stores them, so a mention written in PowerWiki reads correctly there and vice versa. **No extra permission**: the lookup runs as you, through the host, so PowerWiki still never asks for directory access.
+
 ## Diagrams you can actually edit
 
 - **Draw with draw.io, without leaving the wiki.** Hit **Diagram** in the editor toolbar (or type `/diagram`) for a full draw.io canvas — shapes, connectors, the whole shape library.

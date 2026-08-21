@@ -426,8 +426,15 @@ export function WikiBrowser({
   const wikiClient = host.wikiClient;
   const dialogs = host.dialogs;
   const followClient = host.follow;
-  const workItemClient = host.workItems;
-  const identityClient = host.identity;
+  // Gated on the capability rather than on the provider alone, so a host that
+  // declares it cannot enrich work items gets no badges, query tables or linked
+  // work items even if it happens to expose a provider.
+  const workItemClient = capabilities.workItems ? host.workItems : undefined;
+  // Gated on the capability, not just on the provider being present. Both the
+  // `@` picker and mention rendering hang off this one binding, so a host that
+  // says it cannot do mentions gets neither - and the flag stops being a piece
+  // of documentation nothing reads.
+  const identityClient = capabilities.mentions ? host.identity : undefined;
   // Undefined when the host cannot search at all (no organization context in the
   // hub). The search box still matches page titles locally then, rather than
   // failing outright.
@@ -1135,9 +1142,13 @@ export function WikiBrowser({
         return undefined;
       }
 
+      if (!capabilities.permalinks) {
+        return undefined;
+      }
+
       return host.buildPageUrl(buildNavigationHash(activeWiki, activePage.path, wikis), slug);
     },
-    [activePage, activeWiki, host, wikis]
+    [activePage, activeWiki, capabilities.permalinks, host, wikis]
   );
 
   // Clicking a heading permalink scrolls to it and reflects the anchor in the
@@ -1971,9 +1982,10 @@ export function WikiBrowser({
       onNodeExpand: (path) => void handleNodeExpand(path),
       onPageSelected: (path) => void handlePageSelected(path),
       onRenamePage: (path) => void handleRenamePage(path),
-      getPageUrl: (path) => host.buildPageUrl(buildNavigationHash(activeWiki, path, wikis)),
+      getPageUrl: (path) =>
+        capabilities.permalinks ? host.buildPageUrl(buildNavigationHash(activeWiki, path, wikis)) : undefined,
     }),
-    [activeWiki, handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, handleRenamePage, host, performMove, wikis]
+    [activeWiki, capabilities.permalinks, handleCreatePage, handleDeletePage, handleEditPage, handleNodeExpand, handleOpenMoveDialog, handlePageSelected, handleRenamePage, host, performMove, wikis]
   );
 
   async function handleSavePage() {
@@ -2304,6 +2316,14 @@ export function WikiBrowser({
     () => (identityClient ? (id: string) => identityClient.getMentionIdentity(id) : undefined),
     [identityClient]
   );
+
+  // Undefined rather than a stub for the same reason as loadMention: a host with
+  // no identity service should show no `@` picker at all, rather than one that
+  // opens and can never fill.
+  const searchIdentities = useMemo(
+    () => (identityClient ? (query: string) => identityClient.searchIdentities(query) : undefined),
+    [identityClient]
+  );
   const openWorkItem = useMemo(
     () => (workItemClient ? (id: number) => void workItemClient.openWorkItem(id) : undefined),
     [workItemClient]
@@ -2520,6 +2540,8 @@ export function WikiBrowser({
                 onChange={setDraftContent}
                 onResolveImageSrc={resolveImageSrc}
                 onLoadImage={loadImageObjectUrl}
+                onLoadMention={loadMention}
+                onSearchIdentities={searchIdentities}
                 onUploadAttachment={uploadAttachment}
                 value={draftContent}
               />
@@ -2530,6 +2552,7 @@ export function WikiBrowser({
                 onChange={setDraftContent}
                 onCreateDiagram={handleCreateDiagram}
                 onListAttachments={listWikiAttachments}
+                onSearchIdentities={searchIdentities}
                 onUploadAttachment={uploadAttachment}
                 pages={pageLinks}
                 value={draftContent}
@@ -2543,6 +2566,7 @@ export function WikiBrowser({
                     onChange={setDraftContent}
                     onCreateDiagram={handleCreateDiagram}
                     onListAttachments={listWikiAttachments}
+                    onSearchIdentities={searchIdentities}
                     onUploadAttachment={uploadAttachment}
                     pages={pageLinks}
                     value={draftContent}

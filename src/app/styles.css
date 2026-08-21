@@ -789,6 +789,45 @@ body {
   cursor: default;
 }
 
+/* The `@` mention picker in the rich text editor. Positioned at the caret, so
+   it is absolute within the editor shell rather than in the toolbar flow. */
+.wiki-richtext-mention-picker {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border-strong);
+  border-radius: 4px;
+  box-shadow: var(--pw-menu-shadow);
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  min-width: 240px;
+  overflow: auto;
+  position: absolute;
+  z-index: 5;
+}
+
+.wiki-richtext-mention-item {
+  background: transparent;
+  border: 0;
+  color: var(--pw-text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 2px;
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.wiki-richtext-mention-item:hover,
+.wiki-richtext-mention-item.active {
+  background: var(--pw-hover);
+}
+
+.wiki-richtext-mention-detail {
+  color: var(--pw-text-secondary);
+  font-size: var(--pw-font-size-s);
+}
+
 .powerwiki-work-item-list {
   display: flex;
   flex-direction: column;
@@ -2370,8 +2409,11 @@ button.wiki-move-option:hover {
   text-decoration: none;
 }
 
-/* An @<guid> identity mention, resolved to the person's display name. */
-.markdown-preview .powerwiki-mention {
+/* An @<guid> identity mention, resolved to the person's display name. Styled in
+   the rich text editor too: there it is a chip the author is writing, and an
+   unstyled one is indistinguishable from the prose around it. */
+.markdown-preview .powerwiki-mention,
+.wiki-richtext-editor .powerwiki-mention {
   background: var(--pw-selected);
   border-radius: 3px;
   color: var(--pw-accent);
@@ -2381,7 +2423,8 @@ button.wiki-move-option:hover {
 }
 
 /* The identity could not be resolved — stay neutral rather than shouting. */
-.markdown-preview .powerwiki-mention-unresolved {
+.markdown-preview .powerwiki-mention-unresolved,
+.wiki-richtext-editor .powerwiki-mention-unresolved {
   background: var(--pw-subtle);
   color: var(--pw-text-secondary);
   font-weight: 400;

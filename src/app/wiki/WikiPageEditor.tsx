@@ -16,6 +16,7 @@ import { diagramMarkdown } from "../../drawio/drawioDiagram";
 import type { WikiAttachment } from "../../wiki/WikiPage";
 import { MERMAID_SNIPPETS } from "./mermaidSnippets";
 import { formatEditorLoadError, loadMonaco, type MonacoApi } from "./monacoLoader";
+import { registerMentionCompletions, setMentionSearchHandler, type MentionSearch } from "./mentionCompletions";
 import { registerSlashCommands, setDiagramCommandHandler } from "./slashCommands";
 
 /** A wiki page offered by the page-link picker. */
@@ -32,6 +33,12 @@ interface WikiPageEditorProps {
   /** Uploads a pasted/dropped/picked file and returns its wiki reference. */
   readonly onUploadAttachment?: UploadAttachment;
   /**
+   * Searches people and teams for the `@` mention picker. Absent where the host
+   * has no identity service, which turns the picker off rather than offering one
+   * that can never fill.
+   */
+  readonly onSearchIdentities?: MentionSearch;
+  /**
    * Opens the draw.io editor for a new diagram, resolving with the stored
    * attachment once saved (or undefined if the user closes without saving).
    */
@@ -41,7 +48,7 @@ interface WikiPageEditorProps {
   readonly value: string;
 }
 
-export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAttachments, onUploadAttachment, pages, value }: WikiPageEditorProps) {
+export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAttachments, onSearchIdentities, onUploadAttachment, pages, value }: WikiPageEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<MonacoApi | undefined>(undefined);
@@ -95,6 +102,7 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
 
         monacoRef.current = monaco;
         registerSlashCommands(monaco);
+        registerMentionCompletions(monaco);
         const editor = monaco.editor.create(container, {
           automaticLayout: false,
           fontFamily: 'Consolas, "Courier New", monospace',
@@ -597,6 +605,13 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
     setDiagramCommandHandler(() => void createDiagram());
     return () => setDiagramCommandHandler(undefined);
   }, [createDiagram, onCreateDiagram]);
+
+  // Same shape as the diagram command: the completion provider is registered
+  // once for the language, but the search it runs belongs to this editor's host.
+  useEffect(() => {
+    setMentionSearchHandler(onSearchIdentities);
+    return () => setMentionSearchHandler(undefined);
+  }, [onSearchIdentities]);
 
   // Handles paste (images only, so plain text paste is untouched) and drop of
   // files onto the editor. Registered in the capture phase so it runs before

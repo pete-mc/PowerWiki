@@ -495,6 +495,27 @@ workflow. Start the dev server on port 3000 and the hub loads *your* working
 tree. Only a non-localhost `baseUri` — a tunnel origin, say — would pin the
 build to one machine and need republishing to move.
 
+**Stop the dev server with Ctrl+C, and check nothing is left behind.**
+`tools/serve/serve.mjs --watch` spawns `webpack --watch` as a child and only
+stops it on SIGINT, so killing the server any other way — `pkill -f serve.mjs`,
+closing the terminal, a supervisor restart — leaves the watcher running. It is
+invisible, it keeps rebuilding on every file change, and it writes to the same
+`dist/`.
+
+Two or more of them race, and the loser's write is not truncated: the result is a
+bundle with a valid prefix and the tail of another build stapled on. `webpack
+compiled successfully` is printed by each of them, the file size looks
+reasonable, and the failure surfaces in the browser as a bare
+`Uncaught SyntaxError: Unexpected token '='` from a line no source file
+contains. This VM had accumulated **fourteen** orphaned watchers, the oldest five
+days old, before anyone noticed.
+
+Check with `ps -eo pid,etime,cmd | grep '[w]ebpack'` — an `etime` in days is
+always an orphan. Kill them by pid, then `rm -rf dist` and rebuild, because the
+corrupt file survives an incremental build. Beware that
+`pkill -f "webpack --mode development --watch"` matches the shell running it and
+kills itself first.
+
 The HTTPS server generates a self-signed localhost certificate on first run
 (`tools/serve/`); accept it once in your browser. `npm run pw:verify` sets
 `ignoreHTTPSErrors`, so the unattended harness never sees the interstitial.
@@ -615,7 +636,11 @@ layers above. **It is automated: pushing a version tag triggers
 `.github/workflows/release.yml`, which packages the extension, publishes it to the
 Marketplace, and attaches the `.vsix` to a GitHub Release.**
 
-1. Increment only the patch version (the third number) in both `package.json` and `vss-extension.json`. Never change the major or minor version.
+1. Bump the version in **both** `package.json` and `vss-extension.json`, and keep
+   them identical — the release workflow refuses a tag that does not match both.
+   Patch for fixes, documentation and store-listing changes; **minor for a user-
+   visible feature**. Major stays reserved for a break in how pages are stored or
+   what the extension asks permission for, which has not happened yet.
 2. Run `npm test`.
 3. Commit the completed change set with a clear, concise commit message.
 4. Create an annotated Git tag for the patch version (for example, `v1.0.15`).

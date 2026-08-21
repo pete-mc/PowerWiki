@@ -192,6 +192,20 @@ export interface WikiHostDialogs {
 
 export interface IdentityProvider {
   getMentionIdentity(id: string): Promise<MentionIdentity>;
+  /**
+   * People and teams matching a partial name, for the editors' `@` picker.
+   *
+   * The same host identity service that resolves a mention already searches by
+   * name, so this costs no scope beyond what rendering a mention costs: the
+   * lookup runs in the parent frame under the signed-in user's session rather
+   * than through the extension's own token. Asking for `vso.identity` or
+   * `vso.graph` instead would park the extension in "Pending review" until every
+   * installed organisation's administrator re-approved it.
+   *
+   * Returns an empty list rather than throwing when there are no matches, so a
+   * picker can distinguish "nobody by that name" from "the search broke".
+   */
+  searchIdentities(query: string): Promise<readonly MentionIdentity[]>;
 }
 
 export interface WikiHost {

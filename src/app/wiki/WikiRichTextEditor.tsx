@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import MarkdownIt from "markdown-it";
-import TurndownService from "turndown";
-import { gfm } from "turndown-plugin-gfm";
 
 import { adoImageSizePlugin } from "../../rendering/adoImageSizePlugin";
+import { MENTION_ATTR, MENTION_SELECTOR, adoMentionsPlugin } from "../../rendering/adoMentionsPlugin";
+import { createRichTextTurndown } from "./richTextTurndown";
 import { looseHeadingsPlugin } from "../../rendering/looseHeadingsPlugin";
 import {
   filesFromDataTransfer,
   isImageFile,
   type UploadAttachment,
 } from "../../wiki/attachmentUpload";
+import type { MentionIdentity } from "../../rendering/MarkdownPreview";
+import type { MentionSearch } from "./mentionCompletions";
+import { searchMentions } from "./mentionCompletions";
+import { insideExistingMention, matchMentionTrigger } from "./mentionTrigger";
 
 interface WikiRichTextEditorProps {
   readonly currentPath?: string;
@@ -28,6 +32,10 @@ interface WikiRichTextEditorProps {
    * there — the "insert link" button would silently do nothing.
    */
   readonly onPrompt?: (message: string, defaultValue?: string) => Promise<string | undefined>;
+  /** Resolves a mention's GUID to a display name, so a chip reads as a person. */
+  readonly onLoadMention?: (id: string) => Promise<MentionIdentity>;
+  /** Searches people and teams for the `@` picker. Absent turns the picker off. */
+  readonly onSearchIdentities?: MentionSearch;
   readonly value: string;
 }
 
@@ -39,6 +47,8 @@ export function WikiRichTextEditor({
   onLoadImage,
   onUploadAttachment,
   onPrompt,
+  onLoadMention,
+  onSearchIdentities,
   value,
 }: WikiRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -53,6 +63,13 @@ export function WikiRichTextEditor({
   // Position of the floating table toolbar (relative to the shell), or null when
   // the caret is not inside a table.
   const [tableUi, setTableUi] = useState<{ top: number; left: number } | null>(null);
+  // The open `@` picker: where to draw it, what it found, and which row is
+  // highlighted. Null when there is no active trigger.
+  const [mentionUi, setMentionUi] = useState<
+    { top: number; left: number; matches: readonly MentionIdentity[]; active: number } | null
+  >(null);
+  // Guards against a slow search landing after the user typed on or dismissed.
+  const mentionQueryRef = useRef("");
   // Kept in refs so the memoized renderer's image rule always resolves against
   // the current page/resolver without rebuilding the renderer.
   const resolveImageRef = useRef(onResolveImageSrc);
@@ -106,6 +123,50 @@ export function WikiRichTextEditor({
     }
   }, []);
 
+  /**
+   * Replaces each mention placeholder's text with the person's name.
+   *
+   * The stored Markdown is a GUID, and the plugin renders it as "@…" until
+   * something resolves it. In a WYSIWYG editor an unresolved GUID is worse than
+   * useless - the author cannot tell who they mentioned - so this does for the
+   * editable surface what the preview's enrichment does for the rendered page.
+   *
+   * Best-effort: a name that will not resolve leaves the chip as it was rather
+   * than emptying it, and the data attribute is untouched either way, so what
+   * gets saved never depends on whether the lookup succeeded.
+   */
+  const nameMentions = useCallback(
+    (root: HTMLElement) => {
+      for (const chip of Array.from(root.querySelectorAll<HTMLElement>(MENTION_SELECTOR))) {
+        const id = chip.getAttribute(MENTION_ATTR);
+        if (!id) {
+          continue;
+        }
+
+        // Atomic, and this is not cosmetic. A mention is a single value: without
+        // it the caret can sit *inside* the chip - which is where Ctrl+End lands
+        // when a mention ends the document - and anything typed there joins the
+        // span. The Turndown rule then writes the chip out as its identity and
+        // the typed words are gone. Seen happening before this line existed.
+        chip.contentEditable = "false";
+
+        if (!onLoadMention || chip.dataset.powerwikiMentionNamed === "1") {
+          continue;
+        }
+        chip.dataset.powerwikiMentionNamed = "1";
+        onLoadMention(id)
+          .then((identity) => {
+            chip.textContent = `@${identity.displayName}`;
+            chip.title = identity.uniqueName ?? identity.displayName;
+          })
+          .catch(() => {
+            // Leave the placeholder; the mention itself is still intact.
+          });
+      }
+    },
+    [onLoadMention]
+  );
+
   const renderer = useMemo(() => {
     // The image-size plugin is shared with the preview renderer: without it
     // markdown-it rejects `![alt](x.png =500x250)` outright, and Turndown would
@@ -116,6 +177,7 @@ export function WikiRichTextEditor({
     // back out in the canonical `# Title` form).
     const md = new MarkdownIt({ breaks: false, html: false, linkify: true, typographer: true })
       .use(adoImageSizePlugin)
+      .use(adoMentionsPlugin)
       .use(looseHeadingsPlugin);
     // Resolve stored image paths (e.g. "/.attachments/x.png") to a displayable
     // URL for the editable surface, keeping the original path in data-wiki-src
@@ -144,49 +206,7 @@ export function WikiRichTextEditor({
     };
     return md;
   }, []);
-  const turndown = useMemo(() => {
-    const service = new TurndownService({
-      bulletListMarker: "-",
-      codeBlockStyle: "fenced",
-      emDelimiter: "_",
-      headingStyle: "atx",
-      hr: "---",
-      linkStyle: "inlined"
-    });
-
-    // GFM support so HTML tables, strikethrough, and task lists round-trip to
-    // Markdown table/`~~`/`- [ ]` syntax instead of being flattened to text.
-    service.use(gfm);
-
-    // Keep line-break intentions when users hit Enter+Shift in rich text mode.
-    service.addRule("lineBreak", {
-      filter: "br",
-      replacement: () => "  \n"
-    });
-
-    // Emit the portable wiki path (stashed in data-wiki-src when an image was
-    // resolved for display) instead of the resolved CDN URL, so stored Markdown
-    // stays readable in the built-in Azure DevOps Wiki.
-    service.addRule("wikiImage", {
-      filter: "img",
-      replacement: (_content, node) => {
-        const element = node as HTMLElement;
-        const src = element.getAttribute("data-wiki-src") || element.getAttribute("src") || "";
-        if (!src) {
-          return "";
-        }
-        const alt = element.getAttribute("alt") ?? "";
-        const url = src.replace(/ /g, "%20");
-        // Preserve an authored `=WxH` size across the round trip.
-        const width = element.getAttribute("width") ?? "";
-        const height = element.getAttribute("height") ?? "";
-        const size = width || height ? ` =${width}x${height}` : "";
-        return `![${alt}](${url}${size})`;
-      }
-    });
-
-    return service;
-  }, []);
+  const turndown = useMemo(() => createRichTextTurndown(), []);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -201,7 +221,8 @@ export function WikiRichTextEditor({
     editor.innerHTML = value.trim().length > 0 ? renderer.render(value) : "<p><br></p>";
     lastAppliedValueRef.current = value;
     swapAttachmentImages(editor);
-  }, [renderer, swapAttachmentImages, value]);
+    nameMentions(editor);
+  }, [nameMentions, renderer, swapAttachmentImages, value]);
 
   function runCommand(command: string, commandValue?: string) {
     if (disabled) {
@@ -492,6 +513,144 @@ export function WikiRichTextEditor({
     fileInputRef.current?.click();
   }
 
+  const closeMentionPicker = useCallback(() => {
+    mentionQueryRef.current = "";
+    setMentionUi(null);
+  }, []);
+
+  /**
+   * Writes the picked identity in place of the "@query" the user typed.
+   *
+   * Goes through execCommand rather than direct DOM surgery so the insertion
+   * joins the browser's own undo stack - a mention inserted here has to be
+   * undoable with Ctrl+Z like every other edit in this editor.
+   */
+  const insertMention = useCallback(
+    (identity: MentionIdentity) => {
+      const editor = editorRef.current;
+      const selection = window.getSelection();
+      if (!editor || !selection || selection.rangeCount === 0) {
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const node = range.startContainer;
+      if (node.nodeType !== Node.TEXT_NODE || !editor.contains(node)) {
+        closeMentionPicker();
+        return;
+      }
+
+      const textUpToCaret = (node.textContent ?? "").slice(0, range.startOffset);
+      const trigger = matchMentionTrigger(textUpToCaret);
+      if (!trigger) {
+        closeMentionPicker();
+        return;
+      }
+
+      // Select the "@query" so insertHTML replaces it rather than appending.
+      range.setStart(node, trigger.atIndex);
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      const escapedId = identity.id.replace(/"/g, "&quot;");
+      const escapedName = identity.displayName
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<span class="powerwiki-mention" contenteditable="false" ${MENTION_ATTR}="${escapedId}" data-powerwiki-mention-named="1">@${escapedName}</span>&nbsp;`
+      );
+      closeMentionPicker();
+      syncMarkdownFromDom();
+    },
+    [closeMentionPicker]
+  );
+
+  /**
+   * Looks at the text before the caret and opens, updates or closes the picker.
+   *
+   * Runs on every input and caret move, so it must be cheap when there is no
+   * trigger - which is nearly always. `matchMentionTrigger` answers that from
+   * the text alone, and only a genuine trigger reaches the identity service.
+   */
+  const refreshMentionPicker = useCallback(() => {
+    const editor = editorRef.current;
+    const shell = shellRef.current;
+    const selection = window.getSelection();
+    if (!onSearchIdentities || !editor || !shell || !selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE || !editor.contains(node)) {
+      closeMentionPicker();
+      return;
+    }
+
+    const textUpToCaret = (node.textContent ?? "").slice(0, range.startOffset);
+    if (insideExistingMention(textUpToCaret)) {
+      closeMentionPicker();
+      return;
+    }
+
+    const trigger = matchMentionTrigger(textUpToCaret);
+    const query = trigger?.query.trim() ?? "";
+    if (!trigger || query.length < 2) {
+      closeMentionPicker();
+      return;
+    }
+
+    mentionQueryRef.current = query;
+    const caret = range.getBoundingClientRect();
+    const shellBox = shell.getBoundingClientRect();
+    // A collapsed range at the start of a line reports a zero rect; fall back to
+    // the editor's own box so the picker still appears somewhere sensible.
+    const top = (caret.bottom || editor.getBoundingClientRect().top) - shellBox.top + 4;
+    const left = (caret.left || editor.getBoundingClientRect().left) - shellBox.left;
+
+    void searchMentions(query, onSearchIdentities)
+      .then((matches) => {
+        // Discard results for a query the user has already typed past.
+        if (mentionQueryRef.current !== query) {
+          return;
+        }
+        setMentionUi(matches.length > 0 ? { top, left, matches, active: 0 } : null);
+      })
+      .catch(() => setMentionUi(null));
+  }, [closeMentionPicker, onSearchIdentities]);
+
+  /** Arrow/Enter/Escape belong to the picker while it is open. */
+  const handleMentionKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (!mentionUi) {
+        return false;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        setMentionUi((ui) =>
+          ui ? { ...ui, active: (ui.active + step + ui.matches.length) % ui.matches.length } : ui
+        );
+        return true;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        insertMention(mentionUi.matches[mentionUi.active]);
+        return true;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMentionPicker();
+        return true;
+      }
+      return false;
+    },
+    [closeMentionPicker, insertMention, mentionUi]
+  );
+
   return (
     <div className="wiki-richtext-shell" ref={shellRef}>
       <div className="wiki-richtext-toolbar" role="toolbar" aria-label="Rich text formatting">
@@ -543,11 +702,27 @@ export function WikiRichTextEditor({
           event.preventDefault();
           void uploadFiles(files);
         }}
-        onBlur={() => setTableUi(null)}
+        onBlur={() => {
+          setTableUi(null);
+          // Deferred: a click on a picker row blurs the editor before the click
+          // lands, and closing here immediately would unmount the row first.
+          window.setTimeout(closeMentionPicker, 150);
+        }}
         onInput={(event) => {
           const markdown = turndown.turndown(event.currentTarget.innerHTML);
           lastAppliedValueRef.current = markdown;
           onChange(markdown);
+          refreshMentionPicker();
+        }}
+        onKeyDown={(event) => {
+          handleMentionKeyDown(event);
+        }}
+        onKeyUp={(event) => {
+          // Caret moves that are not edits (arrows, Home/End) can leave or enter
+          // a trigger, and onInput does not fire for them.
+          if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
+            refreshMentionPicker();
+          }
         }}
         onPaste={(event) => {
           if (!onUploadAttachment) {
@@ -564,6 +739,37 @@ export function WikiRichTextEditor({
         role="textbox"
         suppressContentEditableWarning
       />
+      {mentionUi ? (
+        <div
+          aria-label="Mention a person or team"
+          className="wiki-richtext-mention-picker"
+          // Keep the caret: a mousedown that stole focus would collapse the
+          // selection the insertion needs.
+          onMouseDown={(event) => event.preventDefault()}
+          role="listbox"
+          style={{ left: mentionUi.left, top: mentionUi.top }}
+        >
+          {mentionUi.matches.map((identity, index) => (
+            <button
+              aria-selected={index === mentionUi.active}
+              className={
+                index === mentionUi.active
+                  ? "wiki-richtext-mention-item active"
+                  : "wiki-richtext-mention-item"
+              }
+              key={identity.id}
+              onClick={() => insertMention(identity)}
+              role="option"
+              type="button"
+            >
+              <span className="wiki-richtext-mention-name">{identity.displayName}</span>
+              {identity.uniqueName ? (
+                <span className="wiki-richtext-mention-detail">{identity.uniqueName}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {tableUi ? (
         <div
           className="wiki-richtext-table-tools"
