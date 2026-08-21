@@ -83,7 +83,8 @@ export async function createAzureDevOpsWikiHost(surface: AzureDevOpsSurface = "h
   );
 }
 
-class AzureDevOpsWikiHost implements WikiHost {
+/** Exported for tests; construct through `createAzureDevOpsWikiHost` in real code. */
+export class AzureDevOpsWikiHost implements WikiHost {
   public readonly capabilities: WikiHostCapabilities;
   public readonly context: WikiHostContext;
   public readonly dialogs = browserDialogs;
@@ -93,10 +94,12 @@ class AzureDevOpsWikiHost implements WikiHost {
   public readonly workItems?: WorkItemProvider;
   public readonly linkedPages?: LinkedPagesProvider;
   public readonly searchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
+  private readonly onWorkItem: boolean;
 
   public constructor(context: WikiHostContext, surface: AzureDevOpsSurface = "hub") {
     this.context = context;
     const onWorkItem = surface === "workItem";
+    this.onWorkItem = onWorkItem;
     this.capabilities = {
       comments: true,
       follow: true,
@@ -163,6 +166,30 @@ class AzureDevOpsWikiHost implements WikiHost {
    * that fallback is actually reachable.
    */
   public getNavigation(): Promise<WikiHostNavigation | undefined> {
+    // The work item form must not own the route, and this is not a preference.
+    //
+    // The host navigation service writes the *top page's* URL, not the
+    // extension iframe's. Azure DevOps keeps the open work item dialog in that
+    // same URL - a work item opened from a backlog or board is
+    // `...?workitem=601` - so writing a hash there is a route change, and a
+    // route change dismisses the dialog. Selecting a linked page therefore shut
+    // the work item the user was reading, which looked like a random modal
+    // dismissal rather than anything the tab did.
+    //
+    // Measured, not deduced: opening 601 from the backlog and clicking the tab
+    // took the URL from `?workitem=601` to
+    // `?workitem=601#/PowerWiki%20Showcase/Mermaid%20Gallery`, and the dialog
+    // went with it.
+    //
+    // There is nothing to lose by declining. A hash here would be a route into
+    // one tab of one work item, which is not a place anyone links to; the
+    // shareable link to the page itself is `buildPageUrl`, which is unaffected.
+    // The app already supports a host with no navigation - the sandbox has none
+    // - so this degrades to remembering nothing across a reload.
+    if (this.onWorkItem) {
+      return Promise.resolve(undefined);
+    }
+
     return resolveWithinTimeout(
       SDK.getService<WikiHostNavigation>(HOST_NAVIGATION_SERVICE_ID),
       HOST_NAVIGATION_TIMEOUT_MS

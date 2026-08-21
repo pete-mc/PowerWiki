@@ -233,30 +233,53 @@ and don't try to shorten the tab to a glyph by blanking `name` — an unlabelled
 tab is not a documented state, and the one approximation (an emoji in `name`) is
 unthemed and unreadable to a screen reader.
 
-**What has *not* been established about the work item dialog.** The form opened
-as a modal from the backlog has been reported to close during interaction with
-the tab. Ruled out from the code: PowerWiki binds no hover, pointer, focus or
-blur handler anywhere, and DOM events do not cross an iframe boundary, so nothing
-here can propagate an `Escape` or a click to the host dialog's dismiss handler.
-The one call that provably navigated the open form was
-`WorkItemFormNavigationService.openWorkItem()` on the item already on screen —
-the rail's old "Manage links…" button — and it is gone. What remains unverified,
-and would need a devtools repro rather than more reading:
+**The work item form must never write the browser's URL.** This is the cause of
+the "the modal closes by itself" reports, and it is measured rather than
+deduced. The host navigation service (`ms.vss-features.host-navigation-service`)
+writes the **top page's** URL, not the extension iframe's. Azure DevOps keeps the
+open work item dialog in that same URL: an item opened from a backlog or board is
+`..._backlogs/backlog/<team>/Issues?workitem=601`. So a hash written from the tab
+is a route change on the page the dialog belongs to, and the dialog is dismissed.
+
+Driving the canary with `tools/pw/`, opening 601 from the backlog and clicking the
+tab took the URL from `?workitem=601` to
+`?workitem=601#/PowerWiki%20Showcase/Mermaid%20Gallery`, and the `[role="dialog"]`
+count went 1 → 0 in the same step. Any action that changes the active page did it:
+selecting a linked page, and linking a new one (which then opens it). Full screen
+was unaffected, because there is no dialog for the route change to dismiss — which
+is exactly why it looked intermittent and unrelated to what the user had clicked.
+
+`getNavigation()` therefore returns `undefined` on the `workItem` surface, and the
+route lives on the iframe's own URL instead. The app already supports a host with
+no navigation service — the sandbox has none — so this degrades to not restoring a
+page across a reload, on a surface where a URL into one tab of one work item was
+never a place anyone links to. `buildPageUrl` is untouched, so the shareable link
+to the page itself still works. `azureDevOpsWikiHostNavigation.test.ts` pins it,
+including that the hub still asks, so the check cannot pass vacuously.
+
+**What is still unverified about that surface:**
 
 - Whether the `work-item-form-page` iframe carries `allow-modals`. The hub's does
   (`browserDialogs` works there); the form page's is a different host surface and
   has never been checked. Without it `window.confirm` returns **false** silently,
-  which would make a confirm-guarded action look dead rather than broken.
-  `IHostPageLayoutService.openMessageDialog` is the supported alternative.
+  which would make a confirm-guarded action — the rail's unlink button — look dead
+  rather than broken. `IHostPageLayoutService.openMessageDialog` is the supported
+  alternative.
 - Whether `openWorkItem()` called from *inside* a dialog stacks, replaces, or
-  closes it. Undocumented.
+  closes it. Undocumented. The one call that provably navigated the open form was
+  the rail's old "Manage links…" button, on the item already on screen, and it is
+  gone.
+
+Ruled out, so do not re-investigate: PowerWiki binds no hover, pointer, focus or
+blur handler anywhere, and DOM events do not cross an iframe boundary, so nothing
+here can propagate an `Escape` or a click to the host dialog's dismiss handler.
+Chrome's removal of `alert`/`confirm`/`prompt` in cross-origin iframes is **not** a
+factor — it shipped in Chrome 92, broke the web, was rolled back, and is marked
+"No longer pursuing".
 
 One thing that *is* documented: a `work-item-form-page` contribution is unloaded
 the moment the dialog closes, which is why `onSaved` has to be observed from a
-`ms.vss-work-web.work-item-notifications` contribution instead. Chrome's removal
-of `alert`/`confirm`/`prompt` in cross-origin iframes is **not** a factor — it
-shipped in Chrome 92, broke the web, was rolled back, and is marked "No longer
-pursuing".
+`ms.vss-work-web.work-item-notifications` contribution instead.
 
 **Anything read back out of the rendered DOM has not been sanitized.**
 `sanitizeRenderedHtml` runs once, before the HTML is inserted; the preview's
