@@ -95,7 +95,6 @@
       "properties": {
         "name": "Power Wiki",
         "uri": "dist/powerwiki-workitem.html",
-        "icon": "media/logo_new.png",
         "order": 30
       }
     }
