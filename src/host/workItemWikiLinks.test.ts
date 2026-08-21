@@ -6,6 +6,7 @@ import {
   linkedWikiPagesFrom,
   parseWikiArtifactUrl,
   wikiPageRelation,
+  wikiPageRelationsFor,
 } from "./workItemWikiLinks";
 
 const PROJECT = "adf21ddb-12ae-4355-924a-8121484e984e";
@@ -110,5 +111,41 @@ describe("alreadyLinked", () => {
 
   it("does not confuse a different page", () => {
     expect(alreadyLinked([relation(REAL_URL)], "/Home")).toBe(false);
+  });
+});
+
+describe("wikiPageRelationsFor", () => {
+  it("returns the relation object it was given, not a rebuilt one", () => {
+    // Identity is the point: `removeWorkItemRelations` is handed relations back,
+    // and one reconstructed from the path would be missing whatever the form
+    // service attached to the real one.
+    const real = relation(REAL_URL);
+    const found = wikiPageRelationsFor([real], "/PowerWiki Showcase/Mermaid Gallery");
+
+    expect(found).toHaveLength(1);
+    expect(found[0]).toBe(real);
+  });
+
+  it("matches a path written without its leading slash", () => {
+    expect(wikiPageRelationsFor([relation(REAL_URL)], "PowerWiki Showcase/Mermaid Gallery")).toHaveLength(1);
+  });
+
+  it("returns every relation linking the same page, so unlinking clears it", () => {
+    const first = relation(REAL_URL);
+    const second = relation(REAL_URL, "Wiki Page", "added twice");
+
+    expect(wikiPageRelationsFor([first, second], "/PowerWiki Showcase/Mermaid Gallery")).toEqual([first, second]);
+  });
+
+  it("leaves other pages, other artifact links and other rels alone", () => {
+    const other = relation(buildWikiArtifactUrl({ projectId: PROJECT, wikiId: WIKI, path: "/Home" }));
+    const commit = relation("vstfs:///Git/Commit/abc", "Fixed in Commit");
+    const child = { rel: "System.LinkTypes.Hierarchy-Forward", url: "https://example/1" };
+
+    expect(wikiPageRelationsFor([other, commit, child], "/PowerWiki Showcase/Mermaid Gallery")).toEqual([]);
+  });
+
+  it("finds nothing when the page is not linked", () => {
+    expect(wikiPageRelationsFor([relation(REAL_URL)], "/Home")).toEqual([]);
   });
 });

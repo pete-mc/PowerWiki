@@ -3110,8 +3110,7 @@ button.wiki-move-option:hover {
   text-transform: uppercase;
 }
 
-.powerwiki-linked-add,
-.powerwiki-linked-manage {
+.powerwiki-linked-add {
   background: none;
   border: 1px solid var(--pw-border);
   border-radius: 2px;
@@ -3122,14 +3121,8 @@ button.wiki-move-option:hover {
   padding: 2px 8px;
 }
 
-.powerwiki-linked-add:hover,
-.powerwiki-linked-manage:hover {
+.powerwiki-linked-add:hover {
   background: var(--pw-hover);
-}
-
-.powerwiki-linked-manage {
-  align-self: flex-start;
-  margin: 4px 12px;
 }
 
 .powerwiki-linked-picker {
@@ -3193,6 +3186,13 @@ button.wiki-move-option:hover {
   padding: 0;
 }
 
+/* Title and unlink share the row, so the title takes the slack and the icon
+   keeps a fixed width rather than being squeezed by a long page name. */
+.powerwiki-linked-row {
+  align-items: stretch;
+  display: flex;
+}
+
 .powerwiki-linked-item {
   background: none;
   border: none;
@@ -3211,6 +3211,42 @@ button.wiki-move-option:hover {
 
 .powerwiki-linked-item:hover {
   background: var(--pw-hover);
+}
+
+/* Destructive, so it is the one place in the rail that leaves the neutral
+   palette — the --pw-danger token, which the delete actions elsewhere use, not a
+   fresh hex. It stays legible on light, dark and custom Azure DevOps themes
+   because only the foreground is coloured and the hover tint is translucent.
+   Muted until the row is hovered or the button focused, so a rail of linked
+   pages does not read as a row of warnings. */
+.powerwiki-linked-unlink {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 2px;
+  color: var(--pw-danger);
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  margin-right: 6px;
+  opacity: 0.55;
+  padding: 0 6px;
+}
+
+.powerwiki-linked-row:hover .powerwiki-linked-unlink,
+.powerwiki-linked-unlink:focus-visible {
+  opacity: 1;
+}
+
+.powerwiki-linked-unlink:hover {
+  background: var(--pw-danger-hover);
+  opacity: 1;
+}
+
+.powerwiki-linked-unlink:disabled {
+  color: var(--pw-disabled-text);
+  cursor: default;
+  opacity: 0.55;
 }
 
 .powerwiki-linked-item.active {
@@ -3245,4 +3281,13 @@ button.wiki-move-option:hover {
   color: var(--pw-error, #a4262c);
   font-size: 12px;
   margin: 4px 12px;
+}
+
+/* Shown in the content area on the work item form when nothing is linked. */
+.powerwiki-linked-placeholder p {
+  max-width: 62ch;
+}
+
+.powerwiki-linked-placeholder-note {
+  color: var(--pw-text-secondary);
 }

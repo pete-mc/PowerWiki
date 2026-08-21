@@ -109,7 +109,11 @@ class AzureDevOpsWikiHost implements WikiHost {
       // The wiki a page belongs to is a property of each link, so there is
       // nothing for a picker to choose between.
       wikiSelector: !onWorkItem,
-      search: !onWorkItem && Boolean(context.organizationName && context.projectName),
+      // Whether to offer the box, not whether full-text search works — an
+      // organisation-less hub still matches page titles locally, and
+      // `searchContent` is what reports that. On the work item form there is
+      // nowhere to come back from a whole-wiki result, so it is off.
+      search: !onWorkItem,
       permalinks: true,
       printToPdf: true,
       // Handing the wiki over to VS Code belongs to the full hub, not to a tab

@@ -60,7 +60,13 @@ export interface WikiHostCapabilities {
   readonly linkedPages: boolean;
   /** The wiki picker. Off where the host already chose the wiki (a VS Code editor tab). */
   readonly wikiSelector: boolean;
-  /** Full-text search across pages. */
+  /**
+   * Whether a search box belongs on this surface at all. Distinct from
+   * `searchContent`, which says whether *full-text* search is reachable: a host
+   * that offers the box but no content search still matches page titles from
+   * the pages it has in memory. Off on the work item form, which exists to show
+   * one item's linked pages rather than to browse the wiki.
+   */
   readonly search: boolean;
   /** Shareable absolute deep links to a page/heading. */
   readonly permalinks: boolean;
@@ -116,9 +122,10 @@ export interface LinkedWikiPage {
 /**
  * The wiki pages linked to the work item currently on screen.
  *
- * Present only on the work item form surface. Adding goes through the host's
- * form service rather than the REST API, so it needs no write scope: the link
- * is added to the open form and the user saves the work item as usual.
+ * Present only on the work item form surface. Adding and removing go through
+ * the host's form service rather than the REST API, so neither needs a write
+ * scope: the change is made to the open form and the user saves the work item
+ * as usual.
  */
 export interface LinkedPagesProvider {
   list(): Promise<readonly LinkedWikiPage[]>;
@@ -128,8 +135,13 @@ export interface LinkedPagesProvider {
    * unsaved change.
    */
   add(page: { readonly wikiId: string; readonly path: string }): Promise<void>;
-  /** Opens the work item's own Links tab, where links can be removed. */
-  openLinksTab(): Promise<void>;
+  /**
+   * Unlinks a page from the open work item. Same bargain as `add`: the form is
+   * left dirty, so the removal is committed by saving and abandoned by
+   * discarding. Callers confirm first — this is destructive from the reader's
+   * point of view even though the page itself is untouched.
+   */
+  remove(page: { readonly path: string }): Promise<void>;
 }
 
 export interface WorkItemProvider {

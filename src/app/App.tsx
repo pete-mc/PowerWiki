@@ -28,9 +28,15 @@ export function App({ error, host, logoUrl = "../media/logo_new.png", status }: 
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [pageByline, setPageByline] = useState<WikiPageBylineProps>();
   const [pageTitle, setPageTitle] = useState<string>();
-  // Full-text search lives in the header, next to the brand, and renders its
-  // results into the content area — so the query is owned here and handed down,
-  // while the tree's name filter stays private to the browser.
+  // Search lives in the header, next to the brand, and renders its results into
+  // the content area — so the query is owned here and handed down, while the
+  // tree's name filter stays private to the browser.
+  //
+  // It is rendered only where the host says search belongs. The work item form
+  // is the case that matters: searching the whole wiki from a tab that exists to
+  // show one item's linked pages takes the reader somewhere the tab cannot show
+  // them back from. `capabilities.search` said so already and nothing read it,
+  // which is why the box appeared there anyway.
   const [searchQuery, setSearchQuery] = useState("");
   const headerTitle = useMemo(() => {
     if (status === "loading") {
@@ -88,7 +94,7 @@ export function App({ error, host, logoUrl = "../media/logo_new.png", status }: 
                 <span>Version {packageMetadata.version}</span>
               </div>
             </div>
-            {status === "ready" ? (
+            {status === "ready" && host?.capabilities.search ? (
               <div className="powerwiki-header-search">
                 <input
                   aria-label="Search all pages"

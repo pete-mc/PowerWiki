@@ -108,3 +108,32 @@ export function wikiPageRelation(
 export function alreadyLinked(relations: readonly WorkItemRelationLike[], path: string): boolean {
   return linkedWikiPagesFrom(relations).some((page) => page.path === path);
 }
+
+/**
+ * The relations that link the given page, returned as the *same objects* the
+ * caller passed in.
+ *
+ * Identity matters: `removeWorkItemRelations` is handed relations back, and a
+ * freshly built one would have to match whatever shape the form service reports
+ * — including any attributes it added, such as the link's id and comment. Find
+ * the real ones and hand those over instead of reconstructing them.
+ *
+ * A list rather than one relation, because nothing stops a work item holding two
+ * links to the same page (added through the Links tab, or by two people before
+ * either saved); unlinking should clear the page, not leave a survivor behind.
+ * The path is compared after parsing, so the encoded artifact URL and the
+ * leading-slash convention are normalised on both sides.
+ */
+export function wikiPageRelationsFor<T extends WorkItemRelationLike>(
+  relations: readonly T[],
+  path: string
+): T[] {
+  const wanted = path.startsWith("/") ? path : `/${path}`;
+  return relations.filter((relation) => {
+    if (relation.rel !== ARTIFACT_LINK_REL || relation.attributes?.name !== WIKI_LINK_NAME) {
+      return false;
+    }
+    const parsed = relation.url ? parseWikiArtifactUrl(relation.url) : undefined;
+    return parsed?.path === wanted;
+  });
+}
