@@ -151,7 +151,7 @@ The current implementation provides a working Power Wiki experience:
 - Inbound-link updates on page rename/move, with a preview/confirm dialog.
 - Word (.docx) and PDF export: single page or an ordered multi-page set, with native Word heading styles, native Word math (OMML), Mermaid images, query tables, and embedded HTML. The Word path rasterizes each diagram through a canvas, so it renders Mermaid with plain SVG text labels — an SVG containing a `<foreignObject>` (Mermaid's default HTML labels) taints the canvas and cannot be turned into an image. PDF/print embeds the SVG directly and keeps the HTML labels.
 - Word export through a customer's own template, chosen per export or stored once per wiki. See [Word export templates](#word-export-templates).
-- A **Power Wiki** tab on the work item form listing that item's linked wiki pages, with full rendering and editing. See [Power Wiki on the work item form](#power-wiki-on-the-work-item-form).
+- A **Power Wiki** tab on the work item form listing that item's linked wiki pages, with full rendering, editing, linking and unlinking. In the other direction, a **Linked work items** panel on the page byline lists the work items that link to the page. See [Power Wiki on the work item form](#power-wiki-on-the-work-item-form).
 - draw.io diagrams: draw one with the editor's **Diagram** button (or `/Diagram`), and reopen any stored diagram from the **Edit diagram** button — on hover in the preview, or in the zoom overlay's toolbar. See [draw.io diagrams](#drawio-diagrams).
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
 - Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki.
@@ -197,12 +197,49 @@ only *looks* slash-separated: everything after `vstfs:///Wiki/WikiPage/` is a
 single URL-encoded `projectId/wikiId/pagePath`, so parsing must decode before
 splitting or it breaks on the first nested page.
 
-**This needs no additional scope.** Reading and adding links go through
-`IWorkItemFormService`, which acts on the open form as the signed-in user rather
-than through the extension's REST token, so `vso.work` stays read-only and no
-installed organization has to re-authorize. Adding leaves the form dirty instead
-of saving, so an accidental link is discarded like any other unsaved change.
-Removing links is left to the work item's own Links tab, which already owns it.
+**This needs no additional scope.** Reading, adding and removing links go
+through `IWorkItemFormService`, which acts on the open form as the signed-in user
+rather than through the extension's REST token, so `vso.work` stays read-only and
+no installed organization has to re-authorize. Adding and unlinking leave the
+form dirty instead of saving, so an accidental change is discarded like any other
+unsaved one. Unlinking hands back the relation objects the service reported
+rather than rebuilding them: a rebuilt relation lacks whatever the service
+attached to it and silently removes nothing.
+
+**The tab must not write the browser's URL.** The host navigation service writes
+the *top page's* URL, and Azure DevOps keeps an open work item dialog in that same
+URL (`..._backlogs/backlog/<team>/Issues?workitem=601`). A hash written from the
+tab is therefore a route change on the page the dialog belongs to, and it
+dismisses the dialog — which presented as the work item closing at random.
+`getNavigation()` returns `undefined` on this surface for that reason; see
+`AGENTS.md` for the measurements.
+
+**The tab cannot carry an icon.** `icon`/`iconName` work for hubs, menus and
+toolbars, not for tab contributions, so the tab is text-only however the manifest
+is written.
+
+### The other direction: work items linked to a page
+
+The hub shows the reverse view — a **Linked work items** count on the page byline
+that opens a panel of the work items linking to that page.
+
+Azure DevOps stores the relationship on the work item, so there is no wiki-side
+index to read. The list comes from `ArtifactUriQuery`
+(`queryWorkItemsForArtifactUris`), which resolves an artifact URI to the work
+items referencing it. That is a read covered by the `vso.work` scope already
+declared, so the reverse view costs no new permission either. The query matches
+URIs case-insensitively and echoes back whatever casing it was sent, so
+`workItemIdsForArtifactUri` looks the response up case-insensitively rather than
+indexing it with the string it sent.
+
+Open items sort first, newest first within each group; closed ones are dimmed and
+sorted last. "Closed" is a state *category* (`Completed`, `Removed`), not a state
+name, because every process names its states differently — and an item whose
+category cannot be resolved counts as open rather than being buried.
+
+It is deliberately read-only. Creating a link from the wiki side means writing to
+the work item, which needs `vso.work_write` — a scope every installed
+organization would have to re-consent to.
 
 ## Theming
 

@@ -54,13 +54,23 @@
 
 ## Documentation where the work happens
 
-Wiki pages are linked to work items using Azure DevOps' own **Wiki Page** links — the ones already on the work item's Links tab. PowerWiki just makes them useful.
+Wiki pages are linked to work items using Azure DevOps' own **Wiki Page** links — the ones already on the work item's Links tab. PowerWiki makes them useful, in both directions.
 
-- **A real tab on the work item form**, beside Details, History and Links, marked with the PowerWiki logo.
+**From the work item:**
+
+- **A real tab on the work item form**, beside Details, History and Links.
 - **The full page, not a preview.** Mermaid, math, callouts, work item badges and query tables all render, and the page can be **edited and saved** right there.
 - **The rail lists this item's linked pages**, so a work item with several documents is one click between them.
 - **Link a page with Add** — search the wiki, pick a page, done. The link is added to the open work item and kept when you save it, exactly like any other change.
-- **No new permissions.** Linking goes through the work item form itself, so PowerWiki still asks only for read access to work items and your organisation does not have to re-approve anything.
+- **Unlink from the same rail**, behind a confirmation, without going to find the Links tab.
+- **Works in the modal form**, opened from a backlog or board, as well as full screen.
+
+**From the wiki page:**
+
+- **Linked work items** sits on the page byline next to Comments, with a count, and opens a panel listing every work item that links to the page — type icon, id, state and title. Click one to open it.
+- **Finished work stands down.** Closed and removed items sort to the bottom and are dimmed, so what is still open reads first.
+
+**No new permissions either way.** Linking goes through the work item form itself, and the reverse lookup is a read, so PowerWiki still asks only for read access to work items and your organisation does not have to re-approve anything.
 
 ![The Power Wiki tab on an Azure DevOps work item, listing the item's linked wiki pages beside the rendered page](https://raw.githubusercontent.com/pete-mc/PowerWiki/main/media/screenshots/powerwiki-workitem.png)
 
@@ -89,7 +99,7 @@ PowerWiki stores nothing outside your wiki's Git repository. Every page remains 
 ## Requirements & permissions
 
 - An Azure DevOps project with at least one wiki (Services; Server where extension APIs are available).
-- Scopes: **Wiki (read/write)** for pages and attachments; **Work Items (read)** for badges and query tables; **Code (read)** for page history, the byline, and attachment listings from the wiki's Git repository; **Notifications (write)** for follow/unfollow page subscriptions.
+- Scopes: **Wiki (read/write)** for pages and attachments; **Work Items (read)** for badges, query tables, and the links between pages and work items; **Code (read)** for page history, the byline, and attachment listings from the wiki's Git repository; **Notifications (write)** for follow/unfollow page subscriptions.
 - Light, dark, and custom Azure DevOps themes are detected automatically.
 
 ## Open source
