@@ -21,6 +21,8 @@ export class SandboxWikiHost implements WikiHost {
     pageTree: true,
     // Only the work item form lists linked pages instead of the tree.
     linkedPages: false,
+    // Nothing to query links against: the sandbox has no work item store.
+    linkedWorkItems: false,
     wikiSelector: true,
     search: true,
     permalinks: false,

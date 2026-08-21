@@ -36,12 +36,12 @@ export function WikiCommentsPanel({
   };
 
   return (
-    <aside className="powerwiki-comments" aria-label="Page comments">
-      <div className="powerwiki-comments-header">
+    <aside className="powerwiki-sidecar powerwiki-comments" aria-label="Page comments">
+      <div className="powerwiki-sidecar-header">
         <h2>Comments</h2>
         <button
           aria-label="Close comments"
-          className="powerwiki-comments-close"
+          className="powerwiki-sidecar-close"
           onClick={onClose}
           type="button"
         >
@@ -49,13 +49,13 @@ export function WikiCommentsPanel({
         </button>
       </div>
 
-      <div className="powerwiki-comments-list">
+      <div className="powerwiki-sidecar-list">
         {loading ? (
-          <p className="powerwiki-comments-status" aria-live="polite">Loading comments…</p>
+          <p className="powerwiki-sidecar-status" aria-live="polite">Loading comments…</p>
         ) : error ? (
-          <p className="powerwiki-comments-status" role="alert">{error}</p>
+          <p className="powerwiki-sidecar-status" role="alert">{error}</p>
         ) : comments.length === 0 ? (
-          <p className="powerwiki-comments-status">No comments yet. Start the conversation.</p>
+          <p className="powerwiki-sidecar-status">No comments yet. Start the conversation.</p>
         ) : (
           comments.map((comment) => (
             <article className="powerwiki-comment" key={comment.id}>

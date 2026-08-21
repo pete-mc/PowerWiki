@@ -215,6 +215,49 @@ wrapped in the service's own `<highlighthit>` markup around wiki content, so the
 are parsed into `{ text, isMatch }` segments and rendered as React text nodes —
 they must never reach `innerHTML`.
 
+**The work item form tab cannot have an icon, and cannot be icon-only.**
+Microsoft documents it plainly on the extensibility-points reference: `icon` and
+`iconName` "work for hubs, menus, and toolbars only. They don't work for tab
+contributions." The `ms.vss-work-web.work-item-form-page` schema exposes only
+`name` and `uri`, and `name` is the sole source of the tab's label — the on-prem
+layout XML confirms it, where `<ControlContribution>` takes a `Label` and
+`<PageContribution>` takes none. Azure DevOps *does* render icon-only pivots on
+that form (History, Links, Attachments), but does not expose the capability to
+extensions.
+
+`media/screenshots/powerwiki-workitem.png`, shot against the published build, is
+the proof: the same `media/logo_new.png` renders beside the hub entries in the
+left rail and is absent from all three "Power Wiki" form tabs. The `icon` on that
+contribution was therefore dead weight and has been removed. Don't add it back,
+and don't try to shorten the tab to a glyph by blanking `name` — an unlabelled
+tab is not a documented state, and the one approximation (an emoji in `name`) is
+unthemed and unreadable to a screen reader.
+
+**What has *not* been established about the work item dialog.** The form opened
+as a modal from the backlog has been reported to close during interaction with
+the tab. Ruled out from the code: PowerWiki binds no hover, pointer, focus or
+blur handler anywhere, and DOM events do not cross an iframe boundary, so nothing
+here can propagate an `Escape` or a click to the host dialog's dismiss handler.
+The one call that provably navigated the open form was
+`WorkItemFormNavigationService.openWorkItem()` on the item already on screen —
+the rail's old "Manage links…" button — and it is gone. What remains unverified,
+and would need a devtools repro rather than more reading:
+
+- Whether the `work-item-form-page` iframe carries `allow-modals`. The hub's does
+  (`browserDialogs` works there); the form page's is a different host surface and
+  has never been checked. Without it `window.confirm` returns **false** silently,
+  which would make a confirm-guarded action look dead rather than broken.
+  `IHostPageLayoutService.openMessageDialog` is the supported alternative.
+- Whether `openWorkItem()` called from *inside* a dialog stacks, replaces, or
+  closes it. Undocumented.
+
+One thing that *is* documented: a `work-item-form-page` contribution is unloaded
+the moment the dialog closes, which is why `onSaved` has to be observed from a
+`ms.vss-work-web.work-item-notifications` contribution instead. Chrome's removal
+of `alert`/`confirm`/`prompt` in cross-origin iframes is **not** a factor — it
+shipped in Chrome 92, broke the web, was rolled back, and is marked "No longer
+pursuing".
+
 **Anything read back out of the rendered DOM has not been sanitized.**
 `sanitizeRenderedHtml` runs once, before the HTML is inserted; the preview's
 enrichers then read attributes back out and write them to real sinks. DOMPurify

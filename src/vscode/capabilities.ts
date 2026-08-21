@@ -30,6 +30,8 @@ export const VS_CODE_CAPABILITIES: WikiHostCapabilities = {
   pageTree: false,
   // The work item form's rail, which only exists on the Azure DevOps side.
   linkedPages: false,
+  // Off a clone there is no work item store to ask what links to a page.
+  linkedWorkItems: false,
   // The editor tab has already chosen the wiki.
   wikiSelector: false,
   // A local scan over the wiki's files.

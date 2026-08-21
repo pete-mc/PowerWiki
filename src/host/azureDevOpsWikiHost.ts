@@ -35,6 +35,7 @@ import type {
   WorkItemProvider
 } from "./WikiHost";
 import { WorkItemFormLinkedPages } from "./workItemFormLinkedPages";
+import { buildWikiArtifactUrl } from "./workItemWikiLinks";
 
 /**
  * Which Azure DevOps surface this host is serving. The hub is the full wiki
@@ -109,7 +110,16 @@ class AzureDevOpsWikiHost implements WikiHost {
       // The wiki a page belongs to is a property of each link, so there is
       // nothing for a picker to choose between.
       wikiSelector: !onWorkItem,
-      search: !onWorkItem && Boolean(context.organizationName && context.projectName),
+      // Whether to offer the box, not whether full-text search works — an
+      // organisation-less hub still matches page titles locally, and
+      // `searchContent` is what reports that. On the work item form there is
+      // nowhere to come back from a whole-wiki result, so it is off.
+      search: !onWorkItem,
+      // The mirror of `linkedPages`, and off for the same reason it is on: on a
+      // work item form the work item is already on screen, so listing it as a
+      // link back to itself says nothing. Needs the project GUID, which is half
+      // of the artifact URI the query matches on.
+      linkedWorkItems: !onWorkItem && Boolean(context.projectName && context.projectId),
       permalinks: true,
       printToPdf: true,
       // Handing the wiki over to VS Code belongs to the full hub, not to a tab
@@ -199,6 +209,16 @@ class AzureDevOpsHostWorkItems implements WorkItemProvider {
   public async getQueryTable(queryId: string): Promise<QueryTableResult> {
     const result = await this.client.getQueryTable(queryId);
     return { ...result, nativeUrl: this.hubUrl(`_queries/query/${encodeURIComponent(queryId)}/`) };
+  }
+
+  public getLinkedWorkItems(page: { readonly wikiId: string; readonly path: string }) {
+    // The artifact URI is composed here rather than above the host interface:
+    // its shape is Azure DevOps' own, and it is the same builder the work item
+    // form writes links with, so the two cannot drift into disagreeing about
+    // what a link to a page looks like.
+    return this.client.getLinkedWorkItems(
+      buildWikiArtifactUrl({ projectId: this.context.projectId ?? "", wikiId: page.wikiId, path: page.path })
+    );
   }
 
   public async openWorkItem(id: number): Promise<void> {

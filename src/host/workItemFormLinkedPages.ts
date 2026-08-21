@@ -7,9 +7,10 @@
 // `vso.work_write` scope for this, and shipping it costs installed
 // organisations no administrator re-authorisation.
 //
-// Adding deliberately leaves the form dirty instead of calling `save()`. A link
-// added by accident is then undone the way every other work item change is —
-// by discarding it — rather than being committed the instant it is clicked.
+// Adding and removing deliberately leave the form dirty instead of calling
+// `save()`. A link added or dropped by accident is then undone the way every
+// other work item change is — by discarding it — rather than being committed
+// the instant it is clicked.
 
 import * as SDK from "azure-devops-extension-sdk";
 import {
@@ -18,7 +19,12 @@ import {
 } from "azure-devops-extension-api/WorkItemTracking";
 
 import type { LinkedPagesProvider, LinkedWikiPage } from "./WikiHost";
-import { alreadyLinked, linkedWikiPagesFrom, wikiPageRelation } from "./workItemWikiLinks";
+import {
+  alreadyLinked,
+  linkedWikiPagesFrom,
+  wikiPageRelation,
+  wikiPageRelationsFor,
+} from "./workItemWikiLinks";
 
 export class WorkItemFormLinkedPages implements LinkedPagesProvider {
   private readonly projectId: string;
@@ -46,17 +52,21 @@ export class WorkItemFormLinkedPages implements LinkedPagesProvider {
     ]);
   }
 
-  public async openLinksTab(): Promise<void> {
-    // Removing a link is the work item form's own job — it owns the Links tab,
-    // and duplicating deletion here would be a second place to get it wrong.
+  public async remove(page: { readonly path: string }): Promise<void> {
     const service = await formService();
-    const id = await service.getId();
-    SDK.getService<{ openWorkItem(id: number): void }>(
-      WorkItemTrackingServiceIds.WorkItemFormNavigationService
-    ).then(
-      (navigation) => navigation.openWorkItem(id),
-      () => undefined
-    );
+
+    // Read the relations back and remove the objects the service itself
+    // reported. `removeWorkItemRelations` matches what it is handed against the
+    // form's own list, and a relation rebuilt from the path would differ in any
+    // attribute the service had added — so removal would silently do nothing.
+    const relations = wikiPageRelationsFor(await service.getWorkItemRelations(), page.path);
+    if (relations.length === 0) {
+      // Already gone: someone removed it on the Links tab, or two rails are
+      // open on the same item. Saying so beats a no-op that looks like a bug.
+      throw new Error("That page is no longer linked to this work item.");
+    }
+
+    await service.removeWorkItemRelations(relations);
   }
 }
 

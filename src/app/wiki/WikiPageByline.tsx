@@ -1,5 +1,5 @@
 import type { WikiPageChange } from "../../wiki/WikiComment";
-import { CommentIcon } from "./WikiPageIcons";
+import { CommentIcon, WorkItemLinkIcon } from "./WikiPageIcons";
 
 export interface WikiPageBylineProps {
   readonly change?: WikiPageChange;
@@ -12,6 +12,14 @@ export interface WikiPageBylineProps {
    */
   readonly commentsOpen?: boolean;
   readonly onToggleComments?: () => void;
+  readonly linkedWorkItemCount?: number;
+  /**
+   * Linked work item state, omitted where the host cannot answer "what links to
+   * this page?" — off a clone there is no work item store, and on the work item
+   * form the answer is the item already on screen.
+   */
+  readonly linkedWorkItemsOpen?: boolean;
+  readonly onToggleLinkedWorkItems?: () => void;
 }
 
 /**
@@ -24,6 +32,9 @@ export function WikiPageByline({
   commentCount,
   commentsOpen,
   onToggleComments,
+  linkedWorkItemCount,
+  linkedWorkItemsOpen,
+  onToggleLinkedWorkItems,
 }: WikiPageBylineProps) {
   const author = change?.authorName ?? (changeLoading ? "Loading" : "Not available");
   const when = change?.date ? formatDate(change.date) : (changeLoading ? "Loading" : "Not available");
@@ -51,6 +62,19 @@ export function WikiPageByline({
           <CommentIcon />
           <span>Comments</span>
           <span className="wiki-byline-comment-count">{commentCount ?? 0}</span>
+        </button>
+      ) : null}
+      {onToggleLinkedWorkItems ? (
+        <button
+          aria-label={linkedWorkItemsOpen ? "Hide linked work items" : "Show linked work items"}
+          aria-pressed={linkedWorkItemsOpen}
+          className={linkedWorkItemsOpen ? "wiki-byline-comments active" : "wiki-byline-comments"}
+          onClick={onToggleLinkedWorkItems}
+          type="button"
+        >
+          <WorkItemLinkIcon />
+          <span>Linked work items</span>
+          <span className="wiki-byline-comment-count">{linkedWorkItemCount ?? 0}</span>
         </button>
       ) : null}
     </div>

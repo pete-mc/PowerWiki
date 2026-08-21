@@ -100,6 +100,28 @@ export function CommentIcon({ className }: IconProps) {
   );
 }
 
+/** Two links of a chain, for the work items linking to a page. */
+export function WorkItemLinkIcon({ className }: IconProps) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M6.5 9.5a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 0 0-3.54-3.54l-.9.9" />
+      <path d="M9.5 6.5a2.5 2.5 0 0 0-3.54 0l-2 2a2.5 2.5 0 0 0 3.54 3.54l.9-.9" />
+    </svg>
+  );
+}
+
+/** A waste-bin glyph, used for destructive actions such as unlinking a page. */
+export function TrashIcon({ className }: IconProps) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M2.75 4.25h10.5" />
+      <path d="M6.25 4.25V2.75a.5.5 0 0 1 .5-.5h2.5a.5.5 0 0 1 .5.5v1.5" />
+      <path d="M4.25 4.25l.6 8.4a.75.75 0 0 0 .75.6h4.8a.75.75 0 0 0 .75-.6l.6-8.4" />
+      <path d="M6.75 6.75v4M9.25 6.75v4" />
+    </svg>
+  );
+}
+
 /** A close (X) glyph. */
 export function CloseIcon({ className }: IconProps) {
   return (

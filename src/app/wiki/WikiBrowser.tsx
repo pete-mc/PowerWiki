@@ -16,6 +16,7 @@ import type { LinkedWikiPage, WikiHost, WikiHostNavigation } from "../../host/Wi
 import type { WikiPage, WikiPageSummary, WikiSummary } from "../../wiki/WikiPage";
 import { buildWikiPageTree } from "../../wiki/WikiPageTree";
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "../../wiki/WikiComment";
+import type { LinkedWorkItemsResult } from "../../workItems/LinkedWorkItem";
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from "./draftStore";
 import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
 import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
@@ -31,7 +32,9 @@ import { toExportImage } from "../../export/imageMeta";
 import type { ExportImage } from "../../export/types";
 import { splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 import { StatusMessage } from "./StatusMessage";
+import { WikiLinkedPagesPlaceholder } from "./WikiLinkedPagesPlaceholder";
 import { WikiCommentsPanel } from "./WikiCommentsPanel";
+import { WikiLinkedWorkItemsPanel } from "./WikiLinkedWorkItemsPanel";
 import { WikiRichTextEditor } from "./WikiRichTextEditor";
 import { WikiMovePageDialog } from "./WikiMovePageDialog";
 import type { WikiPageBylineProps } from "./WikiPageByline";
@@ -41,6 +44,9 @@ import { WikiSearchResults } from "./WikiSearchResults";
 import { filterWikiPageTree } from "./wikiTreeFilter";
 import { CollapsePanelIcon, ExpandPanelIcon, PlusIcon } from "./WikiPageIcons";
 import { WikiSelector } from "./WikiSelector";
+
+/** Stable empty result, so clearing between pages is not a new object each time. */
+const NO_LINKED_WORK_ITEMS: LinkedWorkItemsResult = { items: [] };
 
 /* Long enough to stay clear of the initial load, short enough that the
    upgrade lands before most people reach for the filter. */
@@ -388,6 +394,10 @@ export function WikiBrowser({
   const [commentsError, setCommentsError] = useState<string>();
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [linkedWorkItems, setLinkedWorkItems] = useState<LinkedWorkItemsResult>(NO_LINKED_WORK_ITEMS);
+  const [linkedWorkItemsLoading, setLinkedWorkItemsLoading] = useState(false);
+  const [linkedWorkItemsError, setLinkedWorkItemsError] = useState<string>();
+  const [linkedWorkItemsOpen, setLinkedWorkItemsOpen] = useState(false);
   const [splitRatio, setSplitRatio] = useState(56);
   // Non-empty means the nav rail is showing search results instead of the tree.
   const [treeFilter, setTreeFilter] = useState("");
@@ -446,60 +456,100 @@ export function WikiBrowser({
   const [linkedPages, setLinkedPages] = useState<readonly LinkedWikiPage[]>([]);
   const [linkedPagesLoading, setLinkedPagesLoading] = useState(false);
   const [linkedPagesError, setLinkedPagesError] = useState<string>();
-  // Which wiki the prefetch has already been started for. A ref rather than
-  // state on purpose: an in-flight flag kept in state would be a dependency of
-  // the effect that sets it, so the effect would re-run, its cleanup would fire,
-  // and the request it had just started would be discarded on arrival.
-  const prefetchedWikiRef = useRef<string | undefined>(undefined);
+  // Whether the whole-wiki list is on its way, and why it failed if it did.
+  // Only the work item rail's picker shows either: there the list *is* the
+  // navigation, so "still loading" and "could not load" are different from
+  // "this wiki has no other pages". The tree ignores both and stays lazy.
+  const [allPagesLoading, setAllPagesLoading] = useState(false);
+  const [allPagesError, setAllPagesError] = useState<string>();
+  // The request in flight (or already finished) for a given wiki. A ref rather
+  // than state on purpose: an in-flight flag kept in state would be a dependency
+  // of the effect that sets it, so the effect would re-run, its cleanup would
+  // fire, and the request it had just started would be discarded on arrival.
+  const allPagesRequestRef = useRef<{ wikiId: string; promise: Promise<void> } | undefined>(undefined);
+
+  // Switching wikis invalidates the copy; so does any edit that adds, removes or
+  // moves a page, so the tree cannot keep offering a page that no longer exists.
+  // Falling back to the lazy list is safe — the fetch simply runs again.
+  //
+  // Declared *before* the two loaders below, because effects run in declaration
+  // order: an invalidation running afterwards would clear the request they had
+  // just registered, and the same list would then be fetched twice.
+  useEffect(() => {
+    allPagesRequestRef.current = undefined;
+    setAllPages(undefined);
+    setAllPagesError(undefined);
+  }, [activeWikiId]);
+
+  // One fetch of the whole page list per wiki, shared by the background prefetch
+  // below and by the work item rail's picker, which asks for it the moment it
+  // opens rather than waiting the prefetch out.
+  const loadAllPages = useCallback(async () => {
+    const client = wikiClient;
+    const wikiId = activeWikiId;
+    if (!client || !wikiId) {
+      return;
+    }
+    if (allPagesRequestRef.current?.wikiId === wikiId) {
+      return allPagesRequestRef.current.promise;
+    }
+
+    setAllPagesLoading(true);
+    setAllPagesError(undefined);
+    // Tagged with the wiki it came from, so a response that arrives after the
+    // user switched wikis is ignored by every consumer rather than shown.
+    const promise = client
+      .getAllPages(wikiId)
+      .then((pages) => {
+        setAllPages({ pages, wikiId });
+      })
+      .catch((error: unknown) => {
+        // Logged rather than swallowed, because silent failure here looks like
+        // a filter bug. The tree simply stays lazy, which is how it behaved
+        // before the prefetch existed; only the picker says anything.
+        console.warn("PowerWiki: could not load the full page list.", error);
+        setAllPagesError(formatError(error));
+        // Let a later attempt retry rather than pinning the failure forever.
+        allPagesRequestRef.current = undefined;
+      })
+      .finally(() => {
+        setAllPagesLoading(false);
+      });
+
+    allPagesRequestRef.current = { wikiId, promise };
+    return promise;
+  }, [activeWikiId, wikiClient]);
 
   useEffect(() => {
     if (!wikiClient || !activeWikiId || loadState !== "ready") {
       return;
     }
-    if (prefetchedWikiRef.current === activeWikiId) {
+    if (allPagesRequestRef.current?.wikiId === activeWikiId) {
       return;
     }
 
-    prefetchedWikiRef.current = activeWikiId;
-
-    let cancelled = false;
     // Deferred so it competes with neither the first paint nor the first page
     // fetch; this is a background upgrade, not part of getting on screen.
     const handle = window.setTimeout(() => {
-      if (cancelled) {
-        return;
-      }
-
-      wikiClient
-        .getAllPages(activeWikiId)
-        .then((pages) => {
-          if (!cancelled) {
-            setAllPages({ pages, wikiId: activeWikiId });
-          }
-        })
-        .catch((error: unknown) => {
-          // Not worth interrupting anyone: without this the tree simply stays
-          // lazy, which is exactly how it behaved before. Logged rather than
-          // swallowed, because silent failure here looks like a filter bug.
-          console.warn("PowerWiki: could not prefetch the full page list.", error);
-          // Let a later attempt retry rather than pinning the failure forever.
-          prefetchedWikiRef.current = undefined;
-        });
+      void loadAllPages();
     }, PREFETCH_DELAY_MS);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [activeWikiId, loadState, wikiClient]);
+  }, [activeWikiId, loadAllPages, loadState, wikiClient]);
 
-  // Switching wikis invalidates the copy; so does any edit that adds, removes or
-  // moves a page, so the tree cannot keep offering a page that no longer exists.
-  // Falling back to the lazy list is safe — the prefetch simply runs again.
+  // On the work item form the same list is not an upgrade, it is the feature:
+  // the rail's picker is the only way to find a page there, and Add is usually
+  // the first thing anyone touches. Waiting out the prefetch delay meant the
+  // picker opened offering the root pages alone, with nothing to say it was
+  // still filling in. Ask for it as soon as the wiki is known instead.
   useEffect(() => {
-    prefetchedWikiRef.current = undefined;
-    setAllPages(undefined);
-  }, [activeWikiId]);
+    if (capabilities.linkedPages && activeWikiId) {
+      void loadAllPages();
+    }
+  }, [activeWikiId, capabilities.linkedPages, loadAllPages]);
+
 
   // One tree, used for browsing and filtering alike: the prefetched copy once it
   // is in memory, the lazily loaded pages until then.
@@ -1280,7 +1330,15 @@ export function WikiBrowser({
 
         // Resolve the initial/deep-linked page, trying hyphen/space variants,
         // then falling back to the wiki home page if the saved path is gone.
-        const targetPath = linkedTarget ?? savedPath ?? chooseInitialPage(rootPages);
+        //
+        // That last fallback is deliberately *not* taken on the work item form.
+        // A work item with nothing linked has no wiki page to show, and landing
+        // on the wiki home page there says the opposite of the truth: it looks
+        // like documentation for this item when it is just the front of the
+        // wiki, with nothing on screen to say so. The content area shows how to
+        // link a page instead (see the linkedPages branch in the render).
+        const homePage = capabilities.linkedPages ? undefined : chooseInitialPage(rootPages);
+        const targetPath = linkedTarget ?? savedPath ?? homePage;
         let initialPage: WikiPage | undefined;
 
         if (targetPath) {
@@ -1293,11 +1351,8 @@ export function WikiBrowser({
             }
           }
 
-          if (!initialPage && savedPath) {
-            const fallback = chooseInitialPage(rootPages);
-            if (fallback) {
-              initialPage = await client.getPage(wikiId, fallback).catch(() => undefined);
-            }
+          if (!initialPage && savedPath && homePage) {
+            initialPage = await client.getPage(wikiId, homePage).catch(() => undefined);
           }
         }
 
@@ -1341,6 +1396,19 @@ export function WikiBrowser({
     onPageTitleChange?.(activePage ? pageTitle(activePage.path) : undefined);
   }, [activePage, loadState, onPageTitleChange]);
 
+  // The two drawers share one grid column, so opening either closes the other.
+  // Narrowing the page to fit both would make the thing you came to read the
+  // smallest part of the screen.
+  const openComments = useCallback(() => {
+    setCommentsOpen((open) => !open);
+    setLinkedWorkItemsOpen(false);
+  }, []);
+
+  const openLinkedWorkItems = useCallback(() => {
+    setLinkedWorkItemsOpen((open) => !open);
+    setCommentsOpen(false);
+  }, []);
+
   useEffect(() => {
     if (!activePage || isEditing) {
       onPageBylineChange?.(undefined);
@@ -1352,13 +1420,33 @@ export function WikiBrowser({
       changeLoading: pageChangeLoading,
       commentCount: capabilities.comments && !commentsLoading ? comments.length : undefined,
       commentsOpen: capabilities.comments ? commentsOpen : undefined,
-      onToggleComments: capabilities.comments ? () => setCommentsOpen((open) => !open) : undefined,
+      onToggleComments: capabilities.comments ? openComments : undefined,
+      linkedWorkItemCount:
+        capabilities.linkedWorkItems && !linkedWorkItemsLoading ? linkedWorkItems.items.length : undefined,
+      linkedWorkItemsOpen: capabilities.linkedWorkItems ? linkedWorkItemsOpen : undefined,
+      onToggleLinkedWorkItems: capabilities.linkedWorkItems ? openLinkedWorkItems : undefined,
     });
 
     return () => {
       onPageBylineChange?.(undefined);
     };
-  }, [activePage, capabilities.comments, comments.length, commentsLoading, commentsOpen, isEditing, onPageBylineChange, pageChange, pageChangeLoading]);
+  }, [
+    activePage,
+    capabilities.comments,
+    capabilities.linkedWorkItems,
+    comments.length,
+    commentsLoading,
+    commentsOpen,
+    isEditing,
+    linkedWorkItems.items.length,
+    linkedWorkItemsLoading,
+    linkedWorkItemsOpen,
+    onPageBylineChange,
+    openComments,
+    openLinkedWorkItems,
+    pageChange,
+    pageChangeLoading,
+  ]);
 
   // Loads the direct children of the active page so a [[_TOSP_]] placeholder can
   // be filled in. Scoped to pages that actually use the placeholder to avoid an
@@ -1473,6 +1561,48 @@ export function WikiBrowser({
     return () => { cancelled = true; };
   }, [activePage, activeWikiId, activeWiki?.repositoryId, activeWiki?.version, capabilities.comments, wikiClient]);
 
+  // The work items linking to this page.
+  //
+  // Loaded with the page rather than when the drawer opens, because the count is
+  // on the byline and a count that only appears after you click the thing it is
+  // meant to label is no use. For a page nothing links to this costs a single
+  // artifact query and no work item read at all.
+  useEffect(() => {
+    if (!activePage || !activeWikiId || !capabilities.linkedWorkItems || !workItemClient) {
+      setLinkedWorkItems(NO_LINKED_WORK_ITEMS);
+      setLinkedWorkItemsError(undefined);
+      setLinkedWorkItemsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLinkedWorkItems(NO_LINKED_WORK_ITEMS);
+    setLinkedWorkItemsError(undefined);
+    setLinkedWorkItemsLoading(true);
+
+    workItemClient
+      .getLinkedWorkItems({ wikiId: activeWikiId, path: activePage.path })
+      .then((result) => {
+        if (!cancelled) {
+          setLinkedWorkItems(result);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (!cancelled) {
+          setLinkedWorkItemsError(formatError(failure));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLinkedWorkItemsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePage?.path, activeWikiId, capabilities.linkedWorkItems, workItemClient]);
+
   const handleNodeExpand = useCallback(
     async (path: string): Promise<void> => {
       if (!wikiClient || !activeWikiId || loadedPaths.has(path)) {
@@ -1552,7 +1682,7 @@ export function WikiBrowser({
         })
       );
 
-      prefetchedWikiRef.current = undefined;
+      allPagesRequestRef.current = undefined;
       setAllPages(undefined);
       const removedParents = new Set(uniqueParents);
       setPageList((prev) => {
@@ -1659,7 +1789,7 @@ export function WikiBrowser({
         // page under its new parent and lazily re-fetch its children.
         const isMoved = (candidate: string) =>
           candidate === sourcePath || candidate.startsWith(`${sourcePath}/`);
-        prefetchedWikiRef.current = undefined;
+        allPagesRequestRef.current = undefined;
         setAllPages(undefined);
         setPageList((prev) => prev.filter((page) => !isMoved(page.path)));
         setLoadedPaths((prev) => new Set([...prev].filter((entry) => !isMoved(entry))));
@@ -1750,20 +1880,27 @@ export function WikiBrowser({
   // The work item's linked pages, re-read after each link so the rail matches
   // the form. This goes through the host's form service rather than the REST
   // API, which is why it needs no work-item write scope.
-  const refreshLinkedPages = useCallback(async () => {
+  const refreshLinkedPagesReturning = useCallback(async (): Promise<readonly LinkedWikiPage[]> => {
     if (!host.linkedPages) {
-      return;
+      return [];
     }
     setLinkedPagesLoading(true);
     setLinkedPagesError(undefined);
     try {
-      setLinkedPages(await host.linkedPages.list());
+      const links = await host.linkedPages.list();
+      setLinkedPages(links);
+      return links;
     } catch (failure: unknown) {
       setLinkedPagesError(formatError(failure));
+      return [];
     } finally {
       setLinkedPagesLoading(false);
     }
   }, [host]);
+
+  const refreshLinkedPages = useCallback(async () => {
+    await refreshLinkedPagesReturning();
+  }, [refreshLinkedPagesReturning]);
 
   useEffect(() => {
     if (capabilities.linkedPages) {
@@ -1782,6 +1919,46 @@ export function WikiBrowser({
       void handlePageSelected(path);
     },
     [activeWikiId, handlePageSelected, host, refreshLinkedPages]
+  );
+
+  // Unlinking is confirmed here rather than in the rail, because the
+  // confirmation belongs to the host: `window.confirm` is unavailable in a
+  // VS Code webview, so `dialogs.confirm` is async and may be a real UI.
+  //
+  // The copy names the page and says when the change lands, because neither is
+  // obvious: the rail shows leaf titles, and the removal only becomes real when
+  // the work item is saved — until then it is undone by discarding the item.
+  const handleUnlinkPage = useCallback(
+    async (page: LinkedWikiPage) => {
+      if (!host.linkedPages) {
+        throw new Error("PowerWiki is still loading this work item. Try again in a moment.");
+      }
+
+      const title = pageTitle(page.path);
+      const confirmed = await dialogs.confirm(
+        `Unlink "${title}" from this work item?\n\n` +
+          "The wiki page itself is not changed. The link is removed when you save the work item."
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      await host.linkedPages.remove({ path: page.path });
+      const remaining = await refreshLinkedPagesReturning();
+      // Leaving the unlinked page on screen would show content the rail no
+      // longer offers a way back to. Move to whatever is still linked, or to the
+      // placeholder that explains how to link something.
+      if (activePage?.path === page.path) {
+        const next = remaining.find((linked) => linked.path !== page.path);
+        if (next) {
+          void handlePageSelected(next.path);
+        } else {
+          setActivePage(undefined);
+          setActiveAnchor(undefined);
+        }
+      }
+    },
+    [activePage?.path, dialogs, handlePageSelected, host, refreshLinkedPagesReturning]
   );
 
   const treeActions = useMemo<WikiPageTreeActions>(
@@ -2151,11 +2328,14 @@ export function WikiBrowser({
         <WikiLinkedPagesRail
           activePath={activePage?.path}
           allPages={pageLinks}
+          allPagesError={allPagesError}
+          allPagesLoading={allPagesLoading}
           error={linkedPagesError}
           loading={linkedPagesLoading}
           onAdd={handleLinkPage}
-          onManage={host.linkedPages ? () => void host.linkedPages?.openLinksTab() : undefined}
+          onPickerOpened={() => void loadAllPages()}
           onSelect={(path) => void handlePageSelected(path)}
+          onUnlink={handleUnlinkPage}
           pages={linkedPages}
         />
       ) : null}
@@ -2441,6 +2621,10 @@ export function WikiBrowser({
               onEditDiagram={handleEditDiagram}
             />
           </>
+        ) : capabilities.linkedPages && loadState !== "loading" ? (
+          // "Select a page to view it" is the hub's answer, and it is the wrong
+          // one here: on the work item form there may be no page to select.
+          <WikiLinkedPagesPlaceholder />
         ) : (
           <StatusMessage
             message={loadState === "loading" ? "Loading wiki content." : "Select a page to view it."}
@@ -2458,6 +2642,17 @@ export function WikiBrowser({
           onClose={() => setCommentsOpen(false)}
           onSubmit={handleAddComment}
           submitting={commentSubmitting}
+        />
+      ) : null}
+
+      {capabilities.linkedWorkItems && activePage && !isEditing && linkedWorkItemsOpen ? (
+        <WikiLinkedWorkItemsPanel
+          error={linkedWorkItemsError}
+          icons={linkedWorkItems.icons}
+          items={linkedWorkItems.items}
+          loading={linkedWorkItemsLoading}
+          onClose={() => setLinkedWorkItemsOpen(false)}
+          onOpen={(id) => void workItemClient?.openWorkItem(id)}
         />
       ) : null}
 

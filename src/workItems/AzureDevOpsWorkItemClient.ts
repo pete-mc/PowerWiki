@@ -10,6 +10,9 @@ import {
   type WorkItemLink
 } from "azure-devops-extension-api/WorkItemTracking";
 
+import type { LinkedWorkItem, LinkedWorkItemsResult } from "./LinkedWorkItem";
+import { workItemIdsForArtifactUri } from "./artifactUriQueryResult";
+
 export interface QueryTableColumn {
   readonly name: string;
   readonly referenceName: string;
@@ -66,6 +69,13 @@ const BADGE_FIELDS = [
 
 const QUERY_TOP = 200;
 
+const LINKED_WORK_ITEM_FIELDS = [
+  "System.WorkItemType",
+  "System.Title",
+  "System.State",
+  "System.AssignedTo"
+];
+
 export class AzureDevOpsWorkItemClient {
   private readonly client = getClient(WorkItemTrackingRestClient);
   private fieldTypesPromise?: Promise<ReadonlyMap<string, FieldType>>;
@@ -83,6 +93,54 @@ export class AzureDevOpsWorkItemClient {
       title: fieldValue(workItem, "System.Title"),
       type: fieldValue(workItem, "System.WorkItemType")
     };
+  }
+
+  /**
+   * The work items linking to a wiki page, given the page's artifact URI.
+   *
+   * Scoped to this project, like every other call here, so the type icons
+   * resolve and the ids are openable in the current form host. A work item in
+   * another project may also link the page; that is rare and is left out rather
+   * than shown as a row that cannot be opened.
+   */
+  public async getLinkedWorkItems(artifactUri: string): Promise<LinkedWorkItemsResult> {
+    const query = await this.client.queryWorkItemsForArtifactUris(
+      { artifactUris: [artifactUri] },
+      this.projectName
+    );
+    const ids = [...workItemIdsForArtifactUri(query, artifactUri)];
+    if (ids.length === 0) {
+      return { items: [] };
+    }
+
+    // Omit rather than fail: a link can outlive the work item it points at, and
+    // one deleted item should not blank the whole list.
+    const workItems = await this.client.getWorkItems(
+      ids,
+      this.projectName,
+      LINKED_WORK_ITEM_FIELDS,
+      undefined,
+      undefined,
+      WorkItemErrorPolicy.Omit
+    );
+
+    // Newest first. The artifact query returns relation order, which is the
+    // order the links happened to be made in and means nothing to a reader.
+    const items: LinkedWorkItem[] = workItems.map((workItem) => ({
+      id: workItem.id,
+      assignedToName: fieldValue(workItem, "System.AssignedTo"),
+      state: fieldValue(workItem, "System.State"),
+      title: fieldValue(workItem, "System.Title"),
+      type: fieldValue(workItem, "System.WorkItemType")
+    }));
+
+    items.sort((left, right) => right.id - left.id);
+
+    const typeNames = new Set(
+      items.map((item) => item.type).filter((type): type is string => Boolean(type))
+    );
+
+    return { icons: await this.resolveTypeIcons(typeNames), items };
   }
 
   public async getQueryTable(queryId: string): Promise<QueryTableResult> {
