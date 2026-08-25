@@ -3317,11 +3317,40 @@ button.wiki-move-option:hover {
   padding: 0 1px;
 }
 
+/* Scrolling flex columns: their children must not shrink.
+ *
+ * A `flex-direction: column` box with a bounded height distributes that height
+ * among its children, and `overflow-y: auto` does not stop it — flex sizing runs
+ * first. So a long list does not scroll, it *compresses*: measured on the work
+ * item Add picker, fifty candidates in a 220px box came out 8px tall each with
+ * their text clipped, and stayed unreadable until the search narrowed the list
+ * enough for the rows to relax. That reads as a rendering bug with no obvious
+ * cause, because nothing in the markup or the overflow rule is wrong.
+ *
+ * Every list below is one of these boxes, so every one pins its children at
+ * their natural height and lets the container scroll instead. Add the same line
+ * to any new scrolling flex column. */
+.powerwiki-linked-candidate,
+.powerwiki-linked-row,
+.powerwiki-work-item-list > li,
+.powerwiki-sidecar-list > .powerwiki-comment {
+  flex: 0 0 auto;
+}
+
+/* The other half of the trap above, and it bites the container rather than the
+   children: a flex item defaults to `min-height: auto`, which refuses to shrink
+   below its content. So this list grew to whatever the page count needed, the
+   rail's `overflow: hidden` clipped the overspill, and `overflow-y: auto` here
+   never engaged — twenty-five linked pages simply ran off the bottom with no way
+   to reach them. `flex: 1` claims the space the header and picker leave, and
+   `min-height: 0` is what actually permits the scroll. */
 .powerwiki-linked-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   list-style: none;
   margin: 0;
+  min-height: 0;
   overflow-y: auto;
   padding: 0;
 }
