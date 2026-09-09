@@ -116,6 +116,19 @@ try {
     .catch(() => {});
   const byline = await frame.$eval(".wiki-byline", (el) => el.textContent || "").catch(() => "");
   check(byline.length > 0 && !/Not available|Loading/.test(byline), "byline shows author/date on Home");
+  // The split view lines its panes up by reading `data-powerwiki-line` off the
+  // rendered blocks, so their absence would break scroll sync silently in the
+  // real host while every sandbox test still passed. Asserting it here proves
+  // the renderer plugin reached the published bundle; the sync behaviour itself
+  // is above the host boundary and is covered by tools/e2e.
+  // Wait rather than sample: the shell mounts before the Markdown renders, and
+  // an instant check reports "missing" for a build that is merely still
+  // rendering - which is indistinguishable from the feature being absent.
+  await frame.waitForSelector("[data-powerwiki-line]", { timeout: 30000 }).catch(() => {});
+  check(
+    (await frame.$$("[data-powerwiki-line]")).length > 0,
+    "rendered blocks carry their source line (split-view scroll sync)"
+  );
   await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-home.png") });
 
   // Host tab title reflects the active page name. The extension runs in a
