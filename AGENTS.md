@@ -764,8 +764,13 @@ reproduces against the *published* build as readily as a new one.
 
 Three things follow, all already in the harness:
 
-- The launch disables `DownloadBubble`/`DownloadBubbleV2` and passes
-  `--disable-dev-shm-usage`. A mitigation, not a proven cure.
+- **`pw:verify` runs headless.** The crash is in the browser process's download
+  UI, and headless has none; `PW_HEADED=1` opens a window in the Xvfb session
+  when you want to watch. `pw:auth` stays headed, because signing in needs a
+  real window. Disabling `DownloadBubble`/`DownloadBubbleV2` and passing
+  `--disable-dev-shm-usage` came first and was **not** enough on its own - a run
+  crashed in the same place immediately afterwards, so do not treat those flags
+  as the fix.
 - A lost browser is reported **once**, as an infrastructure crash rather than a
   product failure. Without that it cascades: every later step fails with the
   same "target closed" message and the run reads as a dozen regressions, which

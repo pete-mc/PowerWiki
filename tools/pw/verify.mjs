@@ -75,7 +75,12 @@ async function leaveEditor(page, frame) {
 }
 
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
-const { context, page } = await launch({ headless: false });
+// Headless by default. verify is unattended, and the crash that keeps killing
+// it is a segfault in the *browser process* on the download path - headless has
+// no download UI to crash in. Set PW_HEADED=1 to watch a run in the Xvfb
+// session instead; `npm run pw:auth` is always headed, because signing in needs
+// a real window.
+const { context, page } = await launch({ headless: process.env.PW_HEADED !== "1" });
 // Answer confirms (discard edits, delete) by accepting, and prompts (new page
 // title) with the current promptResponse.
 let promptResponse = "";
