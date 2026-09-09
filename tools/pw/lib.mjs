@@ -60,7 +60,17 @@ export async function launch({ headless = false } = {}) {
     // dev extension, whose manifest points baseUri at the local HTTPS dev server,
     // so without this the hub iframe fails with
     // ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS and the layer is unusable.
-    args: ["--hide-crash-restore-bubble", "--disable-features=LocalNetworkAccessChecks"],
+    // DownloadBubble is off because Chromium 1243 (Chrome 153) segfaults in the
+    // *browser* process on the download path - `Received signal 11 SI_KERNEL`,
+    // `signal=SIGSEGV` - which kills the run mid-suite and takes the cleanup
+    // with it. It is intermittent (the same build completed a full run the same
+    // day), so this is a mitigation of the download UI rather than a proven
+    // cure; keep the crash handling in verify.mjs regardless.
+    args: [
+      "--hide-crash-restore-bubble",
+      "--disable-features=LocalNetworkAccessChecks,DownloadBubble,DownloadBubbleV2",
+      "--disable-dev-shm-usage",
+    ],
     // The dev extension (PW_EXTENSION=powerwiki-dev) loads its assets from the
     // local HTTPS dev server, which uses a self-signed certificate. Without this
     // the iframe fails to load and the failure looks like a missing extension.
@@ -136,6 +146,40 @@ export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
  * delete change per file. Best effort by design: a failure here must never fail
  * an otherwise passing verify, so it reports and moves on.
  */
+/**
+ * Deletes smoke-test attachments left behind by *earlier* runs.
+ *
+ * The end-of-run cleanup goes through the browser's authenticated request
+ * context, so a browser crash takes the cleanup with it and the uploads stay in
+ * the wiki - which is how six of them accumulated in one afternoon. Sweeping at
+ * the start means the next run tidies up after the last one, whatever killed
+ * it, and a crash costs nothing permanent.
+ */
+export async function sweepSmokeAttachments(context) {
+  try {
+    const api = context.request;
+    const wikis = await api.get(`https://dev.azure.com/${ORG}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
+    const all = (await wikis.json()).value;
+    const wiki = all.find((w) => w.type === "projectWiki") ?? all[0];
+    const items = await api.get(
+      `https://dev.azure.com/${ORG}/_apis/git/repositories/${wiki.repositoryId}/items?scopePath=/.attachments&recursionLevel=oneLevel&api-version=7.1`
+    );
+    if (!items.ok()) {
+      return;
+    }
+    const stale = ((await items.json()).value ?? [])
+      .map((item) => item.path)
+      .filter((item) => /\/\.attachments\/pw-smoke-/.test(item));
+    if (stale.length === 0) {
+      return;
+    }
+    console.log(`sweeping ${stale.length} attachment(s) left by an earlier run`);
+    await deleteAttachments(context, stale);
+  } catch (error) {
+    console.log(`attachment sweep skipped (${error.message})`);
+  }
+}
+
 export async function deleteAttachments(context, paths) {
   if (!paths.length) {
     return;

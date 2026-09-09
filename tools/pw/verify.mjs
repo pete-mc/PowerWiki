@@ -10,6 +10,7 @@ import {
   ARTIFACTS_DIR,
   launch,
   deleteAttachments,
+  sweepSmokeAttachments,
   openWikiPage,
   powerWikiFrame,
   readLoadedVersion,
@@ -22,7 +23,25 @@ const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 const failures = [];
+
+// Chromium 1243 segfaults in the browser process on the download path (see
+// AGENTS.md). When it goes, every remaining step fails with the same "target
+// closed" message, and the run reads as a dozen product regressions instead of
+// one infrastructure crash. Report it once, in those terms, and stay quiet
+// afterwards.
+const BROWSER_GONE = /Target (page, context or browser has been closed|closed)|Browser has been closed/;
+let browserGone = false;
+
 function check(condition, message) {
+  if (!condition && BROWSER_GONE.test(message)) {
+    if (browserGone) {
+      return;
+    }
+    browserGone = true;
+    message =
+      "the browser crashed mid-run (Chromium SIGSEGV, not a product failure) - " +
+      `the remaining checks did not run. First symptom: ${message}`;
+  }
   console.log(`${condition ? "PASS" : "FAIL"}: ${message}`);
   if (!condition) {
     failures.push(message);
@@ -98,6 +117,9 @@ page.on("response", async (r) => {
 });
 
 try {
+  // Tidy up after any earlier run that died before its own cleanup could run.
+  await sweepSmokeAttachments(context);
+
   // 1. Home: rendering, work-item/query enrichment, byline.
   let frame = await openWikiPage(page, "#/Home", { timeoutMs: 300000 });
   console.log(`Loaded PowerWiki version: ${(await readLoadedVersion(frame)) || "unknown"}`);

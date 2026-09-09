@@ -754,6 +754,29 @@ Setup and use (details in `tools/pw/README.md`):
 Extend `tools/pw/verify.mjs` with a new assertion whenever you add a feature
 worth guarding, so the harness doubles as a regression smoke test.
 
+**Chromium 1243 segfaults on the download path, intermittently.** Measured with
+`DEBUG=pw:browser*`: the *browser* process dies with `Received signal 11
+SI_KERNEL` and `<process did exit: signal=SIGSEGV>` during the Word export
+download, killing the run mid-suite. It is not deterministic — the same build
+completed a full run the same day — and it is not the product: a fresh-profile
+repro exported the same page three times without incident, and the crash
+reproduces against the *published* build as readily as a new one.
+
+Three things follow, all already in the harness:
+
+- The launch disables `DownloadBubble`/`DownloadBubbleV2` and passes
+  `--disable-dev-shm-usage`. A mitigation, not a proven cure.
+- A lost browser is reported **once**, as an infrastructure crash rather than a
+  product failure. Without that it cascades: every later step fails with the
+  same "target closed" message and the run reads as a dozen regressions, which
+  is exactly how it sent one investigation chasing a Mermaid upgrade.
+- `sweepSmokeAttachments` deletes `pw-smoke-*` leftovers **at the start** of a
+  run. End-of-run cleanup goes through the browser's own request context, so a
+  crash takes the cleanup with it and the uploads stay in the wiki — six of them
+  accumulated in one afternoon before this existed. Note that cleanup deletes by
+  *pushing a commit* to the wiki repository, which is why it can remove an
+  attachment at all: the wiki attachments API is create-only, git is not.
+
 ## Backlog and work items
 
 Work is tracked as Issues under the **Power Wiki** epic (#5) in the **PowerWiki**
