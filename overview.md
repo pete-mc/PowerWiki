@@ -12,7 +12,7 @@
 
 ## Why teams switch
 
-- 🧜 **Today's Mermaid, today's Markdown.** Mermaid v11 (architecture, kanban, sankey, xy-chart, mindmap, timeline and more), GitHub-style callouts, KaTeX math, syntax-highlighted code — instead of the frozen renderers bundled with Azure DevOps.
+- 🧜 **Today's Mermaid, today's Markdown.** Mermaid v11 (architecture, kanban, sankey, xy-chart, mindmap, timeline and more), GitHub-style callouts, KaTeX math, syntax-highlighted code, and every emoji shortcode (`:tada:` 🎉) — instead of the frozen renderers bundled with Azure DevOps.
 - 📤 **Export to Word and PDF — in your own template.** Turn one page, or an ordered set of pages, into a real `.docx` carrying your corporate cover page, headers, footers and styles, or a print-perfect PDF. Diagrams, query tables, and images included.
 - 🕑 **Never lose the thread.** Page history with side-by-side diffs and one-click restore, follow pages for change notifications, and safe renames that fix inbound links for you.
 - 🧩 **Azure Boards, live on the page.** `#1234` becomes a rich work item badge; `::: query-table <id> :::` embeds live query results — and both stay readable as plain text in the built-in wiki.

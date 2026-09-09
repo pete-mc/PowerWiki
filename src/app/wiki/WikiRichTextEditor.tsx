@@ -5,6 +5,7 @@ import MarkdownIt from "markdown-it";
 import { adoImageSizePlugin } from "../../rendering/adoImageSizePlugin";
 import { MENTION_ATTR, MENTION_SELECTOR, adoMentionsPlugin } from "../../rendering/adoMentionsPlugin";
 import { createRichTextTurndown } from "./richTextTurndown";
+import { editableEmojiPlugin } from "../../rendering/emojiPlugin";
 import { looseHeadingsPlugin } from "../../rendering/looseHeadingsPlugin";
 import {
   filesFromDataTransfer,
@@ -178,7 +179,11 @@ export function WikiRichTextEditor({
     const md = new MarkdownIt({ breaks: false, html: false, linkify: true, typographer: true })
       .use(adoImageSizePlugin)
       .use(adoMentionsPlugin)
-      .use(looseHeadingsPlugin);
+      .use(looseHeadingsPlugin)
+      // Emoji shortcodes show as their character while editing, and the
+      // editable variant keeps the shortcode on the element so Turndown can
+      // write `:tada:` back out instead of the character (see wikiEmoji).
+      .use(editableEmojiPlugin);
     // Resolve stored image paths (e.g. "/.attachments/x.png") to a displayable
     // URL for the editable surface, keeping the original path in data-wiki-src
     // so the Turndown rule below can emit portable Markdown on the way out.

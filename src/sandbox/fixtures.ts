@@ -93,6 +93,12 @@ export function greet(name: string): string {
 - [x] Render Markdown
 - [ ] Ship the canary pipeline
 
+## Emoji
+
+Status: :green_circle: healthy, :yellow_circle: degraded, :red_circle: down.
+Shortcodes such as :tada: :rocket: :warning: :heavy_check_mark: render, and so
+does a pasted 🚀. An ASCII emoticon like :) is left as typed.
+
 ## Degrades without host services
 
 A work item reference: AB#15. A mention: @<sandbox-user>.

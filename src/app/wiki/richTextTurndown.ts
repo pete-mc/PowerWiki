@@ -11,6 +11,7 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 
 import { MENTION_ATTR } from "../../rendering/adoMentionsPlugin";
+import { EMOJI_ATTR, emojiForShortcode } from "../../rendering/emojiPlugin";
 import { mentionMarkdown } from "./mentionTrigger";
 
 /** Builds the Turndown service the rich text editor converts its DOM with. */
@@ -64,5 +65,17 @@ export function createRichTextTurndown(): TurndownService {
     replacement: (_content, node) => mentionMarkdown((node as HTMLElement).getAttribute(MENTION_ATTR) ?? "")
   });
 
-return service;
+  // An emoji rendered from a shortcode carries that shortcode, so a save from
+  // rich text mode leaves `:tada:` in the file rather than rewriting every
+  // emoji on the page to its character. If the user has typed inside the
+  // element its text is no longer just the emoji, and what they typed wins.
+  service.addRule("wikiEmoji", {
+    filter: (node) => node.nodeName === "SPAN" && node.hasAttribute(EMOJI_ATTR),
+    replacement: (content, node) => {
+      const shortcode = (node as HTMLElement).getAttribute(EMOJI_ATTR) ?? "";
+      return content === emojiForShortcode(shortcode) ? shortcode : content;
+    }
+  });
+
+  return service;
 }

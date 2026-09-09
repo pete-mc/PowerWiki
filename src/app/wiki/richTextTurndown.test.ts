@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MENTION_ATTR } from "../../rendering/adoMentionsPlugin";
+import { EMOJI_ATTR } from "../../rendering/emojiPlugin";
 import { createRichTextTurndown } from "./richTextTurndown";
 
 const ADA = "a502d9c7-0cbd-45de-9b3f-1c2d3e4f5a6b";
@@ -75,5 +76,29 @@ describe("the rules that were already there", () => {
 
     expect(turndown.turndown(html)).toContain("| A | B |");
     expect(turndown.turndown(html)).toContain("| 1 | 2 |");
+  });
+});
+
+describe("emoji", () => {
+  const chip = (shortcode: string, character: string) =>
+    `<span ${EMOJI_ATTR}="${shortcode}">${character}</span>`;
+
+  it("writes the shortcode the author typed, not the character", () => {
+    // Otherwise editing one paragraph rewrites every emoji on the page.
+    const html = `<p>Status ${chip(":green_circle:", "\u{1F7E2}")} good</p>`;
+
+    expect(turndown.turndown(html)).toBe("Status :green_circle: good");
+  });
+
+  it("keeps text typed inside the element rather than dropping it", () => {
+    // The caret can land inside the span, and the shortcode is then no longer
+    // a faithful description of what is there.
+    const html = `<p>${chip(":tada:", "\u{1F389}done")}</p>`;
+
+    expect(turndown.turndown(html)).toBe("\u{1F389}done");
+  });
+
+  it("leaves a pasted emoji character alone", () => {
+    expect(turndown.turndown("<p>\u{1F7E2} ready</p>")).toBe("\u{1F7E2} ready");
   });
 });

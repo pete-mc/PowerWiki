@@ -147,6 +147,18 @@ async function runSuite(page) {
     assert(svgCount >= 2, `expected both diagrams to render, found ${svgCount} svg`);
   });
 
+  await test("emoji shortcodes render as characters, not as the text that was typed", async () => {
+    await openPage(page, "Markdown-reference", "/Guides/Markdown-reference");
+    const preview = await page.locator(".markdown-preview").innerText();
+
+    assert(preview.includes("\u{1F7E2}"), "the :green_circle: shortcode did not render");
+    assert(!preview.includes(":green_circle:"), `the shortcode was left as text: ${preview}`);
+    // A pasted character survives the round trip through the renderer.
+    assert(preview.includes("\u{1F680}"), "a pasted emoji character was lost");
+    // ASCII emoticons stay as typed - see emojiPlugin.ts.
+    assert(preview.includes(":)"), "an ASCII emoticon was converted");
+  });
+
   await test("the tree filter narrows the page list", async () => {
     const filter = page.locator(".powerwiki-nav-search-input");
     await filter.fill("diagram");

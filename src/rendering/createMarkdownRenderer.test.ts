@@ -41,4 +41,27 @@ describe("createMarkdownRenderer", () => {
     expect(html).toMatch(/<pre><code/);
     expect(html).not.toContain('class="mermaid"');
   });
+
+  it("renders emoji shortcodes as their characters", () => {
+    expect(md.render(":green_circle: ready")).toContain("\u{1F7E2} ready");
+    expect(md.render(":tada:")).toContain("\u{1F389}");
+  });
+
+  it("renders shortcodes the bundled dataset predates", () => {
+    // Unicode 15.1 and 16.0, from the supplement in emojiPlugin.ts.
+    expect(md.render(":lime:")).toContain("\u{1F34B}\u{200D}\u{1F7E9}");
+    expect(md.render(":fingerprint:")).toContain("\u{1FAC6}");
+  });
+
+  it("leaves unknown shortcodes and code spans alone", () => {
+    expect(md.render(":not_an_emoji:")).toContain(":not_an_emoji:");
+    expect(md.render("`:green_circle:`")).toContain("<code>:green_circle:</code>");
+    expect(md.render("```\n:green_circle:\n```")).toContain(":green_circle:");
+  });
+
+  it("does not convert ASCII emoticons, which appear in ordinary text", () => {
+    const html = md.render("Serve from C:/wiki :) and note the 8-) range");
+    expect(html).toContain("C:/wiki :)");
+    expect(html).toContain("8-)");
+  });
 });

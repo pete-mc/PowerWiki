@@ -13,8 +13,13 @@ body,
  * Fallback values keep the extension usable when rendered outside ADO.
  */
 body {
-  --pw-font: "Segoe UI VSS (Regular)", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-  --pw-mono: var(--font-family-monospace, Consolas, "Courier New", monospace);
+  /* Emoji and pictographic symbols have no glyphs in the UI families above,
+     so name the colour emoji fonts explicitly at the end of every stack that
+     renders page content. Without this a platform whose default fallback lacks
+     them (most Linux desktops) draws tofu boxes instead. */
+  --pw-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol";
+  --pw-font: "Segoe UI VSS (Regular)", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif, var(--pw-emoji);
+  --pw-mono: var(--font-family-monospace, Consolas, "Courier New", monospace), var(--pw-emoji);
 
   /* ADO's default body text is 14px; keep the menu a touch smaller. */
   --pw-font-size: 14px;
@@ -1148,7 +1153,7 @@ body {
 
 .wiki-richtext-editor {
   color: var(--pw-text);
-  font-family: "Segoe UI", "Segoe UI Variable", sans-serif;
+  font-family: "Segoe UI", "Segoe UI Variable", sans-serif, var(--pw-emoji);
   font-size: 14px;
   line-height: 1.55;
   min-height: 72vh;

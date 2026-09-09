@@ -156,6 +156,7 @@ The current implementation provides a working Power Wiki experience:
 - Editor power tools: slash-command palette, keyboard shortcuts, page-link and attachment pickers, autosave draft recovery, and in-context rich-text table editing.
 - Resolves `@<identity-guid>` mentions to display names, matching the built-in wiki, and offers an **`@` picker** in both editors to write them. See [Mentions](#mentions).
 - Supports the Azure DevOps image-size suffix, `![alt](image.png =500x250)`.
+- Renders emoji shortcodes such as `:green_circle:` and `:tada:` — the full GitHub shortcode set, plus the emoji standardised since it was published (Unicode 15.1 and 16.0). ASCII emoticons (`:)`, `:/`) are deliberately not converted, so paths and ranges in technical pages stay as typed, and saving from the rich text editor keeps the shortcode in the file rather than replacing it with the character.
 - Resizable page tree rail (drag its edge, double-click to reset), and an editor that fills the available height.
 
 ## Word export templates
