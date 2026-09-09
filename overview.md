@@ -17,7 +17,7 @@
 - 🕑 **Never lose the thread.** Page history with side-by-side diffs and one-click restore, follow pages for change notifications, and safe renames that fix inbound links for you.
 - 🧩 **Azure Boards, live on the page.** `#1234` becomes a rich work item badge; `::: query-table <id> :::` embeds live query results — and both stay readable as plain text in the built-in wiki.
 - 🔗 **Your wiki, inside the work item.** A **Power Wiki** tab sits beside Details and History on every work item, showing the wiki pages linked to it — read *and* edit them without leaving the item.
-- ✍️ **An editor you'll actually enjoy.** Monaco (the VS Code editor) with a `/` command palette, keyboard shortcuts, page-link and attachment pickers, autosaved drafts, and a WYSIWYG mode with in-context table editing.
+- ✍️ **An editor you'll actually enjoy.** Monaco (the VS Code editor) with a `/` command palette, keyboard shortcuts, page-link and attachment pickers, autosaved drafts, and a WYSIWYG mode with in-context table editing. Split view keeps code and preview scrolled together, and images resize by dragging their handles.
 
 ## Reading, upgraded
 

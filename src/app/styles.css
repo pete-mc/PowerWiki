@@ -1066,6 +1066,50 @@ body {
 
 /* Floating table toolbar, shown above the active table only while a cell is
    focused (kept out of the way otherwise). */
+/* The resize frame drawn over a selected image in the rich text editor
+   (GitHub #35). Sits in the shell, not the contenteditable, so the handles are
+   never part of the document being edited - anything inside contenteditable
+   would end up in the Markdown. */
+.wiki-richtext-image-frame {
+  border: 1px solid var(--pw-accent);
+  box-sizing: border-box;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+
+.wiki-richtext-image-handle {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-accent);
+  border-radius: 2px;
+  height: 10px;
+  pointer-events: auto;
+  position: absolute;
+  width: 10px;
+}
+
+.wiki-richtext-image-handle-nw { cursor: nwse-resize; left: -5px; top: -5px; }
+.wiki-richtext-image-handle-n { cursor: ns-resize; left: calc(50% - 5px); top: -5px; }
+.wiki-richtext-image-handle-ne { cursor: nesw-resize; right: -5px; top: -5px; }
+.wiki-richtext-image-handle-e { cursor: ew-resize; right: -5px; top: calc(50% - 5px); }
+.wiki-richtext-image-handle-se { cursor: nwse-resize; bottom: -5px; right: -5px; }
+.wiki-richtext-image-handle-s { cursor: ns-resize; bottom: -5px; left: calc(50% - 5px); }
+.wiki-richtext-image-handle-sw { cursor: nesw-resize; bottom: -5px; left: -5px; }
+.wiki-richtext-image-handle-w { cursor: ew-resize; left: -5px; top: calc(50% - 5px); }
+
+/* Live dimensions while dragging, so the number that lands in the Markdown is
+   visible before the pointer is released. */
+.wiki-richtext-image-size {
+  background: var(--pw-text);
+  border-radius: 3px;
+  bottom: 4px;
+  color: var(--pw-surface);
+  font-size: var(--pw-font-size-s);
+  left: 4px;
+  padding: 2px 6px;
+  position: absolute;
+}
+
 .wiki-richtext-table-tools {
   align-items: center;
   background: var(--pw-surface);

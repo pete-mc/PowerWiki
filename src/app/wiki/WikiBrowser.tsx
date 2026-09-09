@@ -39,6 +39,7 @@ import { WikiRichTextEditor } from "./WikiRichTextEditor";
 import { WikiMovePageDialog } from "./WikiMovePageDialog";
 import type { WikiPageBylineProps } from "./WikiPageByline";
 import { WikiPageEditor, type WikiPageLink } from "./WikiPageEditor";
+import { useSplitScrollSync } from "./useSplitScrollSync";
 import { WikiPageTree, type WikiPageTreeActions } from "./WikiPageTree";
 import { WikiSearchResults } from "./WikiSearchResults";
 import { filterWikiPageTree } from "./wikiTreeFilter";
@@ -399,6 +400,8 @@ export function WikiBrowser({
   const [linkedWorkItemsError, setLinkedWorkItemsError] = useState<string>();
   const [linkedWorkItemsOpen, setLinkedWorkItemsOpen] = useState(false);
   const [splitRatio, setSplitRatio] = useState(56);
+  // Ties the split view's panes together. Inert outside split mode.
+  const splitScroll = useSplitScrollSync(editMode === "splitCode");
   // Non-empty means the nav rail is showing search results instead of the tree.
   const [treeFilter, setTreeFilter] = useState("");
   // The wiki repository's Git clone URL, resolved from the repository rather
@@ -2567,8 +2570,10 @@ export function WikiBrowser({
                     onCreateDiagram={handleCreateDiagram}
                     onListAttachments={listWikiAttachments}
                     onSearchIdentities={searchIdentities}
+                    onTopLineChange={splitScroll.onEditorTopLineChange}
                     onUploadAttachment={uploadAttachment}
                     pages={pageLinks}
+                    scrollControlRef={splitScroll.editorControlRef}
                     value={draftContent}
                   />
                 </div>
@@ -2578,7 +2583,11 @@ export function WikiBrowser({
                   onPointerDown={startSplitResize}
                   role="separator"
                 />
-                <div className="wiki-editor-split-pane wiki-editor-split-pane-preview" style={{ width: `${100 - splitRatio}%` }}>
+                <div
+                  className="wiki-editor-split-pane wiki-editor-split-pane-preview"
+                  ref={splitScroll.previewRef}
+                  style={{ width: `${100 - splitRatio}%` }}
+                >
                   <MarkdownPreview
                     markdown={draftContent}
                     currentPath={activePage.path}

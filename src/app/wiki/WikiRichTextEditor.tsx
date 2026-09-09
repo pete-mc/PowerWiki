@@ -5,6 +5,7 @@ import MarkdownIt from "markdown-it";
 import { adoImageSizePlugin } from "../../rendering/adoImageSizePlugin";
 import { MENTION_ATTR, MENTION_SELECTOR, adoMentionsPlugin } from "../../rendering/adoMentionsPlugin";
 import { createRichTextTurndown } from "./richTextTurndown";
+import { resizedSize, type ImageSize, type ResizeHandle } from "./imageResize";
 import { editableEmojiPlugin } from "../../rendering/emojiPlugin";
 import { looseHeadingsPlugin } from "../../rendering/looseHeadingsPlugin";
 import {
@@ -40,6 +41,9 @@ interface WikiRichTextEditorProps {
   readonly value: string;
 }
 
+/** Corner and edge handles, in visual order around the frame. */
+const IMAGE_HANDLES: readonly ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
 export function WikiRichTextEditor({
   currentPath,
   disabled,
@@ -64,6 +68,12 @@ export function WikiRichTextEditor({
   // Position of the floating table toolbar (relative to the shell), or null when
   // the caret is not inside a table.
   const [tableUi, setTableUi] = useState<{ top: number; left: number } | null>(null);
+  // The frame drawn over the selected image, in shell coordinates, plus the
+  // size readout shown while a handle is being dragged (GitHub #35).
+  const [imageUi, setImageUi] = useState<
+    { top: number; left: number; width: number; height: number; dragging: boolean } | null
+  >(null);
+  const selectedImageRef = useRef<HTMLImageElement | null>(null);
   // The open `@` picker: where to draw it, what it found, and which row is
   // highlighted. Null when there is no active trigger.
   const [mentionUi, setMentionUi] = useState<
@@ -239,6 +249,72 @@ export function WikiRichTextEditor({
     syncMarkdownFromDom();
   }
 
+  /** Redraws the resize frame over the selected image, or hides it. */
+  const updateImageFrame = useCallback((dragging = false) => {
+    const image = selectedImageRef.current;
+    const editor = editorRef.current;
+    const shell = shellRef.current;
+    if (!image || !editor || !shell || !editor.contains(image)) {
+      setImageUi(null);
+      return;
+    }
+
+    const shellRect = shell.getBoundingClientRect();
+    const rect = image.getBoundingClientRect();
+    setImageUi({
+      top: rect.top - shellRect.top,
+      left: rect.left - shellRect.left,
+      width: rect.width,
+      height: rect.height,
+      dragging,
+    });
+  }, []);
+
+  /**
+   * Runs a handle drag. Pointer capture keeps the gesture alive when the
+   * pointer leaves the small handle, and the size is written to the image's
+   * width/height attributes rather than a style, because attributes are what
+   * Turndown reads back out into `=WxH`.
+   */
+  const startImageResize = useCallback(
+    (event: React.PointerEvent<HTMLSpanElement>, handle: ResizeHandle) => {
+      const image = selectedImageRef.current;
+      if (!image || disabled) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+
+      const rect = image.getBoundingClientRect();
+      const start: ImageSize = { width: rect.width, height: rect.height };
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const target = event.currentTarget;
+      target.setPointerCapture(event.pointerId);
+
+      const onMove = (move: PointerEvent) => {
+        const size = resizedSize(start, handle, move.clientX - startX, move.clientY - startY);
+        image.setAttribute("width", String(size.width));
+        image.setAttribute("height", String(size.height));
+        updateImageFrame(true);
+      };
+
+      const onUp = () => {
+        target.releasePointerCapture(event.pointerId);
+        target.removeEventListener("pointermove", onMove);
+        target.removeEventListener("pointerup", onUp);
+        updateImageFrame(false);
+        // A resize fires no input event, so the draft would keep the old size
+        // until the next keystroke - and a save in between would lose it.
+        syncMarkdownFromDom();
+      };
+
+      target.addEventListener("pointermove", onMove);
+      target.addEventListener("pointerup", onUp);
+    },
+    [disabled, updateImageFrame]
+  );
+
   function syncMarkdownFromDom() {
     const editor = editorRef.current;
     if (!editor) {
@@ -313,14 +389,18 @@ export function WikiRichTextEditor({
 
     const editor = editorRef.current;
     document.addEventListener("selectionchange", onSelectionChange);
-    editor?.addEventListener("scroll", updateTableToolbar);
-    window.addEventListener("resize", updateTableToolbar);
+    const reposition = () => {
+      updateTableToolbar();
+      updateImageFrame();
+    };
+    editor?.addEventListener("scroll", reposition);
+    window.addEventListener("resize", reposition);
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
-      editor?.removeEventListener("scroll", updateTableToolbar);
-      window.removeEventListener("resize", updateTableToolbar);
+      editor?.removeEventListener("scroll", reposition);
+      window.removeEventListener("resize", reposition);
     };
-  }, [updateTableToolbar]);
+  }, [updateTableToolbar, updateImageFrame]);
 
   function withActiveCell(
     action: (context: {
@@ -691,6 +771,14 @@ export function WikiRichTextEditor({
         aria-label="Rich text markdown editor"
         className="wiki-richtext-editor"
         contentEditable={!disabled}
+        onPointerDown={(event) => {
+          // Clicking an image selects it for resizing; clicking anything else
+          // puts the frame away. The handles live outside this element, so a
+          // drag on one never reaches here and never deselects.
+          const target = event.target;
+          selectedImageRef.current = target instanceof HTMLImageElement ? target : null;
+          updateImageFrame();
+        }}
         onDragOver={(event) => {
           if (onUploadAttachment && Array.from(event.dataTransfer.types).includes("Files")) {
             event.preventDefault();
@@ -773,6 +861,27 @@ export function WikiRichTextEditor({
               ) : null}
             </button>
           ))}
+        </div>
+      ) : null}
+      {imageUi ? (
+        <div
+          className="wiki-richtext-image-frame"
+          style={{ left: imageUi.left, top: imageUi.top, width: imageUi.width, height: imageUi.height }}
+        >
+          {IMAGE_HANDLES.map((handle) => (
+            <span
+              aria-label={`Resize image (${handle})`}
+              className={`wiki-richtext-image-handle wiki-richtext-image-handle-${handle}`}
+              key={handle}
+              onPointerDown={(event) => startImageResize(event, handle)}
+              role="presentation"
+            />
+          ))}
+          {imageUi.dragging ? (
+            <span className="wiki-richtext-image-size" role="status">
+              {Math.round(imageUi.width)} × {Math.round(imageUi.height)}
+            </span>
+          ) : null}
         </div>
       ) : null}
       {tableUi ? (

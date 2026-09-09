@@ -18,21 +18,21 @@ describe("createMarkdownRenderer", () => {
 
   it("renders GFM tables", () => {
     const html = md.render("| A | B |\n| --- | --- |\n| 1 | 2 |");
-    expect(html).toContain("<table>");
+    expect(html).toContain("<table");
     expect(html).toContain("<th>A</th>");
     expect(html).toContain("<td>1</td>");
   });
 
   it("emits <pre class=\"mermaid\"> for ```mermaid fences (no <code> wrapper)", () => {
     const html = md.render("```mermaid\nflowchart LR\n  A --> B\n```");
-    expect(html).toContain('<pre class="mermaid">');
+    expect(html).toContain('<pre class="mermaid"');
     expect(html).toContain("flowchart LR");
     expect(html).not.toMatch(/<code/);
   });
 
   it("converts ::: mermaid containers into mermaid fences", () => {
     const html = md.render(":::mermaid\nflowchart LR\n  A --> B\n:::");
-    expect(html).toContain('<pre class="mermaid">');
+    expect(html).toContain('<pre class="mermaid"');
     expect(html).toContain("flowchart LR");
   });
 

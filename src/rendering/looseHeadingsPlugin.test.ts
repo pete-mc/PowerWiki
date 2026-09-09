@@ -51,19 +51,19 @@ describe("looseHeadingsPlugin", () => {
 
   it("renders inside a blockquote", () => {
     const html = md.render("> #Quoted heading");
-    expect(html).toContain("<blockquote>");
+    expect(html).toMatch(/<blockquote[ >]/);
     expect(html).toContain("<h1");
   });
 
   it("leaves more than six hashes as a paragraph", () => {
     const html = md.render("#######Too deep");
-    expect(html).toContain("<p>#######Too deep</p>");
+    expect(html).toMatch(/<p[^>]*>#######Too deep<\/p>/);
     expect(html).not.toContain("<h6");
   });
 
   it("leaves indented code blocks alone", () => {
     const html = md.render("    #Indented");
-    expect(html).toContain("<pre><code>#Indented");
+    expect(html).toMatch(/<pre[^>]*><code>#Indented/);
   });
 
   it("does not turn hashes inside a fenced code block into headings", () => {
@@ -74,7 +74,7 @@ describe("looseHeadingsPlugin", () => {
 
   it("does not treat a mid-line hash as a heading", () => {
     const html = md.render("see the #notes section");
-    expect(html).toContain("<p>");
+    expect(html).toMatch(/<p[ >]/);
     expect(html).not.toContain("<h1");
   });
 

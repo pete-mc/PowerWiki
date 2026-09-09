@@ -58,7 +58,19 @@ async function main() {
 
   fs.mkdirSync(ARTIFACTS, { recursive: true });
   const server = await startServer();
-  const browser = await launchBrowser();
+
+  // The server is a child process holding the event loop open, so anything that
+  // throws between here and the `finally` below would leave the run *hanging*
+  // rather than failing - which is what a missing browser build did: an
+  // immediate launch error, a process that never exited, and no output at all
+  // because it is piped. Kill the server on the way out.
+  let browser;
+  try {
+    browser = await launchBrowser();
+  } catch (error) {
+    server.kill();
+    throw error;
+  }
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await context.newPage();
 
@@ -157,6 +169,35 @@ async function runSuite(page) {
     assert(preview.includes("\u{1F680}"), "a pasted emoji character was lost");
     // ASCII emoticons stay as typed - see emojiPlugin.ts.
     assert(preview.includes(":)"), "an ASCII emoticon was converted");
+  });
+
+  // GitHub feedback: the two split panes scrolled independently, so the preview
+  // showed something unrelated to the line being edited.
+  await test("the split view's preview follows the editor as it scrolls", async () => {
+    await openPage(page, "Markdown-reference", "/Guides/Markdown-reference");
+    await clickMenuItem(page, "Edit page");
+    await page.waitForSelector(".wiki-editor-shell", { timeout: 60_000 });
+    await page.locator(".wiki-editor-mode-select").selectOption("splitCode");
+    await page.waitForSelector(".wiki-editor-split-shell", { timeout: 60_000 });
+
+    const previewTop = () =>
+      page.locator(".wiki-editor-split-pane-preview").evaluate((pane) => pane.scrollTop);
+    assert((await previewTop()) === 0, "the preview did not start at the top");
+
+    // Scroll the editor the way a person does, rather than setting scrollTop:
+    // the sync hangs off Monaco's own scroll event.
+    await page.locator(".wiki-editor-split-pane-code .monaco-editor").first().click();
+    await page.keyboard.press("Control+End");
+
+    await page.waitForFunction(
+      () => (document.querySelector(".wiki-editor-split-pane-preview")?.scrollTop ?? 0) > 0,
+      undefined,
+      { timeout: 20_000 }
+    );
+    assert((await previewTop()) > 0, "the preview stayed at the top while the editor moved");
+
+    await page.locator(".wiki-editor-toolbar-actions button", { hasText: "Cancel" }).click();
+    await page.waitForSelector(".wiki-editor-shell", { state: "detached", timeout: 15_000 });
   });
 
   await test("the tree filter narrows the page list", async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 
 import type * as Monaco from "monaco-editor";
 
@@ -45,14 +45,33 @@ interface WikiPageEditorProps {
   readonly onCreateDiagram?: () => Promise<AttachmentUploadResult | undefined>;
   /** Wiki pages the page-link picker can insert links to. */
   readonly pages?: readonly WikiPageLink[];
+  /**
+   * Reports the source line at the top of the viewport as the user scrolls, so
+   * the split view can follow along. Fires on every scroll frame, so the
+   * handler must be cheap and must not set React state.
+   */
+  readonly onTopLineChange?: (line: number) => void;
+  /**
+   * Filled with a handle for scrolling this editor from outside it. A ref
+   * rather than a prop because the split view drives it from a scroll handler:
+   * a prop would re-render the editor on every frame of a preview scroll.
+   */
+  readonly scrollControlRef?: MutableRefObject<WikiEditorScrollControl | undefined>;
   readonly value: string;
 }
 
-export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAttachments, onSearchIdentities, onUploadAttachment, pages, value }: WikiPageEditorProps) {
+/** Scrolls the editor without re-rendering it. */
+export interface WikiEditorScrollControl {
+  /** Puts this 1-based source line at the top of the viewport. */
+  scrollToLine(line: number): void;
+}
+
+export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAttachments, onSearchIdentities, onTopLineChange, onUploadAttachment, pages, scrollControlRef, value }: WikiPageEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<MonacoApi | undefined>(undefined);
   const onChangeRef = useRef(onChange);
+  const onTopLineChangeRef = useRef(onTopLineChange);
   // Recent values the editor itself emitted. The parent feeds `value` back as a
   // controlled prop, but under load (e.g. a heavy Mermaid preview re-render on
   // every keystroke) that round trip lags the live model by a keystroke or two.
@@ -84,6 +103,10 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    onTopLineChangeRef.current = onTopLineChange;
+  }, [onTopLineChange]);
 
   useEffect(() => {
     let disposed = false;
@@ -131,6 +154,22 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
           }
           onChangeRef.current(next);
         });
+        // Scroll reporting for the split view. getVisibleRanges is the honest
+        // source: with wordWrap on, a pixel offset does not divide by line
+        // height, and Monaco already knows which line it is showing.
+        const scrollDisposable = editor.onDidScrollChange(() => {
+          const top = editor.getVisibleRanges()[0]?.startLineNumber;
+          if (top !== undefined) {
+            onTopLineChangeRef.current?.(top);
+          }
+        });
+        if (scrollControlRef) {
+          scrollControlRef.current = {
+            scrollToLine: (line) => {
+              editor.setScrollTop(editor.getTopForLineNumber(Math.max(1, Math.round(line))));
+            },
+          };
+        }
         const resizeObserver = new ResizeObserver(() => {
           editor.layout();
         });
@@ -140,6 +179,10 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
 
         return () => {
           resizeObserver.disconnect();
+          scrollDisposable.dispose();
+          if (scrollControlRef) {
+            scrollControlRef.current = undefined;
+          }
           modelDisposable.dispose();
           editor.dispose();
           editorRef.current = undefined;

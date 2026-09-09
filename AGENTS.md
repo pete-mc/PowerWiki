@@ -360,8 +360,11 @@ esbuild-loader, which strips types without checking them; `tsc` runs separately.
 Always gate on `npm test` (which runs `tsc --noEmit` and then Vitest), never on a
 successful build.
 
-The two webpack warnings about entrypoint/asset size (~665 KiB) are known and
-expected. They are not a failure.
+The three webpack warnings are known and expected, and are not a failure: two
+about entrypoint/asset size, and — since webpack 5.110 — a generic
+`optimization.runtimeChunk` performance recommendation. Do not act on the third
+by splitting the runtime: chunking changes here need re-verifying in the iframe
+(see the Mermaid chunk note above), and the hint is advice, not a defect.
 
 ## Documentation Expectations
 
@@ -596,6 +599,17 @@ and they are separate listings with separate version histories:
 | Azure DevOps hub | `dataversepowertools.powerwiki` | a `v*` tag → `release.yml` |
 | VS Code | `dataversepowertools.powerwiki-vscode` | a `vscode-v*` tag → `release-vscode.yml` |
 
+**One version number, both extensions, released together.** They are separate
+listings with separate version histories, but they render the same app from the
+same commit, so `vscode/package.json` carries the *same* version as
+`package.json` and `vss-extension.json`, and a release cuts both tags:
+`v<version>` and `vscode-v<version>`. Two numbers meant "which VS Code build has
+that fix?" was a lookup, and it was easy to release one and forget the other —
+they drifted to 1.6.2 and 1.4.2 before this rule. Release both even when a
+change looks like it only lands in one bundle: a shared-code change usually
+reaches both, and the cost of an extra patch release is far below the cost of a
+user comparing two builds that claim different versions of the same product.
+
 **The tag prefix is load-bearing, in both directions.** Tagging the VS Code
 extension `v0.1.1` would trigger the *Azure DevOps* release instead, against
 manifests that do not match the tag. Less obviously, `vscode-v0.1.1` *starts
@@ -650,6 +664,22 @@ The workflow refuses to publish if the tag does not match *both* manifest
 versions, which is the usual way a release goes wrong. Watch the run — the
 Marketplace rejects a re-published version number, so a failure after upload
 means the next attempt needs another patch bump.
+
+**A failed publish does not mean nothing was published.** Measured across a
+Marketplace outage during 1.6.x: `tfx` reported `Request timeout: /_apis/gallery`
+and, on another attempt, an HTTP 503 — and in one of those cases the upload had
+*already landed*, so re-running the same tag failed with `Version number must
+increase each time an extension is published. Current version: 1.6.1`.
+
+Do not settle the question with the public gallery query
+(`_apis/public/gallery/extensionquery`): **it lists only *validated* versions**,
+so it cannot tell "never uploaded" from "uploaded, still validating", and
+reading it as proof that a number is free is how 1.6.1 was retried by mistake.
+The reliable answers are a retry (which names the current version in its error)
+or the publisher portal, which shows the version as Pending, Error or live.
+Validation is a separate step that can fail on its own — 1.6.1 finally showed
+`Error: The HTTP request timed out after 00:00:20` there, hours after the upload
+succeeded, and needed 1.6.2 to recover.
 
 The publisher token lives in the `ADO_MARKETPLACE_PAT` GitHub Actions secret and
 is consumed only by the release workflow, which is pinned to the `marketplace`

@@ -12,6 +12,7 @@ import { calloutsPlugin } from "./calloutsPlugin";
 import { emojiPlugin } from "./emojiPlugin";
 import { looseHeadingsPlugin } from "./looseHeadingsPlugin";
 import { mathPlugin } from "./mathPlugin";
+import { SOURCE_LINE_ATTR, sourceLinePlugin } from "./sourceLinePlugin";
 
 /**
  * Adds support for the Azure DevOps Wiki mermaid container syntax:
@@ -100,7 +101,8 @@ export function createMarkdownRenderer(): MarkdownIt {
     .use(adoWorkItemsPlugin)
     .use(adoMentionsPlugin)
     .use(adoImageSizePlugin)
-    .use(adoPlaceholdersPlugin);
+    .use(adoPlaceholdersPlugin)
+    .use(sourceLinePlugin);
 
   // Override the fence renderer so that ```mermaid``` (and our ":::mermaid"
   // container plugin which produces the same fence token) emit
@@ -113,7 +115,13 @@ export function createMarkdownRenderer(): MarkdownIt {
     const token = tokens[idx];
     const info = token.info.trim().toLowerCase();
     if (isMermaidFence(info)) {
-      return `<pre class="mermaid">${md.utils.escapeHtml(token.content)}</pre>\n`;
+      // Carry the source line through by hand: this renderer builds the tag
+      // itself, so the attributes sourceLinePlugin set are not emitted for it
+      // otherwise - and a diagram is the tallest thing on the page, so it is
+      // the anchor the split view needs most.
+      const line = token.attrGet(SOURCE_LINE_ATTR);
+      const lineAttr = line === null ? "" : ` ${SOURCE_LINE_ATTR}="${md.utils.escapeHtml(String(line))}"`;
+      return `<pre class="mermaid"${lineAttr}>${md.utils.escapeHtml(token.content)}</pre>\n`;
     }
     return defaultFence
       ? defaultFence(tokens, idx, options, env, slf)
