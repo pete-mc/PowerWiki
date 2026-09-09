@@ -24,6 +24,29 @@ type PendingCall = {
   readonly wikiMethod?: string;
 };
 
+/**
+ * Whether a message came from the extension host rather than from something
+ * the page embeds.
+ *
+ * Without this, the draw.io editor iframe - or any other embedded frame - could
+ * post a forged `{ type: "response" }` and settle a pending call with its own
+ * data. `drawioEmbed.ts` already guards its own listener the same way.
+ *
+ * The check is on the origin being *ours*, not on which frame delivered the
+ * message: VS Code's host messages arrive from the webview shell, and pinning
+ * that relationship would break the bridge silently if it ever changed, which
+ * is the worst failure this file can have. Everything PowerWiki embeds is on a
+ * remote http(s) origin, so rejecting those is what actually matters. An opaque
+ * origin is accepted only from the shell itself.
+ */
+function isFromExtensionHost(event: MessageEvent): boolean {
+  const origin = event.origin;
+  if (origin === window.origin || origin.startsWith("vscode-webview:") || origin.startsWith("vscode-file:")) {
+    return true;
+  }
+  return (origin === "" || origin === "null") && event.source === window.parent;
+}
+
 export class ExtensionBridge {
   private readonly api = acquireVsCodeApi();
   private readonly pending = new Map<number, PendingCall>();
@@ -32,6 +55,10 @@ export class ExtensionBridge {
 
   public constructor() {
     window.addEventListener("message", (event: MessageEvent<ExtensionMessage>) => {
+      if (!isFromExtensionHost(event)) {
+        return;
+      }
+
       const message = event.data;
       if (message?.type === "response") {
         this.settle(message.id, message.value, message.error);

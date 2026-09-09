@@ -78,9 +78,21 @@ export async function readWordTemplate(data: ArrayBuffer): Promise<WordTemplate>
  * Word splits a typed token across runs whenever formatting, a language change,
  * or a spell-check boundary falls inside it, so `{{PowerWikiContent}}` routinely
  * reaches document.xml as several `<w:t>` fragments. Searching the raw XML would
- * miss exactly those templates, so search the text with the markup removed —
+ * miss exactly those templates, so search the run text joined back together —
  * which is also how docx's own patcher finds it.
  */
 function containsPlaceholder(documentXml: string): boolean {
-  return documentXml.replace(/<[^>]*>/g, "").includes(TEMPLATE_PLACEHOLDER_TOKEN);
+  // Concatenating the `<w:t>` runs, rather than stripping every tag with one
+  // pass of `replace(/<[^>]*>/g, "")`. That pass read like HTML sanitisation
+  // it is not - the result is only ever searched for the token, never rendered
+  // - and CodeQL flagged it as an incomplete one
+  // (js/incomplete-multi-character-sanitization), because a single pass over
+  // crafted markup can leave a tag behind. Reading the runs is narrower, does
+  // not depend on one pass being enough, and is where Word keeps the text
+  // anyway.
+  let text = "";
+  for (const run of documentXml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)) {
+    text += run[1];
+  }
+  return text.includes(TEMPLATE_PLACEHOLDER_TOKEN);
 }
