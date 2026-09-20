@@ -161,6 +161,7 @@ processes:
       - azure-devops
     effects:
       - kind: money
+        stance: never
         action: never - signing in spends nothing, and this project has no payment method anywhere
     guardrails:
       spend: none
@@ -246,10 +247,12 @@ processes:
       - repo
     effects:
       - kind: git-push
+        stance: owner-approves
         to: origin at github.com/pete-mc/PowerWiki
         via: git
         action: push a version tag, which is what starts the public release
       - kind: site-write
+        stance: owner-approves
         to: "Visual Studio Marketplace: dataversepowertools.powerwiki and .powerwiki-vscode"
         via: GitHub Actions - release.yml and release-vscode.yml
         action: >-
@@ -257,6 +260,7 @@ processes:
           installed auto-updates within minutes and a version number can never
           be republished
       - kind: money
+        stance: never
         action: never - publishing to either Marketplace is free and this project holds no payment method
     guardrails:
       spend: none
