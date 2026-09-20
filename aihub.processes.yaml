@@ -1,0 +1,291 @@
+# aihub.processes.yaml - what PowerWiki DOES, as processes.
+#
+# Written by hand. 'aihub processes draft' had nothing to offer here: this
+# project ships no manifest, no schedule entries and no systemd units, so code
+# could see none of the work below. Every process in this file is interactive -
+# it happens because Peter asks for it in a session.
+
+schemaVersion: 1
+project: powerwiki
+
+note: >-
+  PowerWiki is an Azure DevOps extension. Nothing in it runs on a timer and
+  nothing here spends money. The outward effects are all one of three things:
+  pushing to the public GitHub repository, writing to the Azure DevOps board or
+  the test wiki, and - as a maintainer step only - publishing to the Visual
+  Studio Marketplace.
+
+processes:
+  - id: backlog-work
+    title: Plan and update the PowerWiki backlog
+    confidence: declared
+    model: per-run
+    owner: main-agent
+    trigger:
+      type: manual
+      detail: Peter asks what is next, or asks for an item to be written up or closed
+    steps:
+      - Read the Issues under the Power Wiki epic on the Azure Boards project.
+      - Work out what the item really is, and write a real description if it has none.
+      - Add, edit or re-tag items so the board slices into release-sized batches.
+      - Before anything moves to Done, add a comment saying how it was addressed and how it was verified.
+    reads:
+      - azure-devops
+      - repo
+    effects:
+      - kind: ado-write
+        to: "Azure Boards: dataversepowertools/PowerWiki"
+        via: azure-devops MCP server
+        action: create and edit work items, change their state and tags, and add comments
+    guardrails:
+      connectors:
+        - azure-devops
+      spend: none
+      approvals: none
+    note: >-
+      The board token is organisation-scoped. It reads and writes the board and
+      the wiki and cannot publish anything to the Marketplace.
+
+  - id: issue-intake
+    title: Turn a public GitHub bug report into a board item
+    confidence: declared
+    model: per-run
+    owner: main-agent
+    trigger:
+      type: manual
+      detail: Peter points at a GitHub issue, or asks what has come in
+    steps:
+      - Read the issue on the public GitHub repository and reproduce what it describes.
+      - Decide whether it is a real defect, a parity gap or out of scope.
+      - Raise or update the matching item on the Azure Boards backlog, keeping the plan on the board rather than in GitHub.
+      - Reference the GitHub number in the commit and the board item so the two stay linked.
+    reads:
+      - github
+      - azure-devops
+      - repo
+    effects:
+      - kind: ado-write
+        to: "Azure Boards: dataversepowertools/PowerWiki"
+        via: azure-devops MCP server
+        action: raise or update the work item that tracks the reported bug
+      - kind: site-write
+        to: github.com/pete-mc/PowerWiki
+        via: gh
+        confidence: inferred
+        action: reply on or close the public issue
+        note: >-
+          Possible and appropriate, but not something this session has been
+          asked to do yet, so it is left inferred rather than claimed.
+    guardrails:
+      connectors:
+        - azure-devops
+      spend: none
+      approvals: none
+
+  - id: code-change
+    title: Make a change to the extension and land it on main
+    confidence: declared
+    model: per-run
+    owner: main-agent
+    trigger:
+      type: manual
+      detail: Peter asks for a fix or a feature, usually naming a board item
+    steps:
+      - Read the guide, find the code, and make the change above the host boundary wherever it can live there.
+      - Run the type check and the unit tests, and the sandbox end-to-end tests when the change is visible on screen.
+      - Serve the working tree to a real Azure DevOps hub when the change needs a real organisation to judge.
+      - Commit in Peter's voice, mentioning the board item, and push to the public GitHub repository.
+    reads:
+      - repo
+      - azure-devops
+      - npm registry
+    effects:
+      - kind: git-push
+        to: origin/main at github.com/pete-mc/PowerWiki
+        via: git
+        action: push commits to the public source repository
+      - kind: site-write
+        to: "Visual Studio Marketplace: dataversepowertools.powerwiki-canary (private)"
+        via: GitHub Actions - canary.yml
+        action: >-
+          every push to main automatically publishes a private canary build,
+          shared only with the dataversepowertools organisation
+        note: >-
+          Downstream of the push rather than done here, and it has no path
+          filter - a documentation-only push cuts a canary too. It never
+          touches the public powerwiki listing.
+    guardrails:
+      spend: none
+      approvals: none
+    note: >-
+      The main agent owns repository management here, so a push to main needs no
+      approval. Publishing anything public does - see release-publish.
+
+  - id: change-review
+    title: Have a change checked over before it is called done
+    confidence: inferred
+    model: per-run
+    owner: aihub-core:picky-reviewer
+    trigger:
+      type: process
+      ref: code-change
+    steps:
+      - Hand the finished change to a read-only reviewer subagent.
+      - The reviewer re-runs the tests and the build rather than taking the summary's word for it.
+      - Anything it finds goes back into the change before the commit.
+    reads:
+      - repo
+    effects: []
+    guardrails:
+      spend: none
+      approvals: none
+    note: >-
+      Left inferred: the reviewer subagent is available to this project and is
+      the right tool when a change claims to fix something, but it is not a
+      fixed step of every change and no run of it in this project was verified.
+
+  - id: browser-signin
+    title: Sign in to Azure DevOps once, so the browser harness can run unattended
+    confidence: declared
+    model: none
+    owner: main-agent
+    trigger:
+      type: manual
+      detail: only when the verify harness reports it is waiting for sign-in
+    steps:
+      - Start a throwaway virtual display and open a real Chromium window on it.
+      - Peter connects over VNC, bound to this machine only, and signs in to Azure DevOps with his own account.
+      - The session is kept in a dedicated browser profile outside the repository.
+      - Everything afterwards runs unattended against that profile.
+    reads:
+      - azure-devops
+    effects:
+      - kind: money
+        action: never - signing in spends nothing, and this project has no payment method anywhere
+    guardrails:
+      spend: none
+      approvals: owner
+    note: >-
+      Cannot run without Peter - the organisation uses push-notification MFA,
+      which no stored secret can answer. The profile holds live session cookies
+      and is never committed.
+
+  - id: browser-verify
+    title: Check a real build inside a real Azure DevOps organisation
+    confidence: declared
+    model: none
+    owner: main-agent
+    trigger:
+      type: manual
+      detail: before a release, and after a change the sandbox cannot judge
+    steps:
+      - Drive the chosen build - published, canary or the working tree - in a real browser against the PowerWiki test wiki.
+      - Assert on what the extension actually renders inside its iframe.
+      - Exercise the real write paths - create a page, rename it, upload an image, read the history back.
+      - Clean up after itself, and after any earlier run that died before it could.
+      - Save screenshots and a report locally.
+    reads:
+      - azure-devops
+      - repo
+    effects:
+      - kind: ado-write
+        to: "the PowerWiki project wiki at dev.azure.com/dataversepowertools"
+        via: Azure DevOps wiki REST API
+        action: create, rename and delete test pages, and upload smoke-test image attachments
+      - kind: git-push
+        to: "the PowerWiki wiki's own git repository (wikiMaster)"
+        via: Azure DevOps git push API
+        action: >-
+          commit the deletion of leftover smoke-test attachments, which the
+          create-only attachments API cannot do
+    guardrails:
+      connectors:
+        - azure-devops
+      spend: none
+      approvals: none
+    note: >-
+      Writes only to the dataversepowertools PowerWiki test wiki, which exists to
+      be written to. Needs the signed-in profile from browser-signin, and only
+      one run can hold that profile at a time.
+
+  - id: screenshot-capture
+    title: Refresh the store screenshots from a live build
+    confidence: declared
+    model: none
+    owner: main-agent
+    trigger:
+      type: manual
+      detail: when the listing images no longer match what the product looks like
+    steps:
+      - Open the showcase wiki pages in the signed-in browser, hiding the dev and canary menu entries first.
+      - Photograph the editor, the rendered page, the diagrams and the work item tab.
+      - Write the images into the repository's media folder.
+    reads:
+      - azure-devops
+    effects: []
+    guardrails:
+      spend: none
+      approvals: none
+    note: >-
+      Reads the wiki and writes only into the working tree. The images leave this
+      machine later, as part of a code-change push.
+
+  - id: release-publish
+    title: Release a new version to the public Marketplace
+    confidence: declared
+    model: none
+    trigger:
+      type: manual
+      detail: Peter decides, from his own machine
+    steps:
+      - Bump the version in the package and both extension manifests so they match.
+      - Run the tests, commit, and tag the release for both the Azure DevOps and the VS Code extension.
+      - Push the tags, which starts the GitHub Actions release workflows.
+      - CI packages each extension, publishes it, and attaches the package to a GitHub release.
+    reads:
+      - repo
+    effects:
+      - kind: git-push
+        to: origin at github.com/pete-mc/PowerWiki
+        via: git
+        action: push a version tag, which is what starts the public release
+      - kind: site-write
+        to: "Visual Studio Marketplace: dataversepowertools.powerwiki and .powerwiki-vscode"
+        via: GitHub Actions - release.yml and release-vscode.yml
+        action: >-
+          publish the extension publicly; every organisation that has it
+          installed auto-updates within minutes and a version number can never
+          be republished
+      - kind: money
+        action: never - publishing to either Marketplace is free and this project holds no payment method
+    guardrails:
+      spend: none
+      approvals: owner
+    note: >-
+      This machine must never create or push a v* tag. The publisher token lives
+      only in GitHub Actions and on Peter's own machine; the token this session
+      holds cannot publish at all.
+
+  - id: report-to-owner
+    title: Tell Peter something he should know but is not waiting for
+    confidence: declared
+    model: per-run
+    owner: main-agent
+    trigger:
+      type: manual
+      detail: also raised from inside other processes when something turns up
+    steps:
+      - Write up the finding, the decision needed, or what a run turned up.
+      - Send it from the fleet's own mailbox to Peter and nobody else.
+      - Carry on; this is for things that can wait until he reads his mail.
+    reads:
+      - repo
+      - azure-devops
+    effects:
+      - kind: email
+        to: owner
+        via: aihub mail send
+        action: one message to Peter's address, never to anyone else
+    guardrails:
+      spend: none
+      approvals: none
