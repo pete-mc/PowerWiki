@@ -40,6 +40,14 @@ Setup and use (details in `tools/pw/README.md`):
    enrichment and the byline load, that enrichment survives page navigation, and
    that an uploaded image renders. Artifacts land in `tools/pw/artifacts/`
    (gitignored). Re-run `pw:auth` if verify reports it is waiting for sign-in.
+4. Unattended: with `PW_AUTH_USER` and `PW_AUTH_PASSWORD` in the environment,
+   `pw:auth` signs in by itself (headless), and `pw:verify` signs back in once if
+   the session has expired. `tools/pw/signIn.mjs` answers only the account,
+   password and "Stay signed in?" prompts, choosing the password route over a
+   code; a code, app approval, password change or security-details prompt stops
+   the run with the page's title. The values are only handed to `fill()`: never
+   logged, never in an error, no screenshot while a sign-in page shows. Keep them
+   in the environment only, never on a command line or in a file.
 
 Extend `tools/pw/verify.mjs` with a new assertion whenever you add a feature
 worth guarding, so the harness doubles as a regression smoke test.

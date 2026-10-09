@@ -9,6 +9,8 @@ import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
+import { hasSignInCredentials, isOnSignInPage, signIn } from "./signIn.mjs";
+
 // Which Azure DevOps organization/project to drive, and which published
 // extension. Point it at any org that has the extension installed and a wiki to
 // read:
@@ -110,6 +112,7 @@ export async function launch({ headless = false } = {}) {
  */
 export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
   const start = Date.now();
+  let triedSignIn = false;
   while (Date.now() - start < timeoutMs) {
     // Identify the frame by the mounted shell, not by its URL. The URL shape
     // differs per build in ways that are easy to get wrong: the public build is
@@ -124,7 +127,16 @@ export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
         return candidate;
       }
     }
-    if (/login\.microsoftonline|login\.live|\/oauth2|\/_signin|aadcdn/.test(page.url())) {
+    if (isOnSignInPage(page)) {
+      // The session in the profile expires; sign back in unattended when the
+      // credentials are available, rather than waiting on a person. Once only:
+      // a sign-in that did not take is a failure to report, not to retry.
+      if (hasSignInCredentials() && !triedSignIn) {
+        triedSignIn = true;
+        console.log("  signing in to Azure DevOps with PW_AUTH_USER / PW_AUTH_PASSWORD...");
+        await signIn(page);
+        continue;
+      }
       const elapsed = Math.round((Date.now() - start) / 1000);
       if (elapsed % 8 === 0) {
         console.log(`  waiting for Azure DevOps sign-in in the Chrome window... (${elapsed}s)`);
