@@ -565,6 +565,37 @@ try {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07b-math-viewer-error.png") });
   }
 
+  // AB#780: a link to another page carries an absolute Azure DevOps URL, so a
+  // new tab or a copied link does not resolve against the CDN iframe. That URL
+  // also carries the route in `?route=`, because signing in keeps the query and
+  // drops the hash - so open it with the hash cut off, which is what a signed-out
+  // reader gets back from sign-in, and expect to land on the linked page.
+  try {
+    frame = await openWikiPage(page, "#/PowerWiki%20Showcase");
+    await frame.waitForSelector(".markdown-preview a[data-powerwiki-href]", { timeout: 60000 });
+    const pageLink = await frame.$eval(".markdown-preview a[data-powerwiki-href]", (a) => ({
+      href: a.getAttribute("href") || "",
+      title: (a.textContent || "").trim(),
+    }));
+    check(
+      pageLink.href.startsWith("https://dev.azure.com/") && pageLink.href.includes("?route="),
+      `page links are absolute Azure DevOps URLs carrying the route (${JSON.stringify(pageLink.href)})`
+    );
+
+    await page.goto(pageLink.href.split("#")[0], { waitUntil: "domcontentloaded" });
+    frame = await powerWikiFrame(page);
+    const landed = await waitForPageTitle(frame, pageLink.title).then(
+      () => true,
+      () => false
+    );
+    check(landed, `a link with only its ?route= (no hash) opens "${pageLink.title}"`);
+    await page.waitForFunction(() => !location.search.includes("route="), { timeout: 15000 }).catch(() => {});
+    check(!page.url().includes("route="), `the ?route= is removed once read (url=${page.url()})`);
+  } catch (error) {
+    check(false, `page link / ?route= check failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07c-page-links-error.png") });
+  }
+
   // #32: the query-table id column is a plain hyperlinked id, not a full
   // work-item badge (badges stay for #N references in the page body).
   try {

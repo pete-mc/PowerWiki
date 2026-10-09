@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildHubPageUrl, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
+import { buildHubPageUrl, HUB_ROUTE_PARAM, splitHashAnchor, withHashAnchor } from "./wikiHeadingLink";
 
 const context = {
   organizationName: "dataversepowertools",
@@ -39,14 +39,25 @@ describe("buildHubPageUrl", () => {
   it("builds an absolute Azure DevOps hub url with an anchor", () => {
     expect(buildHubPageUrl(context, "/PowerWiki Showcase/Mermaid Gallery", "sequence-diagram")).toBe(
       "https://dev.azure.com/dataversepowertools/dataversepowertools/_apps/hub/" +
-        "dataversepowertools.powerwiki.wiki#/PowerWiki Showcase/Mermaid Gallery&anchor=sequence-diagram"
+        "dataversepowertools.powerwiki.wiki?route=/PowerWiki%20Showcase/Mermaid%20Gallery%26anchor%3Dsequence-diagram" +
+        "#/PowerWiki Showcase/Mermaid Gallery&anchor=sequence-diagram"
     );
+  });
+
+  // The hash does not survive Azure DevOps sign-in; the query does. A link
+  // opened in a browser with no session must still find its page.
+  it("carries the route in the query, where it survives sign-in, decoding back to the hash", () => {
+    const pageHash = "/wikis/Team%20Wiki/List-%252D-Firewall-rules";
+    const url = new URL(buildHubPageUrl(context, pageHash, "a & b") ?? "");
+
+    expect(url.searchParams.get(HUB_ROUTE_PARAM)).toBe(url.hash.slice(1));
+    expect(url.searchParams.get(HUB_ROUTE_PARAM)).toBe(withHashAnchor(pageHash, "a & b"));
   });
 
   it("adds a leading slash to the page hash when missing", () => {
     expect(buildHubPageUrl(context, "Home")).toBe(
       "https://dev.azure.com/dataversepowertools/dataversepowertools/_apps/hub/" +
-        "dataversepowertools.powerwiki.wiki#/Home"
+        "dataversepowertools.powerwiki.wiki?route=/Home#/Home"
     );
   });
 

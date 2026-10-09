@@ -12,6 +12,18 @@
 
 const ANCHOR_MARKER = "&anchor=";
 
+/**
+ * Query parameter that carries the route in a shareable link, alongside the
+ * hash. A link opened without an Azure DevOps session goes through sign-in,
+ * and that round trip keeps only the path and query: `reply_to` is built
+ * server-side, where the fragment never arrives, and the sign-in redirect sets
+ * a fragment of its own. The route in the hash was lost, so the link opened the
+ * wiki's home page, and worked on the second try only because by then the user
+ * was signed in. The host reads this parameter on load (see
+ * `azureDevOpsWikiHost.ts`).
+ */
+export const HUB_ROUTE_PARAM = "route";
+
 export interface HubLinkContext {
   readonly organizationName?: string;
   readonly projectName?: string;
@@ -47,7 +59,8 @@ export function withHashAnchor(pageHash: string, slug: string): string {
 
 /**
  * Absolute dev.azure.com URL for a PowerWiki hub route hash, optionally deep
- * linked to a heading. Returns undefined for on-prem/unknown contexts, where the
+ * linked to a heading. The route goes in both the query (survives sign-in) and
+ * the hash (what the app has always read). Returns undefined for on-prem/unknown contexts, where the
  * host base can't be constructed — callers keep the default in-page anchor then.
  */
 export function buildHubPageUrl(context: HubLinkContext, pageHash: string, slug?: string): string | undefined {
@@ -58,8 +71,11 @@ export function buildHubPageUrl(context: HubLinkContext, pageHash: string, slug?
 
   const hash = slug ? withHashAnchor(pageHash, slug) : pageHash;
   const normalized = hash.startsWith("/") ? hash : `/${hash}`;
+  // Slashes are left readable; everything else is escaped so the value comes
+  // back from the query exactly as the route hash it was built from.
+  const query = encodeURIComponent(normalized).replace(/%2F/g, "/");
   return (
     `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}` +
-    `/_apps/hub/${contributionId}#${normalized}`
+    `/_apps/hub/${contributionId}?${HUB_ROUTE_PARAM}=${query}#${normalized}`
   );
 }

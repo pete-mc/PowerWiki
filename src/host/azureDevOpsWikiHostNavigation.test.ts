@@ -21,7 +21,7 @@ vi.mock("azure-devops-extension-sdk", () => ({
 const NAVIGATION_SERVICE = "ms.vss-features.host-navigation-service";
 const LOCATION_SERVICE = "ms.vss-features.location-service";
 
-const { AzureDevOpsWikiHost } = await import("./azureDevOpsWikiHost");
+const { AzureDevOpsWikiHost, withQueryRoute } = await import("./azureDevOpsWikiHost");
 
 const CONTEXT = {
   organizationName: "org",
@@ -31,8 +31,10 @@ const CONTEXT = {
 };
 
 const navigationService = {
-  getHash: () => Promise.resolve(""),
-  setHash: () => Promise.resolve(),
+  getHash: () => Promise.resolve("/From the hash"),
+  getQueryParams: () => Promise.resolve({}),
+  setHash: () => {},
+  setQueryParams: () => {},
   onHashChanged: () => {},
   setDocumentTitle: () => {},
 };
@@ -55,7 +57,7 @@ describe("the host navigation service", () => {
   it("is used in the hub, which owns the page it is rendered on", async () => {
     const host = new AzureDevOpsWikiHost(CONTEXT, "hub");
 
-    expect(await host.getNavigation()).toBe(navigationService);
+    expect(await (await host.getNavigation())?.getHash()).toBe("/From the hash");
   });
 
   it("is declined on the work item form, whose URL belongs to the dialog", async () => {
@@ -78,5 +80,45 @@ describe("the host navigation service", () => {
     await host.getNavigation();
 
     expect(askedForNavigation()).toBe(true);
+  });
+});
+
+// A shareable link carries its route in the query as well as the hash, because
+// signing in to Azure DevOps keeps the query and drops the hash. Without this,
+// a link opened in a browser with no session showed the wiki's home page.
+describe("a route carried in the query", () => {
+  function service(query: Record<string, string>, hash = "") {
+    return {
+      ...navigationService,
+      getHash: vi.fn(() => Promise.resolve(hash)),
+      getQueryParams: vi.fn(() => Promise.resolve(query)),
+      setQueryParams: vi.fn(),
+    } as any;
+  }
+
+  it("wins over the hash, which sign-in may have replaced with its own", async () => {
+    const host = service({ route: "/Ecosystem/Power-Pages-Sites" }, "ctx=eyJTaWduSW4");
+
+    expect(await withQueryRoute(host).getHash()).toBe("/Ecosystem/Power-Pages-Sites");
+  });
+
+  it("is removed once read, so it cannot go stale behind in-app navigation", async () => {
+    const host = service({ route: "/Home" });
+    await withQueryRoute(host).getHash();
+
+    expect(host.setQueryParams).toHaveBeenCalledWith({ route: "" });
+  });
+
+  it("falls back to the hash when there is none", async () => {
+    const host = service({}, "/From the hash");
+
+    expect(await withQueryRoute(host).getHash()).toBe("/From the hash");
+    expect(host.setQueryParams).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the hash when the host cannot read the query", async () => {
+    const host = { ...service({}, "/From the hash"), getQueryParams: undefined };
+
+    expect(await withQueryRoute(host).getHash()).toBe("/From the hash");
   });
 });

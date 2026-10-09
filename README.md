@@ -133,6 +133,7 @@ The current implementation provides a working Power Wiki experience:
 - Lists available project wikis through the Azure DevOps Wiki client.
 - Lists wiki pages and builds a navigable, collapsible page tree with lazy-loaded children.
 - Supports URL hash deep links and browser back/forward navigation for wiki pages.
+- Links between wiki pages, heading permalinks and "Open in new window" use absolute dev.azure.com URLs, so they work in a new tab or when copied. Shareable links also carry the page in a `?route=` query parameter, because Azure DevOps sign-in drops the `#` part of a URL; PowerWiki reads it on load and removes it.
 - Searches the wiki from the page-tree rail: page titles match locally as you type, and page content comes from the same Azure DevOps Search service the built-in wiki uses. When an organization's index is still building, that service answers a valid query with zero results and a reason code — PowerWiki shows the reason rather than reporting that nothing matched.
 - Loads selected page Markdown from the standard Azure DevOps Wiki backing store.
 - Renders Markdown through the PowerWiki Markdown pipeline.
