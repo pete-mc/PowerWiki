@@ -1154,6 +1154,24 @@ export function WikiBrowser({
     [activePage, activeWiki, capabilities.permalinks, host, wikis]
   );
 
+  // Absolute, shareable Azure DevOps URL for a page a link in the preview points
+  // at, given the path as resolved from the link (still percent-encoded).
+  const buildPageLinkUrl = useCallback(
+    (linkPath: string): string | undefined => {
+      if (!capabilities.permalinks) {
+        return undefined;
+      }
+
+      // The route hash is decoded once on load, which would turn a `%2D` (a
+      // hyphen that is really a hyphen, not a space) into a plain one and send
+      // the link to the wrong page. Escape the escape so it survives, the same
+      // way a click hands the encoded path to pagePathCandidates.
+      const routePath = linkPath.replace(/%2D/gi, "%252D");
+      return host.buildPageUrl(buildNavigationHash(activeWiki, routePath, wikis));
+    },
+    [activeWiki, capabilities.permalinks, host, wikis]
+  );
+
   // Clicking a heading permalink scrolls to it and reflects the anchor in the
   // route, so the URL stays shareable and back/forward restores the position.
   const handleHeadingLinkActivated = useCallback(
@@ -2594,6 +2612,7 @@ export function WikiBrowser({
                     subPages={subPages}
                     anchor={activeAnchor}
                     buildHeadingUrl={buildHeadingUrl}
+                    buildPageLinkUrl={buildPageLinkUrl}
                     onHeadingLinkActivated={handleHeadingLinkActivated}
                     onLoadQueryTable={loadQueryTable}
                     onLoadWorkItemBadge={loadWorkItemBadge}
@@ -2637,6 +2656,7 @@ export function WikiBrowser({
               subPages={subPages}
               anchor={activeAnchor}
               buildHeadingUrl={buildHeadingUrl}
+              buildPageLinkUrl={buildPageLinkUrl}
               onHeadingLinkActivated={handleHeadingLinkActivated}
               onLoadQueryTable={loadQueryTable}
               onLoadWorkItemBadge={loadWorkItemBadge}

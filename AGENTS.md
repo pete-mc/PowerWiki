@@ -67,6 +67,7 @@ Full measured findings: [`docs/azure-devops-constraints.md`](docs/azure-devops-c
 - The wiki **attachments API is create-only**; don't re-litigate it or take `vso.code_write` to work around it (re-approval in every organization).
 - **Wiki search** is `almsearch.dev.azure.com` and reports an unready index as HTTP 200 + `count: 0`; surface the `infoCode`, never "no results". Snippets never reach `innerHTML`.
 - The **work item form tab** cannot have an icon and must **never write the browser's URL** (`getNavigation()` is `undefined` there). Don't re-open without a new measurement.
+- **Sign-in drops the URL `#fragment`**: a shareable link carries its route in `?route=` too, which the hub host reads first and removes. Links in the preview get absolute dev.azure.com hrefs; a relative one resolves against the extension's CDN iframe.
 - **Rendered DOM read back is unsanitized**: validate by replacing the value with the parsed one (`toSafeImageUrl`).
 - **`npm run build` does not type-check** (esbuild-loader); gate on `npm test` (`tsc --noEmit` + Vitest). Node 24.15+. markdown-it 15: import types from the package root.
 - Mermaid is a lazy chunk with `publicPath: "auto"`: no single-chunk limit, no runtime-chunk split; re-check with `npm run pw:verify` after webpack changes. The three known webpack warnings are expected.

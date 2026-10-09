@@ -16,6 +16,20 @@ to write a new file and repoint its references (see `src/drawio/`), unless the
 extension takes `vso.code_write` to push to the wiki repository directly — which
 would force every organization to re-approve the extension, so don't.
 
+**Signing in drops the URL fragment, so a shareable link cannot rely on the
+hash alone.** An unauthenticated request for a hub URL is answered with a 302 to
+`*.vssps.visualstudio.com/_signin?...&reply_to=<url>`. `reply_to` is built
+server-side, where the fragment never arrives, and the `Location` carries a
+fragment of its own (`#ctx=...`), which replaces the user's instead of letting the
+browser keep it. A PowerWiki deep link (`...wiki#/Page`) therefore opened the
+wiki's home page the first time in a browser session, and worked the second time
+only because no redirect happened once signed in. The query string survives
+(`reply_to` includes it), so `buildHubPageUrl` writes the route to `?route=` as
+well as to the hash, and the hub host reads `route` first and removes it
+(`withQueryRoute` in `src/host/azureDevOpsWikiHost.ts`). Check the redirect with
+`curl -sD - -o /dev/null "https://dev.azure.com/<org>/<project>/_apps/hub/<id>?route=/x"`.
+URLs copied from the address bar still hold the route only in the hash.
+
 **Wiki search is a different service on a different host, and it reports
 trouble as success.** Search lives on `almsearch.dev.azure.com`, not
 `dev.azure.com`, and `azure-devops-extension-api` ships no Search client — hence

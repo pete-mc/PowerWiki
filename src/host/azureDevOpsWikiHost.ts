@@ -5,6 +5,7 @@
 // that boundary matters.
 
 import * as SDK from "azure-devops-extension-sdk";
+import type { IHostNavigationService } from "azure-devops-extension-api";
 import {
   WorkItemTrackingServiceIds,
   type IWorkItemFormNavigationService
@@ -12,7 +13,7 @@ import {
 
 import { resolveWithinTimeout } from "../app/wiki/hostServiceTimeout";
 import { browserDialogs, downloadInBrowser } from "./browserDialogs";
-import { buildHubPageUrl } from "../app/wiki/wikiHeadingLink";
+import { buildHubPageUrl, HUB_ROUTE_PARAM } from "../app/wiki/wikiHeadingLink";
 import { AzureDevOpsIdentityClient } from "../identity/AzureDevOpsIdentityClient";
 import type { QueryTableResult } from "../rendering/MarkdownPreview";
 import { AzureDevOpsWorkItemClient } from "../workItems/AzureDevOpsWorkItemClient";
@@ -191,7 +192,7 @@ export class AzureDevOpsWikiHost implements WikiHost {
     }
 
     return resolveWithinTimeout(
-      SDK.getService<WikiHostNavigation>(HOST_NAVIGATION_SERVICE_ID),
+      SDK.getService<IHostNavigationService>(HOST_NAVIGATION_SERVICE_ID).then(withQueryRoute),
       HOST_NAVIGATION_TIMEOUT_MS
     );
   }
@@ -220,6 +221,39 @@ export class AzureDevOpsWikiHost implements WikiHost {
     const { projectName } = this.context;
     return projectName ? buildGitItemUrl(wiki, projectName, wikiPath) : undefined;
   }
+}
+
+/**
+ * The host route, preferring a route carried in the query by a shareable link
+ * (see `HUB_ROUTE_PARAM`) over the hash. A query route is only ever there
+ * because someone opened such a link, so it is read once and removed: the app
+ * writes the page it lands on to the hash, and a route left behind in the query
+ * would go stale as soon as the user moved to another page.
+ *
+ * Exported for tests.
+ */
+export function withQueryRoute(service: IHostNavigationService): WikiHostNavigation {
+  return {
+    async getHash() {
+      const params = await Promise.resolve(service.getQueryParams?.()).catch(() => undefined);
+      const route = params?.[HUB_ROUTE_PARAM];
+      if (route) {
+        try {
+          service.setQueryParams({ [HUB_ROUTE_PARAM]: "" });
+        } catch {
+          // Harmless: a later hash change still wins over a stale query route on
+          // in-app navigation, and only a reload would read it again.
+        }
+        return route;
+      }
+      return service.getHash();
+    },
+    async setHash(hash) {
+      service.setHash(hash);
+    },
+    onHashChanged: (callback) => service.onHashChanged(callback),
+    setDocumentTitle: (title) => service.setDocumentTitle(title)
+  };
 }
 
 class AzureDevOpsHostWorkItems implements WorkItemProvider {

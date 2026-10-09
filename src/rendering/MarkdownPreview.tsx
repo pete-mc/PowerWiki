@@ -99,6 +99,13 @@ interface MarkdownPreviewProps {
    * relative to the extension's CDN iframe.
    */
   readonly buildHeadingUrl?: (slug: string) => string | undefined;
+  /**
+   * Builds an absolute, shareable Azure DevOps URL for a wiki page path (as
+   * resolved from a link, still percent-encoded). Used to give in-wiki links a
+   * real `href`, so opening one in a new tab or copying it lands on the page
+   * rather than on the extension's CDN iframe.
+   */
+  readonly buildPageLinkUrl?: (path: string) => string | undefined;
   /** Called when a heading permalink is clicked (to reflect it in the route). */
   readonly onHeadingLinkActivated?: (slug: string) => void;
   /**
@@ -123,6 +130,10 @@ const ATTACHMENT_IMAGE_ATTR = "data-powerwiki-image";
 // Diagram editing needs the path as the author wrote it, because that is the
 // string it has to find and rewrite when a new revision is saved.
 const ATTACHMENT_SOURCE_ATTR = "data-powerwiki-image-src";
+
+// A page link's href as authored, kept when the href itself is replaced by an
+// absolute Azure DevOps URL (see rewritePageLinks). Clicks resolve from this.
+const PAGE_LINK_HREF_ATTR = "data-powerwiki-href";
 
 interface ImageEnrichmentContext {
   /** Resolved URL -> object URL for images already fetched this session. */
@@ -249,6 +260,7 @@ export function MarkdownPreview({
   onLoadImage,
   anchor,
   buildHeadingUrl,
+  buildPageLinkUrl,
   onHeadingLinkActivated,
   onEditDiagram
 }: MarkdownPreviewProps) {
@@ -361,9 +373,12 @@ export function MarkdownPreview({
       addDiagramTools(container, ATTACHMENT_SOURCE_ATTR);
     }
     rewriteHeadingLinks(container, buildHeadingUrl);
+    if (currentPath) {
+      rewritePageLinks(container, currentPath, buildPageLinkUrl);
+    }
     void highlightCodeBlocks(container);
     void renderMath(container);
-  }, [buildHeadingUrl, bumpEnrichment, enrichmentVersion, html, onEditDiagram, onLoadImage, onLoadMention, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
+  }, [buildHeadingUrl, buildPageLinkUrl, bumpEnrichment, currentPath, enrichmentVersion, html, onEditDiagram, onLoadImage, onLoadMention, onLoadQueryTable, onLoadWorkItemBadge, subPages]);
 
   // Release the attachment object URLs this preview created when it unmounts.
   useEffect(() => {
@@ -496,7 +511,14 @@ export function MarkdownPreview({
       return;
     }
 
-    const href = anchor.getAttribute("href");
+    const rewrittenHref = anchor.getAttribute(PAGE_LINK_HREF_ATTR);
+    // A page link with an absolute href: a modified click (new tab or window)
+    // is left to the browser, which now has a URL that works outside the iframe.
+    if (rewrittenHref && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+      return;
+    }
+
+    const href = rewrittenHref ?? anchor.getAttribute("href");
     if (!href) {
       return;
     }
@@ -1196,6 +1218,43 @@ function rewriteHeadingLinks(container: HTMLElement, buildHeadingUrl?: (slug: st
       link.setAttribute("href", url);
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
+    }
+  }
+}
+
+/**
+ * Replaces each in-wiki page link's href with the page's absolute Azure DevOps
+ * URL. Left relative, the browser resolves it against the extension iframe's
+ * CDN origin, so a link opened in a new tab or copied led to an "Access Denied"
+ * page there. The authored href is kept for handleClick, which still turns a
+ * plain click into in-app navigation.
+ */
+function rewritePageLinks(
+  container: HTMLElement,
+  currentPath: string,
+  buildPageLinkUrl?: (path: string) => string | undefined
+): void {
+  if (!buildPageLinkUrl) {
+    return;
+  }
+
+  for (const link of Array.from(container.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+    // Already rewritten on an earlier pass; its href is absolute now anyway.
+    if (link.hasAttribute(PAGE_LINK_HREF_ATTR)) {
+      continue;
+    }
+
+    const href = link.getAttribute("href") ?? "";
+    const targetPath = resolveInternalPath(href, currentPath);
+    // A link to an attachment is a file, not a page; a page URL would be wrong.
+    if (!targetPath || targetPath.startsWith("/.attachments/")) {
+      continue;
+    }
+
+    const url = buildPageLinkUrl(targetPath);
+    if (url) {
+      link.setAttribute(PAGE_LINK_HREF_ATTR, href);
+      link.setAttribute("href", url);
     }
   }
 }
