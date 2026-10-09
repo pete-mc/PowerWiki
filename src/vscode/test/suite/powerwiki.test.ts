@@ -18,6 +18,7 @@ import {
   openPage,
   openTabs,
   settleTabs,
+  waitForDocumentClosed,
   waitForScreen,
   wikiFile,
   wikiRootFor
@@ -253,7 +254,14 @@ suite("PowerWiki in VS Code", function () {
   suite("editing", () => {
     const scratchPage = "Scratch.md";
 
+    // Close the page before deleting its file, and wait for VS Code to drop the
+    // document. This teardown runs before the outer one that closes editors, so
+    // the file used to be deleted under an open editor, and the next test to
+    // create Scratch.md got that stale, emptied document back: a save into a
+    // document that was closing, or a page that rendered blank.
     teardown(async () => {
+      await closeAllEditors();
+      await waitForDocumentClosed(path.join(productWiki, scratchPage));
       await fs.rm(path.join(productWiki, scratchPage), { force: true });
       await api.workspace.refresh();
     });

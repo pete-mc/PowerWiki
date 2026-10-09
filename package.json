@@ -1,6 +1,6 @@
 {
   "name": "powerwiki",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "PowerWiki is an Azure DevOps extension that adds a Power Wiki menu experience while continuing to use the standard Azure DevOps Wiki repositories as the source of truth.",
   "private": true,
   "main": "dist/powerwiki.js",
@@ -51,14 +51,16 @@
     "node": ">=24.15.0"
   },
   "overrides": {
-    "dompurify": "^3.4.13",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "dompurify": "^3.4.16",
+    "katex": "$katex",
     "serialize-javascript": "^7.1.0"
   },
   "dependencies": {
     "azure-devops-extension-api": "^5.276.0",
     "azure-devops-extension-sdk": "^4.2.0",
     "docx": "^9.7.1",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.16",
     "highlight.js": "^11.12.0",
     "jszip": "^3.10.1",
     "katex": "^0.18.4",
@@ -74,7 +76,7 @@
     "turndown-plugin-gfm": "^1.0.2"
   },
   "devDependencies": {
-    "@azure-devops/mcp": "^2.9.0",
+    "@azure-devops/mcp": "^2.10.0",
     "@types/katex": "^0.16.8",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.5.0",
@@ -83,12 +85,12 @@
     "@types/turndown": "^5.0.6",
     "@types/vscode": "^1.136.0",
     "@vscode/test-electron": "^3.1.0",
-    "@vscode/vsce": "^3.9.2",
+    "@vscode/vsce": "^4.0.0",
     "copy-webpack-plugin": "^14.0.0",
     "css-loader": "^7.1.5",
     "esbuild-loader": "^4.5.0",
     "jsdom": "^30.0.1",
-    "mocha": "^11.8.0",
+    "mocha": "^12.0.3",
     "playwright-core": "^1.63.0",
     "style-loader": "^4.0.0",
     "tfx-cli": "^0.24.1",

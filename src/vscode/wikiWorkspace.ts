@@ -35,9 +35,19 @@ export const vsCodeFileWriter: WikiFileWriter = {
     if (open && !open.isClosed) {
       const edit = new vscode.WorkspaceEdit();
       edit.replace(uri, new vscode.Range(0, 0, open.lineCount, 0), contents);
-      await vscode.workspace.applyEdit(edit);
-      await open.save();
-      return;
+      try {
+        if ((await vscode.workspace.applyEdit(edit)) && (await open.save())) {
+          return;
+        }
+      } catch (error: unknown) {
+        // VS Code disposes a document some time after its last editor closes,
+        // so one that was open a moment ago can close between the edit and the
+        // save ("Document has been closed"). There is no buffer left to keep in
+        // step with then, so write the file directly like any closed one.
+        if (!open.isClosed) {
+          throw error;
+        }
+      }
     }
 
     await vscode.workspace.fs.writeFile(uri, Buffer.from(contents, "utf8"));
