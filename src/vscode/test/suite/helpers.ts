@@ -93,6 +93,36 @@ export async function closeAllEditors(): Promise<void> {
   await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 }
 
+/**
+ * Waits until VS Code has let go of a file's document. Closing its editor is
+ * not enough: the document is disposed some time later, and until then it is
+ * still in `workspace.textDocuments`. Delete the file in that window and the
+ * next test to create it gets the old, emptied document back. Gives up after
+ * `timeoutMs` rather than failing, because a document that is never disposed
+ * is VS Code's business, not the test's.
+ */
+export async function waitForDocumentClosed(fsPath: string, timeoutMs = 10_000): Promise<void> {
+  const isOpen = () =>
+    vscode.workspace.textDocuments.some((document) => document.uri.fsPath === fsPath && !document.isClosed);
+  if (!isOpen()) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(done, timeoutMs);
+    const subscription = vscode.workspace.onDidCloseTextDocument(() => {
+      if (!isOpen()) {
+        done();
+      }
+    });
+    function done() {
+      clearTimeout(timer);
+      subscription.dispose();
+      resolve();
+    }
+  });
+}
+
 /** Every open tab, across groups, as `<viewType|text>:<file name>`. */
 export function openTabs(): string[] {
   return vscode.window.tabGroups.all.flatMap((group) =>
