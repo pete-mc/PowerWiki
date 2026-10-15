@@ -2733,6 +2733,7 @@ export function WikiBrowser({
         <DrawioEditorDialog
           busy={diagramBusy}
           error={diagramError}
+          fullScreen={host.fullScreen}
           onClose={closeDiagramEditor}
           onSave={(pngDataUrl, title) => void handleSaveDiagram(pngDataUrl, title)}
           target={diagramTarget}

@@ -190,6 +190,18 @@ export interface WikiHostDialogs {
   prompt(message: string, defaultValue?: string): Promise<string | undefined>;
 }
 
+/**
+ * The host's own page chrome: in Azure DevOps, the header and navigation around
+ * the extension's iframe. That chrome is outside the iframe, so nothing the app
+ * does to its own layout reaches it, and the hub iframe may not use browser
+ * fullscreen (`document.fullscreenEnabled` is false there), so asking the host
+ * is the only way to give a task that needs room the whole window.
+ */
+export interface FullScreenProvider {
+  isFullScreen(): Promise<boolean>;
+  setFullScreen(fullScreen: boolean): Promise<void>;
+}
+
 export interface IdentityProvider {
   getMentionIdentity(id: string): Promise<MentionIdentity>;
   /**
@@ -226,6 +238,8 @@ export interface WikiHost {
   readonly identity?: IdentityProvider;
   readonly follow?: FollowProvider;
   readonly linkedPages?: LinkedPagesProvider;
+  /** Absent where the host has no chrome of its own to hide. */
+  readonly fullScreen?: FullScreenProvider;
 
   /** Resolves once the host's route service is ready, or undefined if it has none. */
   getNavigation(): Promise<WikiHostNavigation | undefined>;

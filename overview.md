@@ -50,7 +50,7 @@ Stored exactly as the built-in wiki stores them, so a mention written in PowerWi
 
 ## Diagrams you can actually edit
 
-- **Draw with draw.io, without leaving the wiki.** Hit **Diagram** in the editor toolbar (or type `/diagram`) for a full draw.io canvas — shapes, connectors, the whole shape library.
+- **Draw with draw.io, without leaving the wiki.** Hit **Diagram** in the editor toolbar (or type `/diagram`) for a full draw.io canvas — shapes, connectors, the whole shape library. **Maximize** hides the Azure DevOps header and navigation, so the canvas gets the whole window.
 - **Edit any diagram in place.** Hover a diagram on a page and click **Edit diagram**. It reopens exactly as you drew it, not as a flat picture.
 - **Reuse one diagram across many pages.** Reference the same diagram wherever it's relevant; edit it from any of those pages and every page updates. No more six stale copies of the same architecture diagram.
 - **Stored as a normal image.** Each diagram is saved to `.attachments` as a `.drawio.png` — a real PNG that happens to carry its own source. It renders in the built-in Azure DevOps Wiki, drops into Word and PDF exports like any other image, and keeps working if you ever stop using PowerWiki.

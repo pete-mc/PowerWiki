@@ -128,6 +128,10 @@ try {
   // 1. Home: rendering, work-item/query enrichment, byline.
   let frame = await openWikiPage(page, "#/Home", { timeoutMs: 300000 });
   console.log(`Loaded PowerWiki version: ${(await readLoadedVersion(frame)) || "unknown"}`);
+  // The draw.io editor's Maximise covers the Azure DevOps chrome only when the
+  // hub iframe may go fullscreen; otherwise it fills the iframe alone.
+  const fullscreen = await frame.evaluate(() => document.fullscreenEnabled).catch(() => null);
+  console.log(`Hub iframe fullscreenEnabled: ${fullscreen}`);
   await frame.waitForSelector(".powerwiki-work-item-badge-rich", { timeout: 60000 }).catch(() => {});
   await frame.waitForSelector(".powerwiki-query-table table", { timeout: 60000 }).catch(() => {});
   check(!!(await frame.$(".powerwiki-work-item-badge-rich")), "work item badge enriched on Home");
@@ -482,6 +486,38 @@ try {
   } catch (error) {
     check(false, `draw.io diagram affordances failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06b-drawio-error.png") });
+  }
+
+  // draw.io Maximize: the dialog fills the iframe, and the hub's full-screen
+  // mode hides the Azure DevOps header and navigation, so the iframe itself
+  // grows. Restoring gives the chrome back.
+  try {
+    const iframeBox = async () => (await frame.frameElement()).boundingBox();
+    await frame.click('.wiki-format-toolbar button[title*="draw.io"]');
+    await frame.waitForSelector(".powerwiki-drawio-maximize", { timeout: 30000 });
+    const before = await iframeBox();
+    await frame.click(".powerwiki-drawio-maximize");
+    await sleep(1500);
+    const maximized = await iframeBox();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06c-drawio-maximized.png") });
+    console.log("drawio maximize iframe boxes:", JSON.stringify({ before, maximized }));
+    check(!!(await frame.$(".powerwiki-drawio-overlay.is-maximized")), "draw.io dialog maximizes");
+    check(
+      maximized.width > before.width && maximized.height > before.height,
+      "maximizing hides the Azure DevOps header and navigation (the iframe grows)"
+    );
+    await frame.click(".powerwiki-drawio-maximize");
+    await sleep(1500);
+    const restored = await iframeBox();
+    check(
+      Math.abs(restored.width - before.width) < 2 && Math.abs(restored.height - before.height) < 2,
+      `restoring gives the chrome back (restored=${JSON.stringify(restored)})`
+    );
+    await frame.click(".powerwiki-drawio-dialog .wiki-export-close");
+    await frame.waitForSelector(".powerwiki-drawio-overlay", { state: "detached", timeout: 10000 });
+  } catch (error) {
+    check(false, `draw.io maximize failed: ${error.message}`);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06c-drawio-maximize-error.png") });
   }
 
   // Release C: KaTeX math renders (loads the katex chunk + CSS).
