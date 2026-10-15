@@ -242,6 +242,46 @@ async function runSuite(page) {
     await page.waitForSelector(".markdown-preview", { timeout: 15_000 });
   });
 
+  // Diagramming needs room: Maximize takes the draw.io dialog edge to edge.
+  // (The sandbox has no host chrome to hide; that half is pw:verify's.)
+  await test("the draw.io editor dialog maximizes to fill the window, and restores", async () => {
+    // The editor itself is diagrams.net's, and nothing here needs it to load.
+    await page.route("https://embed.diagrams.net/**", (route) => route.abort());
+    await openPage(page, "Markdown-reference", "/Guides/Markdown-reference");
+    await clickMenuItem(page, "Edit page");
+    await page.waitForSelector(".wiki-editor-shell", { timeout: 60_000 });
+    try {
+      await page.locator(".wiki-editor-mode-select").selectOption("splitCode");
+      await page.locator('.wiki-format-toolbar button[title*="draw.io"]').click();
+      await page.waitForSelector(".powerwiki-drawio-maximize", { timeout: 15_000 });
+
+      const dialog = page.locator(".powerwiki-drawio-dialog");
+      const viewport = page.viewportSize();
+      const normal = await dialog.boundingBox();
+      assert(normal.width < viewport.width - 8, `the dialog started full width (${normal.width}px)`);
+
+      await page.locator(".powerwiki-drawio-maximize").click();
+      const maximized = await dialog.boundingBox();
+      await page.screenshot({ path: path.join(ARTIFACTS, "drawio-maximized.png") });
+      assert(
+        maximized.width === viewport.width && maximized.height === viewport.height,
+        `the maximized dialog is ${maximized.width}x${maximized.height}, not the whole ${viewport.width}x${viewport.height} window`
+      );
+
+      await page.keyboard.press("Escape");
+      const restored = await dialog.boundingBox();
+      assert(restored.width === normal.width, "Escape did not restore the dialog");
+    } finally {
+      // Leave the shell as the next test expects it, even after a failure.
+      for (let i = 0; i < 3 && (await page.$(".powerwiki-drawio-dialog")); i += 1) {
+        await page.keyboard.press("Escape");
+      }
+      await page.locator(".wiki-editor-toolbar-actions button", { hasText: "Cancel" }).click();
+      await page.waitForSelector(".wiki-editor-shell", { state: "detached", timeout: 15_000 });
+      await page.unroute("https://embed.diagrams.net/**");
+    }
+  });
+
   await test("a page can be edited and saved, and the preview shows the change", async () => {
     await expandTree(page, "Guides");
     await openPage(page, "Diagrams", "/Guides/Diagrams");

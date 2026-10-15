@@ -117,6 +117,14 @@ One thing that *is* documented: a `work-item-form-page` contribution is unloaded
 the moment the dialog closes, which is why `onSaved` has to be observed from a
 `ms.vss-work-web.work-item-notifications` contribution instead.
 
+**The hub iframe cannot go browser-fullscreen.** `document.fullscreenEnabled`
+is `false` inside the extension's iframe (measured with `pw:verify`, 1.8.0), so
+`requestFullscreen()` cannot reach past the Azure DevOps header and navigation.
+Azure DevOps' own full-screen mode can:
+`IHostPageLayoutService.setFullScreenMode` (`ms.vss-features.host-page-layout-service`),
+exposed as `WikiHost.fullScreen` and used by the draw.io dialog's Maximize. It is
+not offered on the work item form, where the tab sits inside the work item dialog.
+
 **Anything read back out of the rendered DOM has not been sanitized.**
 `sanitizeRenderedHtml` runs once, before the HTML is inserted; the preview's
 enrichers then read attributes back out and write them to real sinks. DOMPurify

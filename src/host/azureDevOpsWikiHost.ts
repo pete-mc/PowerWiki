@@ -5,7 +5,7 @@
 // that boundary matters.
 
 import * as SDK from "azure-devops-extension-sdk";
-import type { IHostNavigationService } from "azure-devops-extension-api";
+import type { IHostNavigationService, IHostPageLayoutService } from "azure-devops-extension-api";
 import {
   WorkItemTrackingServiceIds,
   type IWorkItemFormNavigationService
@@ -27,6 +27,7 @@ import type { WikiSummary } from "../wiki/WikiPage";
 import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
 import type {
   FollowProvider,
+  FullScreenProvider,
   IdentityProvider,
   LinkedPagesProvider,
   WikiHost,
@@ -46,6 +47,7 @@ import { buildWikiArtifactUrl } from "./workItemWikiLinks";
 export type AzureDevOpsSurface = "hub" | "workItem";
 
 const HOST_NAVIGATION_SERVICE_ID = "ms.vss-features.host-navigation-service";
+const HOST_PAGE_LAYOUT_SERVICE_ID = "ms.vss-features.host-page-layout-service";
 
 // A real host answers in milliseconds; this only has to be short enough that a
 // stalled host degrades to hash-based navigation rather than hanging.
@@ -94,6 +96,7 @@ export class AzureDevOpsWikiHost implements WikiHost {
   public readonly wikiClient: WikiRepositoryClient;
   public readonly workItems?: WorkItemProvider;
   public readonly linkedPages?: LinkedPagesProvider;
+  public readonly fullScreen?: FullScreenProvider;
   public readonly searchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
   private readonly onWorkItem: boolean;
 
@@ -145,6 +148,12 @@ export class AzureDevOpsWikiHost implements WikiHost {
 
     if (onWorkItem && context.projectId) {
       this.linkedPages = new WorkItemFormLinkedPages(context.projectId);
+    }
+
+    // On the work item form the tab sits inside the work item dialog, which
+    // full-screen mode would leave in place while hiding the page behind it.
+    if (!onWorkItem) {
+      this.fullScreen = azureDevOpsFullScreen;
     }
 
     // Content search runs against the Azure DevOps Search service, which indexes
@@ -221,6 +230,25 @@ export class AzureDevOpsWikiHost implements WikiHost {
     const { projectName } = this.context;
     return projectName ? buildGitItemUrl(wiki, projectName, wikiPath) : undefined;
   }
+}
+
+/** Azure DevOps' full-screen mode, which hides its header and navigation. */
+const azureDevOpsFullScreen: FullScreenProvider = {
+  async isFullScreen() {
+    const layout = await pageLayoutService();
+    return layout ? layout.getFullScreenMode() : false;
+  },
+  async setFullScreen(fullScreen) {
+    const layout = await pageLayoutService();
+    layout?.setFullScreenMode(fullScreen);
+  }
+};
+
+function pageLayoutService(): Promise<IHostPageLayoutService | undefined> {
+  return resolveWithinTimeout(
+    SDK.getService<IHostPageLayoutService>(HOST_PAGE_LAYOUT_SERVICE_ID),
+    HOST_NAVIGATION_TIMEOUT_MS
+  );
 }
 
 /**

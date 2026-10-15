@@ -296,6 +296,13 @@ leaving the wiki. Create one with the **Diagram** button in the editor toolbar
 (or the `/Diagram` slash command); reopen an existing one from the **Edit
 diagram** button that appears when you hover it in the preview.
 
+The **Maximize** button (⤢) in the editor dialog's title bar gives the canvas
+the whole window. In the Azure DevOps hub it also switches Azure DevOps to its
+full-screen mode, which hides the header and project navigation around
+PowerWiki. **Restore** (or Esc) switches it back, and so does closing the
+dialog. If Azure DevOps was already full screen, it stays that way. On a work
+item's PowerWiki tab, the dialog fills only the tab.
+
 ### How diagrams are stored
 
 A diagram is saved to the wiki's `.attachments` folder as

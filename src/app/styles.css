@@ -1569,6 +1569,54 @@ body {
   width: min(1500px, 96vw);
 }
 
+/*
+ * Maximized: the dialog fills the extension's frame edge to edge with tighter
+ * chrome. The host's full-screen mode (see FullScreenProvider) grows the frame.
+ */
+.powerwiki-drawio-overlay.is-maximized {
+  background: var(--pw-surface);
+}
+
+.powerwiki-drawio-overlay.is-maximized .powerwiki-drawio-dialog {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 4px 8px 8px;
+  width: 100%;
+}
+
+.powerwiki-drawio-overlay.is-maximized .wiki-export-header h2 {
+  font-size: 14px;
+}
+
+.powerwiki-drawio-overlay.is-maximized .powerwiki-drawio-bar {
+  padding: 4px 0;
+}
+
+.powerwiki-drawio-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.powerwiki-drawio-maximize {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--pw-text);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.powerwiki-drawio-maximize:hover {
+  background: var(--pw-hover);
+  border-color: var(--pw-border);
+}
+
 .powerwiki-drawio-bar {
   align-items: center;
   display: flex;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useThemeMode } from "../app/themeMode";
+import type { FullScreenProvider } from "../host/WikiHost";
 import { diagramTitle } from "./drawioDiagram";
 import { startDrawioSession } from "./drawioEmbed";
 
@@ -19,6 +20,8 @@ interface DrawioEditorDialogProps {
   /** Receives the exported `.drawio.png` data URL and the diagram's title. */
   readonly onSave: (pngDataUrl: string, title: string) => void;
   readonly onClose: () => void;
+  /** The host's full-screen mode, used while the dialog is maximized. */
+  readonly fullScreen?: FullScreenProvider;
 }
 
 /**
@@ -26,8 +29,9 @@ interface DrawioEditorDialogProps {
  * in an iframe (see drawioEmbed); this component owns the surrounding chrome,
  * the diagram title, and the save/close lifecycle.
  */
-export function DrawioEditorDialog({ target, busy, error, onSave, onClose }: DrawioEditorDialogProps) {
+export function DrawioEditorDialog({ target, busy, error, onSave, onClose, fullScreen }: DrawioEditorDialogProps) {
   const frameHostRef = useRef<HTMLDivElement>(null);
+  const [maximized, setMaximized] = useState(false);
   const isNew = !target.path;
   const [title, setTitle] = useState(target.path ? diagramTitle(target.path) : "Diagram");
   const [loadError, setLoadError] = useState<string>();
@@ -65,27 +69,79 @@ export function DrawioEditorDialog({ target, busy, error, onSave, onClose }: Dra
     // eslint-disable-next-line react-hooks/exhaustive-deps -- start once per dialog
   }, []);
 
-  // Escape closes the dialog, matching the other PowerWiki dialogs.
+  // Maximized, the dialog fills the extension's frame edge to edge, and the
+  // host hides its own chrome around the frame where it can.
+  const hostWasFullScreen = useRef<boolean>(undefined);
+  useEffect(() => {
+    let current = true;
+    void fullScreen
+      ?.isFullScreen()
+      .then((value) => {
+        if (current) {
+          hostWasFullScreen.current = value;
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [fullScreen]);
+
+  // Restoring, or closing the dialog, hands the host back its chrome — unless
+  // the host was already full screen, which is the user's choice to keep.
+  useEffect(() => {
+    if (!maximized || !fullScreen || hostWasFullScreen.current) {
+      return;
+    }
+    void fullScreen.setFullScreen(true).catch(() => undefined);
+    return () => {
+      void fullScreen.setFullScreen(false).catch(() => undefined);
+    };
+  }, [fullScreen, maximized]);
+
+  // Escape restores a maximized dialog, and otherwise closes it, matching the
+  // other PowerWiki dialogs.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (maximized) {
+        setMaximized(false);
+      } else if (!busy) {
         onCloseRef.current();
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [busy]);
+  }, [busy, maximized]);
 
   const message = error ?? loadError;
 
   return (
-    <div className="wiki-export-overlay" role="dialog" aria-modal="true">
+    <div
+      className={`wiki-export-overlay powerwiki-drawio-overlay${maximized ? " is-maximized" : ""}`}
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="powerwiki-drawio-dialog" onClick={(event) => event.stopPropagation()}>
         <div className="wiki-export-header">
           <h2>{isNew ? "New diagram" : "Edit diagram"}</h2>
-          <button aria-label="Close" className="wiki-export-close" disabled={busy} onClick={onClose} type="button">
-            &times;
-          </button>
+          <div className="powerwiki-drawio-header-actions">
+            <button
+              aria-label={maximized ? "Restore" : "Maximize"}
+              aria-pressed={maximized}
+              className="powerwiki-drawio-maximize"
+              onClick={() => setMaximized(!maximized)}
+              title={maximized ? "Restore (Esc)" : "Maximize"}
+              type="button"
+            >
+              {maximized ? "\u2921" : "\u2922"}
+            </button>
+            <button aria-label="Close" className="wiki-export-close" disabled={busy} onClick={onClose} type="button">
+              &times;
+            </button>
+          </div>
         </div>
 
         <div className="powerwiki-drawio-bar">
