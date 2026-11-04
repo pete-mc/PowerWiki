@@ -20,13 +20,18 @@ would force every organization to re-approve the extension, so don't.
 branch and every pages call can omit `versionDescriptor`. A code wiki (a Git
 folder published as a wiki) reads fine without one, but creating and editing a
 page fail with `"The versionType should be 'branch' and version cannot be
-null Parameter name: versionDescriptor"` (issue #85; delete and move were not
-measured but take the same parameter). The client therefore sends
+null Parameter name: versionDescriptor"` (issue #85). Measured on a code wiki:
+create, edit, move, delete and attachment upload all return that 400 without
+the branch and succeed with it; reads succeed either way. The client therefore sends
 `versionDescriptor.version=<versions[0]>&versionDescriptor.versionType=branch`
 on every pages, pageMoves and attachments request to a code wiki, reads included
 so reads and writes agree on the branch, and nothing extra to a project wiki
 (`wikiBranch` in `src/wiki/AzureDevOpsWikiRepositoryClient.ts`). A code wiki with
 several published versions is edited on its first one, the one PowerWiki shows.
+A code wiki's attachment upload also answers with the *repository* path
+(`/docs/.attachments/x.png` for a wiki mapped to `/docs`), not the wiki path a
+project wiki returns; `wikiAttachmentPath` trims it to `/.attachments/x.png` so
+the mapped folder is not added twice when the page renders.
 
 **Signing in drops the URL fragment, so a shareable link cannot rely on the
 hash alone.** An unauthenticated request for a hub URL is answered with a 302 to

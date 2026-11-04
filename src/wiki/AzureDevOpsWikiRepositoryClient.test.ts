@@ -28,7 +28,7 @@ vi.mock("azure-devops-extension-api/Common", () => ({
   },
 }));
 
-const { AzureDevOpsWikiRepositoryClient, wikiBranch } = await import("./AzureDevOpsWikiRepositoryClient");
+const { AzureDevOpsWikiRepositoryClient, wikiAttachmentPath, wikiBranch } = await import("./AzureDevOpsWikiRepositoryClient");
 
 const codeWiki = {
   id: "code-wiki-id",
@@ -116,5 +116,18 @@ describe("wikiBranch", () => {
 
   it("is undefined for a code wiki with no published version", () => {
     expect(wikiBranch({ ...codeWiki, versions: [] })).toBeUndefined();
+  });
+});
+
+describe("wikiAttachmentPath", () => {
+  it("keeps a project wiki's path", () => {
+    expect(wikiAttachmentPath("/.attachments/image-1.png")).toBe("/.attachments/image-1.png");
+  });
+
+  // Measured on a code wiki mapped to /docs: the API answers with the
+  // repository path, which would render as /docs/docs/.attachments/….
+  it("drops a code wiki's mapped folder", () => {
+    expect(wikiAttachmentPath("/docs/.attachments/image-1.png")).toBe("/.attachments/image-1.png");
+    expect(wikiAttachmentPath("/team/docs/.attachments/image-1.png")).toBe("/.attachments/image-1.png");
   });
 });

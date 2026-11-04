@@ -72,6 +72,17 @@ export function wikiBranch(wiki: Pick<WikiV2, "type" | "versions">): WikiBranch 
   return wiki.type === WikiType.CodeWiki && version ? { version, versionType: "branch" } : undefined;
 }
 
+/**
+ * The wiki-relative form of a stored attachment's path. A project wiki returns
+ * "/.attachments/x.png" already; a code wiki returns the repository path,
+ * mapped folder included ("/docs/.attachments/x.png"), which the app would
+ * join to the mapped folder a second time when it renders the page.
+ */
+export function wikiAttachmentPath(path: string): string {
+  const folder = path.lastIndexOf("/.attachments/");
+  return folder > 0 ? path.slice(folder) : path;
+}
+
 // Subclasses WikiRestClient to expose the same pages endpoint but requesting
 // JSON instead of text/plain, which returns the full WikiPage object including
 // subPages, order, and isParentPage.
@@ -266,7 +277,7 @@ class WikiJsonClient extends WikiRestClient {
     if (!attachment?.name || !attachment?.path) {
       throw new Error("The wiki attachments API returned an unexpected response.");
     }
-    return { name: attachment.name, path: attachment.path };
+    return { name: attachment.name, path: wikiAttachmentPath(attachment.path) };
   }
 
   public async movePage(
