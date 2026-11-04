@@ -27,8 +27,8 @@ import { hasSignInCredentials, isOnSignInPage, signIn } from "./signIn.mjs";
 //
 // PW_HUB still overrides the whole URL for hosts that don't match the
 // dev.azure.com shape (e.g. Azure DevOps Server).
-const ORG = process.env.PW_ORG ?? "dataversepowertools";
-const PROJECT = process.env.PW_PROJECT ?? "PowerWiki";
+export const ORG = process.env.PW_ORG ?? "dataversepowertools";
+export const PROJECT = process.env.PW_PROJECT ?? "PowerWiki";
 const PUBLISHER = process.env.PW_PUBLISHER ?? "dataversepowertools";
 const EXTENSION = process.env.PW_EXTENSION ?? "powerwiki";
 
@@ -192,7 +192,17 @@ export async function sweepSmokeAttachments(context) {
   }
 }
 
-export async function deleteAttachments(context, paths) {
+/** The project's wiki with this name, or undefined when there is none. */
+export async function findWiki(context, name) {
+  const wikis = await context.request.get(`https://dev.azure.com/${ORG}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
+  return ((await wikis.json()).value ?? []).find((w) => w.name === name);
+}
+
+/**
+ * Deletes uploaded attachments (repository paths) from the project wiki, or
+ * from the named wiki when `wikiName` is given.
+ */
+export async function deleteAttachments(context, paths, wikiName) {
   if (!paths.length) {
     return;
   }
@@ -200,9 +210,10 @@ export async function deleteAttachments(context, paths) {
     const api = context.request;
     const wikis = await api.get(`https://dev.azure.com/${ORG}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
     const all = (await wikis.json()).value;
-    const wiki = all.find((w) => w.type === "projectWiki") ?? all[0];
+    const wiki = wikiName ? all.find((w) => w.name === wikiName) : all.find((w) => w.type === "projectWiki") ?? all[0];
     // A project wiki's repository id is the wiki id, and its branch is whatever
     // the wiki was provisioned with (wikiMaster on older projects, main on newer).
+    // A code wiki's branch is the one it is published from.
     const branch = (wiki.versions?.[0]?.version) ?? "wikiMaster";
     const refs = await api.get(
       `https://dev.azure.com/${ORG}/_apis/git/repositories/${wiki.repositoryId}/refs?filter=heads/${branch}&api-version=7.1`
