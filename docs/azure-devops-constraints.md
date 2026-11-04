@@ -16,6 +16,18 @@ to write a new file and repoint its references (see `src/drawio/`), unless the
 extension takes `vso.code_write` to push to the wiki repository directly — which
 would force every organization to re-approve the extension, so don't.
 
+**A code wiki's page writes must name its branch.** A project wiki has one
+branch and every pages call can omit `versionDescriptor`. A code wiki (a Git
+folder published as a wiki) reads fine without one, but creating and editing a
+page fail with `"The versionType should be 'branch' and version cannot be
+null Parameter name: versionDescriptor"` (issue #85; delete and move were not
+measured but take the same parameter). The client therefore sends
+`versionDescriptor.version=<versions[0]>&versionDescriptor.versionType=branch`
+on every pages, pageMoves and attachments request to a code wiki, reads included
+so reads and writes agree on the branch, and nothing extra to a project wiki
+(`wikiBranch` in `src/wiki/AzureDevOpsWikiRepositoryClient.ts`). A code wiki with
+several published versions is edited on its first one, the one PowerWiki shows.
+
 **Signing in drops the URL fragment, so a shareable link cannot rely on the
 hash alone.** An unauthenticated request for a hub URL is answered with a 302 to
 `*.vssps.visualstudio.com/_signin?...&reply_to=<url>`. `reply_to` is built

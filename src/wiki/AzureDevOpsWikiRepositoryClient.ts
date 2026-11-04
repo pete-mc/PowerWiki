@@ -15,8 +15,10 @@ import {
 } from "azure-devops-extension-api/Git";
 import {
   WikiRestClient,
+  WikiType,
   type WikiPage as WikiApiPage,
-  type WikiPageMove
+  type WikiPageMove,
+  type WikiV2
 } from "azure-devops-extension-api/Wiki";
 
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "./WikiComment";
@@ -48,6 +50,28 @@ interface WikiAttachmentBody {
   readonly attachment?: { readonly name?: string; readonly path?: string };
 }
 
+/**
+ * The branch a page request targets, sent as `versionDescriptor.*` query
+ * parameters. A code wiki (a Git folder published as a wiki) rejects writes
+ * without one ("The versionType should be 'branch' and version cannot be
+ * null"); a project wiki has a single branch and needs none, so it gets
+ * undefined and its requests stay exactly as they were.
+ */
+interface WikiBranch {
+  readonly version: string;
+  readonly versionType: "branch";
+}
+
+function versionQuery(branch: WikiBranch | undefined): Record<string, WikiBranch> {
+  return branch ? { versionDescriptor: branch } : {};
+}
+
+/** The published branch a code wiki's pages must be read and written on. */
+export function wikiBranch(wiki: Pick<WikiV2, "type" | "versions">): WikiBranch | undefined {
+  const version = wiki.versions?.[0]?.version;
+  return wiki.type === WikiType.CodeWiki && version ? { version, versionType: "branch" } : undefined;
+}
+
 // Subclasses WikiRestClient to expose the same pages endpoint but requesting
 // JSON instead of text/plain, which returns the full WikiPage object including
 // subPages, order, and isParentPage.
@@ -55,7 +79,8 @@ class WikiJsonClient extends WikiRestClient {
   public getPageJson(
     project: string,
     wikiIdentifier: string,
-    path: string
+    path: string,
+    branch?: WikiBranch
   ): Promise<WikiApiPage> {
     return this.beginRequest<WikiApiPage>({
       apiVersion: "5.2-preview.1",
@@ -65,13 +90,15 @@ class WikiJsonClient extends WikiRestClient {
         path,
         recursionLevel: VersionControlRecursionType.OneLevel,
         includeContent: false,
+        ...versionQuery(branch),
       },
     });
   }
 
   public getPageTreeJson(
     project: string,
-    wikiIdentifier: string
+    wikiIdentifier: string,
+    branch?: WikiBranch
   ): Promise<WikiApiPage> {
     return this.beginRequest<WikiApiPage>({
       apiVersion: "5.2-preview.1",
@@ -81,6 +108,7 @@ class WikiJsonClient extends WikiRestClient {
         path: "/",
         recursionLevel: VersionControlRecursionType.Full,
         includeContent: false,
+        ...versionQuery(branch),
       },
     });
   }
@@ -88,7 +116,8 @@ class WikiJsonClient extends WikiRestClient {
   public async getPageTextWithVersion(
     project: string,
     wikiIdentifier: string,
-    path: string
+    path: string,
+    branch?: WikiBranch
   ): Promise<{ content: string; version?: string }> {
     const response = await this.beginRequest<Response>({
       apiVersion: "5.2-preview.1",
@@ -99,6 +128,7 @@ class WikiJsonClient extends WikiRestClient {
       queryParams: {
         path,
         recursionLevel: VersionControlRecursionType.None,
+        ...versionQuery(branch),
       },
     });
 
@@ -111,7 +141,8 @@ class WikiJsonClient extends WikiRestClient {
   public getPageMetaJson(
     project: string,
     wikiIdentifier: string,
-    path: string
+    path: string,
+    branch?: WikiBranch
   ): Promise<WikiApiPage> {
     return this.beginRequest<WikiApiPage>({
       apiVersion: "5.2-preview.1",
@@ -121,6 +152,7 @@ class WikiJsonClient extends WikiRestClient {
         path,
         recursionLevel: VersionControlRecursionType.None,
         includeContent: false,
+        ...versionQuery(branch),
       },
     });
   }
@@ -128,7 +160,8 @@ class WikiJsonClient extends WikiRestClient {
   public async savePage(
     project: string,
     wikiIdentifier: string,
-    page: WikiPage
+    page: WikiPage,
+    branch?: WikiBranch
   ): Promise<WikiPage> {
     const customHeaders: Record<string, string> = {};
     if (page.version) {
@@ -144,6 +177,7 @@ class WikiJsonClient extends WikiRestClient {
       routeValues: { project, wikiIdentifier },
       queryParams: {
         path: page.path,
+        ...versionQuery(branch),
       },
       body: {
         content: page.content,
@@ -166,7 +200,8 @@ class WikiJsonClient extends WikiRestClient {
     project: string,
     wikiIdentifier: string,
     path: string,
-    content: string
+    content: string,
+    branch?: WikiBranch
   ): Promise<WikiPage> {
     const response = await this.beginRequest<Response>({
       apiVersion: "5.2-preview.1",
@@ -174,7 +209,7 @@ class WikiJsonClient extends WikiRestClient {
       returnRawResponse: true,
       routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages/{*path}",
       routeValues: { project, wikiIdentifier },
-      queryParams: { path },
+      queryParams: { path, ...versionQuery(branch) },
       body: { content },
     });
     const saved = await response.json() as WikiApiPage;
@@ -190,7 +225,8 @@ class WikiJsonClient extends WikiRestClient {
   public async deletePage(
     project: string,
     wikiIdentifier: string,
-    path: string
+    path: string,
+    branch?: WikiBranch
   ): Promise<void> {
     await this.beginRequest<Response>({
       apiVersion: "5.2-preview.1",
@@ -198,7 +234,7 @@ class WikiJsonClient extends WikiRestClient {
       returnRawResponse: true,
       routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pages/{*path}",
       routeValues: { project, wikiIdentifier },
-      queryParams: { path },
+      queryParams: { path, ...versionQuery(branch) },
     });
   }
 
@@ -206,7 +242,8 @@ class WikiJsonClient extends WikiRestClient {
     project: string,
     wikiIdentifier: string,
     name: string,
-    base64Content: string
+    base64Content: string,
+    branch?: WikiBranch
   ): Promise<WikiAttachment> {
     // The generated SDK client only exposes comment attachments, so call the
     // wiki attachments endpoint directly. The API expects the file bytes
@@ -219,7 +256,7 @@ class WikiJsonClient extends WikiRestClient {
       customHeaders: { "Content-Type": "application/octet-stream" },
       routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/attachments",
       routeValues: { project, wikiIdentifier },
-      queryParams: { name },
+      queryParams: { name, ...versionQuery(branch) },
       body: base64Content,
     });
 
@@ -237,7 +274,8 @@ class WikiJsonClient extends WikiRestClient {
     wikiIdentifier: string,
     path: string,
     newPath: string,
-    newOrder: number
+    newOrder: number,
+    branch?: WikiBranch
   ): Promise<WikiPage> {
     const response = await this.beginRequest<Response>({
       apiVersion: "5.2-preview.1",
@@ -245,6 +283,7 @@ class WikiJsonClient extends WikiRestClient {
       returnRawResponse: true,
       routeTemplate: "{project}/_apis/wiki/wikis/{wikiIdentifier}/pageMoves",
       routeValues: { project, wikiIdentifier },
+      queryParams: versionQuery(branch),
       body: { path, newPath, newOrder },
     });
     const moved = await response.json() as WikiPageMove;
@@ -262,6 +301,8 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   private readonly wikiClient = getClient(WikiRestClient);
   private readonly wikiJsonClient = getClient(WikiJsonClient);
   private readonly gitClient = getClient(GitRestClient);
+  /** Each wiki's page branch, keyed by wiki id and name (either identifies it). */
+  private readonly wikiBranches = new Map<string, Promise<WikiBranch | undefined>>();
 
   public constructor(private readonly projectName: string) {}
 
@@ -279,6 +320,11 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
 
   public async getWikis(): Promise<WikiSummary[]> {
     const wikis = await this.wikiClient.getAllWikis(this.projectName);
+    for (const wiki of wikis) {
+      const branch = Promise.resolve(wikiBranch(wiki));
+      this.wikiBranches.set(wiki.id, branch);
+      this.wikiBranches.set(wiki.name, branch);
+    }
 
     return wikis.map((wiki) => ({
       id: wiki.id,
@@ -291,7 +337,7 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   }
 
   public async getAllPages(wikiId: string): Promise<WikiPageSummary[]> {
-    const root = await this.wikiJsonClient.getPageTreeJson(this.projectName, wikiId);
+    const root = await this.wikiJsonClient.getPageTreeJson(this.projectName, wikiId, await this.branchOf(wikiId));
     const pages: WikiPageSummary[] = [];
 
     const collect = (page: WikiApiPage) => {
@@ -311,7 +357,12 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
   }
 
   public async getChildPages(wikiId: string, parentPath: string): Promise<WikiPageSummary[]> {
-    const page = await this.wikiJsonClient.getPageJson(this.projectName, wikiId, parentPath);
+    const page = await this.wikiJsonClient.getPageJson(
+      this.projectName,
+      wikiId,
+      parentPath,
+      await this.branchOf(wikiId)
+    );
 
     return (page.subPages ?? []).map((subPage: WikiApiPage) => ({
       id: subPage.id,
@@ -325,22 +376,23 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     const page = await this.wikiJsonClient.getPageTextWithVersion(
       this.projectName,
       wikiId,
-      path
+      path,
+      await this.branchOf(wikiId)
     );
 
     return { content: page.content, path, version: page.version };
   }
 
   public async savePage(wikiId: string, page: WikiPage): Promise<WikiPage> {
-    return this.wikiJsonClient.savePage(this.projectName, wikiId, page);
+    return this.wikiJsonClient.savePage(this.projectName, wikiId, page, await this.branchOf(wikiId));
   }
 
   public async createPage(wikiId: string, path: string, content = ""): Promise<WikiPage> {
-    return this.wikiJsonClient.createPage(this.projectName, wikiId, path, content);
+    return this.wikiJsonClient.createPage(this.projectName, wikiId, path, content, await this.branchOf(wikiId));
   }
 
   public async deletePage(wikiId: string, path: string): Promise<void> {
-    return this.wikiJsonClient.deletePage(this.projectName, wikiId, path);
+    return this.wikiJsonClient.deletePage(this.projectName, wikiId, path, await this.branchOf(wikiId));
   }
 
   public async movePage(
@@ -349,16 +401,48 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
     newPath: string,
     newOrder: number
   ): Promise<WikiPage> {
-    return this.wikiJsonClient.movePage(this.projectName, wikiId, path, newPath, newOrder);
+    return this.wikiJsonClient.movePage(
+      this.projectName,
+      wikiId,
+      path,
+      newPath,
+      newOrder,
+      await this.branchOf(wikiId)
+    );
   }
 
   public async createAttachment(wikiId: string, name: string, base64Content: string): Promise<WikiAttachment> {
-    return this.wikiJsonClient.createAttachment(this.projectName, wikiId, name, base64Content);
+    return this.wikiJsonClient.createAttachment(
+      this.projectName,
+      wikiId,
+      name,
+      base64Content,
+      await this.branchOf(wikiId)
+    );
   }
 
   public async getPageMeta(wikiId: string, path: string): Promise<WikiPageMeta> {
-    const page = await this.wikiJsonClient.getPageMetaJson(this.projectName, wikiId, path);
+    const page = await this.wikiJsonClient.getPageMetaJson(
+      this.projectName,
+      wikiId,
+      path,
+      await this.branchOf(wikiId)
+    );
     return { id: page.id, gitItemPath: page.gitItemPath };
+  }
+
+  /**
+   * The branch a wiki's pages live on: known from getWikis, otherwise read once
+   * from the wiki itself. A failed read is not cached, so the next call retries.
+   */
+  private branchOf(wikiId: string): Promise<WikiBranch | undefined> {
+    let branch = this.wikiBranches.get(wikiId);
+    if (!branch) {
+      branch = this.wikiClient.getWiki(this.projectName, wikiId).then(wikiBranch);
+      branch.catch(() => this.wikiBranches.delete(wikiId));
+      this.wikiBranches.set(wikiId, branch);
+    }
+    return branch;
   }
 
   public async getPageLastChange(
