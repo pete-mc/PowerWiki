@@ -137,7 +137,7 @@ The current implementation provides a working Power Wiki experience:
 - Searches the wiki from the page-tree rail: page titles match locally as you type, and page content comes from the same Azure DevOps Search service the built-in wiki uses. When an organization's index is still building, that service answers a valid query with zero results and a reason code — PowerWiki shows the reason rather than reporting that nothing matched.
 - Loads selected page Markdown from the standard Azure DevOps Wiki backing store.
 - Renders Markdown through the PowerWiki Markdown pipeline.
-- Renders Mermaid diagrams through the bundled Mermaid runtime, including standard fenced blocks and Azure DevOps `::: mermaid` blocks.
+- Renders Mermaid diagrams through the bundled Mermaid 12 runtime, including standard fenced blocks and Azure DevOps `::: mermaid` blocks. Diagrams follow the Azure DevOps light or dark theme and keep Mermaid's classic look and dagre layout, so existing pages draw as they did with Mermaid 11. A diagram can opt in to Mermaid 12's ELK layout or `neo` look in its own front matter (`config: { layout: elk, look: neo }`); the ELK engine is downloaded only when a diagram asks for it. Mermaid 12 needs a current browser (Safari 17.4 or later).
 - Renders inline work item references such as `#1234` as Azure Boards badges that open the native work item form.
 - Renders embedded saved query tables written as `::: query-table <query-id> :::`, with a native Azure DevOps query link when hosted by Azure DevOps Services.
 - Opens a Monaco-powered Markdown editor from the page actions menu and saves page content back through the Azure DevOps Wiki API with ETag-based concurrency.

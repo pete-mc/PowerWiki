@@ -65,6 +65,25 @@ describe("renderMermaidDiagrams", () => {
     expect(initialize).toHaveBeenCalledWith(expect.objectContaining({ htmlLabels: false }));
   });
 
+  // Mermaid 12 moved these diagrams to ELK and the "neo" look; existing pages
+  // keep the Mermaid 11 appearance unless their front matter opts in.
+  it("keeps the dagre layout and classic look that existing diagrams were drawn with", async () => {
+    await renderMermaidDiagrams(containerWith("flowchart LR\n A --> B"), "light");
+
+    const config = initialize.mock.calls[0][0] as Record<string, unknown>;
+    expect(config.look).toBe("classic");
+    for (const type of ["flowchart", "class", "state", "er", "requirement"]) {
+      expect(config[type]).toEqual({ layout: "dagre" });
+    }
+  });
+
+  // A root-level layout would count as user-defined and take mindmaps off
+  // cose-bilkent and swimlanes off their own engine.
+  it("does not set a global layout", async () => {
+    await renderMermaidDiagrams(containerWith("flowchart LR\n A --> B"), "light");
+    expect(initialize.mock.calls[0][0]).not.toHaveProperty("layout");
+  });
+
   it("re-initializes when only the label mode changes, not just the theme", async () => {
     await renderMermaidDiagrams(containerWith("flowchart LR\n A --> B"), "light", { htmlLabels: false });
     expect(initialize).toHaveBeenCalledTimes(1);

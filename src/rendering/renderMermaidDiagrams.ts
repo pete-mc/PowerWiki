@@ -96,6 +96,18 @@ function ensureMermaidInitialized(mermaid: MermaidApi, theme: string, htmlLabels
     // Root-level htmlLabels wins over the deprecated per-diagram settings, so
     // one flag covers flowcharts, class, state, and ER diagrams alike.
     htmlLabels,
+    // Mermaid 12 switched these diagram types to the ELK layout. Keep dagre so
+    // pages already in the wiki don't re-flow; front matter can still opt in
+    // with `layout: elk`. Pinned per diagram type, not globally: a global
+    // layout would also override the engines mindmaps and swimlanes choose.
+    flowchart: { layout: "dagre" },
+    class: { layout: "dagre" },
+    state: { layout: "dagre" },
+    er: { layout: "dagre" },
+    requirement: { layout: "dagre" },
+    // Mermaid 12's default look is "neo" for most diagram types; keep the
+    // classic look, which follows the Azure DevOps theme via `theme` below.
+    look: "classic",
     logLevel: "error",
     securityLevel: "strict",
     startOnLoad: false,
