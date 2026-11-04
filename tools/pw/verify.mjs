@@ -1279,24 +1279,24 @@ try {
       const url =
         `https://dev.azure.com/${ORG}/${PROJECT}/_apis/git/repositories/${codeWiki.repositoryId}/items` +
         `?path=${encodeURIComponent(`${mapped}/${name}.md`)}&versionDescriptor.version=${encodeURIComponent(branch)}` +
-        `&versionDescriptor.versionType=branch&includeContent=true&api-version=7.1`;
+        `&versionDescriptor.versionType=branch&api-version=7.1`;
+      // A single file comes back raw, not as JSON (and a new page is empty).
       const response = await context.request.get(url);
-      return response.ok() ? (await response.json()).content ?? "" : undefined;
+      return response.ok() ? await response.text() : undefined;
     };
     const wikiHash = (pagePath) => `#/wikis/${encodeURIComponent(codeWikiName)}/${encodeURI(pagePath)}`;
     try {
-      frame = await openWikiPage(page, wikiHash(""));
-      await frame.waitForSelector(".wiki-page-tree-link", { timeout: 60000 });
+      // Open a page, not the root: the pages API answers "/" (a folder) with
+      // JSON even when asked for text.
+      frame = await openWikiPage(page, wikiHash("Home"));
+      await waitForPageTitle(frame, "Home");
       promptResponse = original;
       await frame.click(".powerwiki-new-page");
       await frame.waitForSelector(`[aria-label="Actions for ${original}"]`, { timeout: 60000 });
       check((await readStored(original)) !== undefined, "code wiki: created a page (stored in Git)");
-      await leaveEditor(page, frame);
 
-      frame = await openWikiPage(page, wikiHash(original));
+      // A new page opens straight in the editor.
       await waitForPageTitle(frame, original);
-      await frame.click(".powerwiki-header-menu-button");
-      await frame.getByRole("menuitem", { name: "Edit page" }).click();
       await frame.waitForSelector(".wiki-editor-mode-select", { timeout: 30000 });
       await frame.selectOption(".wiki-editor-mode-select", "splitCode");
       await frame.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 30000 });
