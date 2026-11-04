@@ -164,7 +164,6 @@ that as \`List-%2D-Firewall-rules\`, and a link to it used to 404 (GitHub #29).
 \`\`\`mermaid
 flowchart TD
   A[Working tree] -->|npm run dev:sandbox| B[Local sandbox]
-  A -->|dev extension, baseUri| C[Real ADO, live code]
   A -->|push to main| D[Private canary]
   D -->|pw:verify green| E[Tag v*]
   E --> F[Public Marketplace]

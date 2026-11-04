@@ -17,7 +17,7 @@
 // the host boundary is therefore the production code path. What it deliberately
 // cannot catch is anything *below* that boundary — REST contracts, permissions,
 // the extension SDK handshake — which is what the layered testing in AGENTS.md
-// says to use the dev extension and the canary for.
+// says to use the canary for.
 //
 // Assertions are on rendered DOM, never on internal state: the point is to fail
 // when a user would see something wrong.

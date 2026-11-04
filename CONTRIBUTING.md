@@ -96,10 +96,8 @@ colors are acceptable only for semantic states such as destructive actions.
 PowerWiki runs inside a cross-origin iframe, so a real browser is needed to assert
 on what it renders. The Playwright harness in `tools/pw/` does that.
 
-This no longer requires a public release. Maintainers publish two *private*
-extensions — a `powerwiki-dev` build whose assets are served from localhost, and a
-`powerwiki-canary` build published automatically from `main` — and verify against
-those. See "Testing before release" in `AGENTS.md`; the public Marketplace is the
+This does not require a public release. A *private* `powerwiki-canary` build is
+published automatically from `main`, and maintainers verify against that. See "Testing before release" in `AGENTS.md`; the public Marketplace is the
 last step, never the test bed.
 
 ```bash
