@@ -5,11 +5,11 @@
 // so it navigates to a work item and opens the contributed tab. Point it at a
 // work item that has at least one linked wiki page:
 //
-//   PW_EXTENSION=powerwiki-dev PW_WORKITEM=601 node tools/pw/capture-workitem-screenshot.mjs
+//   PW_EXTENSION=powerwiki-canary PW_WORKITEM=601 node tools/pw/capture-workitem-screenshot.mjs
 //
-// Needs a signed-in profile (`npm run pw:auth` once). Run it against the dev
-// extension while `npm run dev:extension` serves the working tree, so the shot
-// shows the build being released rather than the one already published.
+// Needs a signed-in profile (`npm run pw:auth` once). Run it against the canary
+// built from the release commit, so the shot shows the build being released
+// rather than the one already published.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { hideVariantBuilds, launch, powerWikiFrame, sleep } from "./lib.mjs";

@@ -76,11 +76,10 @@ Full measured findings: [`docs/azure-devops-constraints.md`](docs/azure-devops-c
 
 **Do not publish to the public Marketplace in order to test a change.** There is no staged rollout: 20+ organizations auto-update within minutes and a version number can never be republished. Use the cheapest layer that catches the bug ([`docs/testing-layers.md`](docs/testing-layers.md)):
 
-1. **Sandbox** — `npm run dev:sandbox`, `npm run test:e2e` (in CI). Blind to REST contracts, permissions, host services and CDN paths.
-2. **Dev extension** — private `powerwiki-dev`, `baseUri` `https://localhost:3000`, `npm run dev:extension`. A new manifest contribution needs the extension removed and reinstalled. Stop the server with Ctrl+C and check for orphaned `webpack --watch` processes (`ps -eo pid,etime,cmd | grep '[w]ebpack'`).
-3. **Canary** — private `powerwiki-canary` from every push to `main`; `PW_EXTENSION=powerwiki-canary npm run pw:verify`.
+1. **Sandbox** — `npm run dev:sandbox`, `npm run test:e2e` (in CI). Blind to REST contracts, permissions, host services and CDN paths. Stop the server with Ctrl+C and check for orphaned `webpack --watch` processes (`ps -eo pid,etime,cmd | grep '[w]ebpack'`).
+2. **Canary** — private `powerwiki-canary` from every push to `main`; `PW_EXTENSION=powerwiki-canary npm run pw:verify` once the organization has installed the new build. This is the gate for a public release.
 
-Variants **must** use a different extension id from public `powerwiki` (`tools/release/assert-private.mjs` enforces it) and be relabelled.
+The localhost-served dev extension (`powerwiki-dev`) is retired; don't bring it back without reading why in `docs/testing-layers.md`. The canary **must** use a different extension id from public `powerwiki` (`tools/release/assert-private.mjs` enforces it) and be relabelled.
 
 ## Publishing
 
@@ -97,7 +96,7 @@ Both extensions ship from one version number and one commit; details, PAT scopes
 Use `tools/pw/` (the extension iframe is cross-origin; browser-extension automation cannot see it). Setup and the Chromium crash findings: [`docs/browser-verification.md`](docs/browser-verification.md).
 
 - `npm run pw:auth` once, headed, to sign in to the profile at `~/.powerwiki-pw` (session cookies — never commit it).
-- `npm run pw:verify` runs headless against `PW_EXTENSION=powerwiki|powerwiki-canary|powerwiki-dev` (`PW_ORG`, `PW_PROJECT`, `PW_PUBLISHER`, `PW_HUB`, `PW_CHANNEL`, `PW_HEADED=1`). Extend `tools/pw/verify.mjs` when you add a guarded feature.
+- `npm run pw:verify` runs headless against `PW_EXTENSION=powerwiki|powerwiki-canary` (`PW_ORG`, `PW_PROJECT`, `PW_PUBLISHER`, `PW_HUB`, `PW_CHANNEL`, `PW_HEADED=1`). Extend `tools/pw/verify.mjs` when you add a guarded feature.
 
 ## Backlog and work items
 

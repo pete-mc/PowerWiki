@@ -19,11 +19,10 @@ import { hasSignInCredentials, isOnSignInPage, signIn } from "./signIn.mjs";
 //
 // PW_EXTENSION selects which build to verify. The hub URL contains the
 // contribution id, which is `<publisher>.<extension-id>.<contribution>`, so the
-// private dev and canary builds live at different URLs from the public one:
+// private canary build lives at a different URL from the public one:
 //
 //   npm run pw:verify                        # public powerwiki
 //   PW_EXTENSION=powerwiki-canary npm run pw:verify
-//   PW_EXTENSION=powerwiki-dev    npm run pw:verify   # working tree, via baseUri
 //
 // PW_HUB still overrides the whole URL for hosts that don't match the
 // dev.azure.com shape (e.g. Azure DevOps Server).
@@ -57,11 +56,6 @@ export async function launch({ headless = false } = {}) {
   const options = {
     headless,
     viewport: { width: 1600, height: 1000 },
-    // Chrome's Local Network Access checks block a public origin (dev.azure.com)
-    // from loading a subresource on localhost. That is exactly the shape of the
-    // dev extension, whose manifest points baseUri at the local HTTPS dev server,
-    // so without this the hub iframe fails with
-    // ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS and the layer is unusable.
     // DownloadBubble is off because Chromium 1243 (Chrome 153) segfaults in the
     // *browser* process on the download path - `Received signal 11 SI_KERNEL`,
     // `signal=SIGSEGV` - which kills the run mid-suite and takes the cleanup
@@ -70,13 +64,9 @@ export async function launch({ headless = false } = {}) {
     // cure; keep the crash handling in verify.mjs regardless.
     args: [
       "--hide-crash-restore-bubble",
-      "--disable-features=LocalNetworkAccessChecks,DownloadBubble,DownloadBubbleV2",
+      "--disable-features=DownloadBubble,DownloadBubbleV2",
       "--disable-dev-shm-usage",
     ],
-    // The dev extension (PW_EXTENSION=powerwiki-dev) loads its assets from the
-    // local HTTPS dev server, which uses a self-signed certificate. Without this
-    // the iframe fails to load and the failure looks like a missing extension.
-    ignoreHTTPSErrors: true,
   };
   // The Playwright-managed build is selected by omitting channel entirely, not
   // by passing "chromium" as a channel name.
@@ -255,24 +245,25 @@ export async function readLoadedVersion(frame) {
 }
 
 /**
- * Hides the maintainer's own dev and canary builds from the page before a
- * marketplace screenshot.
+ * Hides the maintainer's own canary build from the page before a marketplace
+ * screenshot.
  *
- * They are private extensions with different ids, shared only with this
- * organization, so no customer has them — but they are installed here, which
- * puts three "Power Wiki" entries in the project nav and three "Power Wiki" tabs
- * on the work item form. A store screenshot showing those advertises something
+ * It is a private extension with a different id, shared only with this
+ * organization, so no customer has it — but it is installed here, which puts a
+ * second "Power Wiki" entry in the project nav and a second "Power Wiki" tab on
+ * the work item form. A store screenshot showing those advertises something
  * nobody can install and makes the real one look ambiguous.
  *
  * This is presentation only, and only for captures: it hides nodes in the page
  * being photographed rather than changing what is installed. Disabling the
- * extensions for real would be an organization-wide change affecting anyone else
+ * extension for real would be an organization-wide change affecting anyone else
  * using them, to make a picture look right.
  *
  * Match on the visible label rather than an id: the contribution ids are
- * generated per install, whereas the "(Dev)"/"(Canary)" suffixes are set by
- * `tools/release/variant-manifest.mjs` and are the whole reason the variants are
- * distinguishable in the first place.
+ * generated per install, whereas the "(Canary)" suffix is set by
+ * `tools/release/variant-manifest.mjs` and is the whole reason the variant is
+ * distinguishable in the first place. "(Dev)" is still matched for an
+ * organization that has the retired dev extension installed.
  */
 export async function hideVariantBuilds(page) {
   const hidden = await page.evaluate(() => {

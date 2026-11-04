@@ -16,7 +16,6 @@ require a public release — see "Testing before release":
 ```bash
 npm run pw:verify                                  # public powerwiki
 PW_EXTENSION=powerwiki-canary npm run pw:verify    # the pre-release canary
-PW_EXTENSION=powerwiki-dev    npm run pw:verify    # working tree, via baseUri
 ```
 
 `PW_EXTENSION` works because the hub URL embeds the contribution id

@@ -51,7 +51,7 @@ defaults to the maintainer's org; override with environment variables:
 | `PW_HUB` | *(derived)* | Full hub URL, for hosts that aren't `dev.azure.com` (e.g. Azure DevOps Server) |
 | `PW_TEAM_ID` | *(PowerWiki Team)* | Identity GUID used by the `@mention` check |
 | `PW_TEAM_NAME` | `PowerWiki Team` | Display name that GUID must resolve to |
-| `PW_EXTENSION` | `powerwiki` | Which published build to drive: `powerwiki-canary` for the pre-release canary, `powerwiki-dev` for the working tree via `baseUri` |
+| `PW_EXTENSION` | `powerwiki` | Which published build to drive: `powerwiki-canary` for the pre-release canary |
 | `PW_PUBLISHER` | `dataversepowertools` | Publisher segment of the contribution id |
 | `PW_CHANNEL` | `chrome` | Browser to drive. Left unset it uses your system Chrome, falling back to Playwright's own build if there is none. Set `chromium` to require that build; any other value (`msedge`, ...) must be installed or the run fails. |
 
