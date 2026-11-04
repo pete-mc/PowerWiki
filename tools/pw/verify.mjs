@@ -10,6 +10,9 @@ import {
   ARTIFACTS_DIR,
   launch,
   deleteAttachments,
+  findWiki,
+  ORG,
+  PROJECT,
   sweepSmokeAttachments,
   openWikiPage,
   powerWikiFrame,
@@ -1254,6 +1257,101 @@ try {
   } catch (error) {
     check(false, `history-across-rename failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "23-rename-history-error.png") });
+  }
+
+  // Issue #85: a code wiki (a repository folder published as a wiki) rejects
+  // every page write that does not name its branch. Create, edit with an
+  // uploaded image, rename and delete a page there, and read what was stored
+  // back from Git. Skipped when the project has no code wiki of that name
+  // (PW_CODE_WIKI, default "CodeWikiTest", published from a repository folder).
+  const codeWikiName = process.env.PW_CODE_WIKI ?? "CodeWikiTest";
+  const codeWiki = await findWiki(context, codeWikiName).catch(() => undefined);
+  if (codeWiki?.type !== "codeWiki") {
+    console.log(`code wiki checks skipped (no code wiki named ${codeWikiName})`);
+  } else {
+    const codeWikiUploads = uploadedAttachments.length;
+    // No hyphens in the names: the wiki stores a "-" in a file name as "%2D".
+    const original = `PWCodeWiki${Date.now()}`;
+    const renamed = `${original}Renamed`;
+    const branch = codeWiki.versions?.[0]?.version;
+    const mapped = (codeWiki.mappedPath ?? "/").replace(/\/+$/, "");
+    const readStored = async (name) => {
+      const url =
+        `https://dev.azure.com/${ORG}/${PROJECT}/_apis/git/repositories/${codeWiki.repositoryId}/items` +
+        `?path=${encodeURIComponent(`${mapped}/${name}.md`)}&versionDescriptor.version=${encodeURIComponent(branch)}` +
+        `&versionDescriptor.versionType=branch&includeContent=true&api-version=7.1`;
+      const response = await context.request.get(url);
+      return response.ok() ? (await response.json()).content ?? "" : undefined;
+    };
+    const wikiHash = (pagePath) => `#/wikis/${encodeURIComponent(codeWikiName)}/${encodeURI(pagePath)}`;
+    try {
+      frame = await openWikiPage(page, wikiHash(""));
+      await frame.waitForSelector(".wiki-page-tree-link", { timeout: 60000 });
+      promptResponse = original;
+      await frame.click(".powerwiki-new-page");
+      await frame.waitForSelector(`[aria-label="Actions for ${original}"]`, { timeout: 60000 });
+      check((await readStored(original)) !== undefined, "code wiki: created a page (stored in Git)");
+      await leaveEditor(page, frame);
+
+      frame = await openWikiPage(page, wikiHash(original));
+      await waitForPageTitle(frame, original);
+      await frame.click(".powerwiki-header-menu-button");
+      await frame.getByRole("menuitem", { name: "Edit page" }).click();
+      await frame.waitForSelector(".wiki-editor-mode-select", { timeout: 30000 });
+      await frame.selectOption(".wiki-editor-mode-select", "splitCode");
+      await frame.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 30000 });
+      const marker = `CODE_WIKI_EDIT_${Date.now()}`;
+      await frame.evaluate((mk) => {
+        const models = (window.monaco && window.monaco.editor && window.monaco.editor.getModels()) || [];
+        if (models[0]) models[0].setValue(`# Code wiki\n\n${mk}\n\n`);
+      }, marker);
+      await frame.click(".wiki-editor-split-pane-code .monaco-editor");
+      await page.keyboard.press("Control+End");
+      await frame.setInputFiles('input[type="file"]', {
+        name: `pw-smoke-cw-${Date.now()}.png`,
+        mimeType: "image/png",
+        buffer: Buffer.from(PNG_BASE64, "base64"),
+      });
+      await frame.waitForSelector(".wiki-editor-split-pane-preview .markdown-preview img", { timeout: 60000 });
+      await frame.getByRole("button", { name: "Save", exact: true }).click();
+      await frame.waitForSelector(".wiki-editor-mode-select", { state: "detached", timeout: 60000 });
+      const stored = (await readStored(original)) ?? "";
+      check(stored.includes(marker), "code wiki: edit saved to Git");
+      check(
+        /\]\(\/\.attachments\/pw-smoke-cw-/.test(stored),
+        `code wiki: image stored with its wiki path (${JSON.stringify(stored.match(/\]\([^)]*\)/)?.[0] ?? null)})`
+      );
+      await frame.waitForFunction(
+        () => {
+          const img = document.querySelector(".powerwiki-content .markdown-preview img");
+          return !!img && img.complete && img.naturalWidth > 0;
+        },
+        undefined,
+        { timeout: 60000 }
+      ).catch(() => {});
+      check(
+        await frame.evaluate(() => (document.querySelector(".powerwiki-content .markdown-preview img")?.naturalWidth ?? 0) > 0),
+        "code wiki: uploaded image renders on the saved page"
+      );
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "24-code-wiki.png") });
+
+      promptResponse = renamed;
+      await frame.click(`[aria-label="Actions for ${original}"]`);
+      await frame.getByRole("menuitem", { name: "Rename" }).click();
+      await frame.waitForSelector(`[aria-label="Actions for ${renamed}"]`, { timeout: 60000 });
+      check((await readStored(renamed)) !== undefined, "code wiki: renamed the page");
+
+      await frame.click(`[aria-label="Actions for ${renamed}"]`);
+      await frame.getByRole("menuitem", { name: "Delete" }).click();
+      await frame.waitForSelector(`[aria-label="Actions for ${renamed}"]`, { state: "detached", timeout: 60000 });
+      check((await readStored(renamed)) === undefined, "code wiki: deleted the page");
+    } catch (error) {
+      check(false, `code wiki round-trip failed: ${error.message}`);
+      await page.screenshot({ path: path.join(ARTIFACTS_DIR, "24-code-wiki-error.png") });
+    } finally {
+      // The upload went to the code wiki's repository, not the project wiki's.
+      await deleteAttachments(context, uploadedAttachments.splice(codeWikiUploads), codeWikiName);
+    }
   }
 } catch (error) {
   check(false, `unexpected error: ${error.message}`);
