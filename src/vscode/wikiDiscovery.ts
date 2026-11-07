@@ -149,19 +149,33 @@ export async function findRepositoryRoot(startPath: string): Promise<string | un
   let current = path.resolve(startPath);
 
   for (;;) {
-    try {
-      // A worktree or submodule has `.git` as a file, not a directory, so this
-      // deliberately checks for existence rather than for a directory.
-      await fs.stat(path.join(current, ".git"));
+    if (await hasGitMetadata(current)) {
       return current;
-    } catch {
-      const parent = path.dirname(current);
-      if (parent === current) {
-        return undefined;
-      }
-      current = parent;
     }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
   }
+}
+
+async function hasGitMetadata(directory: string): Promise<boolean> {
+  const gitPath = path.join(directory, ".git");
+  try {
+    const metadata = await fs.stat(gitPath);
+    if (metadata.isDirectory()) {
+      await fs.stat(path.join(gitPath, "HEAD"));
+      return true;
+    }
+    if (metadata.isFile()) {
+      return (await fs.readFile(gitPath, "utf8")).trimStart().startsWith("gitdir:");
+    }
+  } catch {
+    // Not Git metadata at this level; continue up the directory tree.
+  }
+  return false;
 }
 
 async function subdirectories(directory: string): Promise<string[]> {

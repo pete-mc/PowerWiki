@@ -43,6 +43,7 @@ describe("wiki discovery", () => {
   it("finds a wiki in a subfolder and records its mapped path", async () => {
     const repository = path.join(workspace, "repo");
     await fs.mkdir(path.join(repository, ".git"), { recursive: true });
+    await fs.writeFile(path.join(repository, ".git", "HEAD"), "ref: refs/heads/main\n");
     await makeWiki(path.join(repository, "docs", "MyProject.wiki"));
 
     const wikis = await discoverWikis([workspace], { maxDepth: 3 });
@@ -104,6 +105,9 @@ describe("wiki discovery", () => {
     await fs.writeFile(path.join(repository, ".git"), "gitdir: /elsewhere\n");
 
     expect(await findRepositoryRoot(path.join(repository, "nested"))).toBe(repository);
-    expect(await findRepositoryRoot(os.tmpdir())).toBeUndefined();
+
+    const notRepository = path.join(workspace, "not-a-repository");
+    await fs.mkdir(path.join(notRepository, ".git"), { recursive: true });
+    expect(await findRepositoryRoot(notRepository)).toBeUndefined();
   });
 });
