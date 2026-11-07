@@ -227,8 +227,7 @@ export class AzureDevOpsWikiHost implements WikiHost {
   }
 
   public buildAttachmentUrl(wiki: WikiSummary, wikiPath: string): string | undefined {
-    const { projectName } = this.context;
-    return projectName ? buildGitItemUrl(wiki, projectName, wikiPath) : undefined;
+    return buildGitItemUrl(wiki, wikiPath);
   }
 }
 
