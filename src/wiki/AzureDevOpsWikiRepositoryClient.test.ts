@@ -28,7 +28,8 @@ vi.mock("azure-devops-extension-api/Common", () => ({
   },
 }));
 
-const { AzureDevOpsWikiRepositoryClient, wikiAttachmentPath, wikiBranch } = await import("./AzureDevOpsWikiRepositoryClient");
+const { AzureDevOpsWikiRepositoryClient, wikiBranch } = await import("./AzureDevOpsWikiRepositoryClient");
+const { wikiAttachmentPath } = await import("./attachmentPath");
 
 const codeWiki = {
   id: "code-wiki-id",
