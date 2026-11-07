@@ -253,15 +253,14 @@ function resolveWikiImagePath(src: string, currentPath: string): string | undefi
 }
 
 // Azure DevOps serves some wiki attachments (images pasted into the editor) as
-// CDN URLs. Hostnames we recognise:
+// CDN URLs. These hosts do not identify a collection/project, unlike direct
+// Azure DevOps URLs, which are checked against the active wiki below.
 //   {org}.gallerycdn.vsassets.io  – older CDN pattern seen in the wild
 //   {org}.vsassets.io             – alternate CDN pattern
-//   dev.azure.com                 – direct API URLs
-//   {org}.visualstudio.com        – legacy host
-const AZURE_DEVOPS_HOSTNAMES = /(?:^|\.)(vsassets\.io|gallerycdn\.vsassets\.io|dev\.azure\.com|visualstudio\.com)$/i;
+const AZURE_DEVOPS_CDN_HOSTNAMES = /(?:^|\.)(vsassets\.io|gallerycdn\.vsassets\.io)$/i;
 
 function isAzureDevOpsUrl(url: URL, wikiRemoteUrl?: string): boolean {
-  if (AZURE_DEVOPS_HOSTNAMES.test(url.hostname)) {
+  if (AZURE_DEVOPS_CDN_HOSTNAMES.test(url.hostname)) {
     return true;
   }
   if (!wikiRemoteUrl) {
@@ -269,7 +268,14 @@ function isAzureDevOpsUrl(url: URL, wikiRemoteUrl?: string): boolean {
   }
 
   try {
-    return url.origin === new URL(wikiRemoteUrl).origin;
+    const remoteUrl = new URL(wikiRemoteUrl);
+    const gitIndex = remoteUrl.pathname.toLowerCase().indexOf("/_git/");
+    if (url.origin !== remoteUrl.origin || gitIndex === -1) {
+      return false;
+    }
+
+    const wikiBasePath = remoteUrl.pathname.slice(0, gitIndex);
+    return url.pathname.startsWith(`${wikiBasePath}/.attachments/`);
   } catch {
     return false;
   }
