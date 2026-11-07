@@ -22,6 +22,7 @@ import {
 } from "azure-devops-extension-api/Wiki";
 
 import type { WikiComment, WikiPageChange, WikiPageMeta, WikiPageRevision } from "./WikiComment";
+import { wikiAttachmentPath } from "./attachmentPath";
 import {
   alreadyVisited,
   findRenameHop,
@@ -70,17 +71,6 @@ function versionQuery(branch: WikiBranch | undefined): Record<string, WikiBranch
 export function wikiBranch(wiki: Pick<WikiV2, "type" | "versions">): WikiBranch | undefined {
   const version = wiki.versions?.[0]?.version;
   return wiki.type === WikiType.CodeWiki && version ? { version, versionType: "branch" } : undefined;
-}
-
-/**
- * The wiki-relative form of a stored attachment's path. A project wiki returns
- * "/.attachments/x.png" already; a code wiki returns the repository path,
- * mapped folder included ("/docs/.attachments/x.png"), which the app would
- * join to the mapped folder a second time when it renders the page.
- */
-export function wikiAttachmentPath(path: string): string {
-  const folder = path.lastIndexOf("/.attachments/");
-  return folder > 0 ? path.slice(folder) : path;
 }
 
 // Subclasses WikiRestClient to expose the same pages endpoint but requesting

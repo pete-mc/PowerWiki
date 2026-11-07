@@ -22,6 +22,7 @@ import { loadAllWikiPages, type IndexedWikiPage } from "./wikiContentIndex";
 import { rewriteWikiLinks } from "../../wiki/wikiLinkRewrite";
 import { PROJECT_TEMPLATE_WIKI_PATH } from "../../export/wordTemplate";
 import { joinRepositoryPath } from "../../wiki/repositoryItemPath";
+import { wikiAttachmentPath } from "../../wiki/attachmentPath";
 import { relativePathToPagePath } from "../../wiki/wikiPathEncoding";
 import { WikiAttachmentsDialog } from "./WikiAttachmentsDialog";
 import { WikiExportDialog } from "./WikiExportDialog";
@@ -252,29 +253,42 @@ function resolveWikiImagePath(src: string, currentPath: string): string | undefi
 }
 
 // Azure DevOps serves some wiki attachments (images pasted into the editor) as
-// CDN URLs. Hostnames we recognise:
+// CDN URLs. These hosts do not identify a collection/project, unlike direct
+// Azure DevOps URLs, which are checked against the active wiki below.
 //   {org}.gallerycdn.vsassets.io  – older CDN pattern seen in the wild
 //   {org}.vsassets.io             – alternate CDN pattern
-//   dev.azure.com                 – direct API URLs
-//   {org}.visualstudio.com        – legacy host
-const AZURE_DEVOPS_HOSTNAMES = /(?:^|\.)(vsassets\.io|gallerycdn\.vsassets\.io|dev\.azure\.com|visualstudio\.com)$/i;
+const AZURE_DEVOPS_CDN_HOSTNAMES = /(?:^|\.)(vsassets\.io|gallerycdn\.vsassets\.io)$/i;
 
-function isAzureDevOpsUrl(src: string): boolean {
+function isAzureDevOpsUrl(url: URL, wikiRemoteUrl?: string): boolean {
+  if (AZURE_DEVOPS_CDN_HOSTNAMES.test(url.hostname)) {
+    return true;
+  }
+  if (!wikiRemoteUrl) {
+    return false;
+  }
+
   try {
-    return AZURE_DEVOPS_HOSTNAMES.test(new URL(src).hostname);
+    const remoteUrl = new URL(wikiRemoteUrl);
+    const gitIndex = remoteUrl.pathname.toLowerCase().indexOf("/_git/");
+    if (url.origin !== remoteUrl.origin || gitIndex === -1) {
+      return false;
+    }
+
+    const wikiBasePath = remoteUrl.pathname.slice(0, gitIndex);
+    return url.pathname.startsWith(`${wikiBasePath}/.attachments/`);
   } catch {
     return false;
   }
 }
 
-function resolveAzureDevOpsImagePath(src: string): string | undefined {
+export function resolveAzureDevOpsImagePath(src: string, wikiRemoteUrl?: string): string | undefined {
   try {
     const url = new URL(src);
-    if (!AZURE_DEVOPS_HOSTNAMES.test(url.hostname)) {
+    if (!isAzureDevOpsUrl(url, wikiRemoteUrl)) {
       return undefined;
     }
 
-    return safeDecode(url.pathname);
+    return wikiAttachmentPath(safeDecode(url.pathname));
   } catch {
     return undefined;
   }
@@ -2082,9 +2096,9 @@ export function WikiBrowser({
       // attachment URLs. They still name a file in this repository, so map them
       // back to a repository path and let the host serve it — that is what makes
       // those images render off a local clone with no service to call.
-      if (isAzureDevOpsUrl(src)) {
-        const azureDevOpsPath = resolveAzureDevOpsImagePath(src);
-        return azureDevOpsPath ? host.buildAttachmentUrl(activeWiki, azureDevOpsPath) : undefined;
+      const azureDevOpsPath = resolveAzureDevOpsImagePath(src, activeWiki.remoteUrl);
+      if (azureDevOpsPath) {
+        return host.buildAttachmentUrl(activeWiki, azureDevOpsPath);
       }
 
       return undefined;

@@ -72,6 +72,42 @@ Full measured findings: [`docs/azure-devops-constraints.md`](docs/azure-devops-c
 - **`npm run build` does not type-check** (esbuild-loader); gate on `npm test` (`tsc --noEmit` + Vitest). Node 24.15+. markdown-it 15: import types from the package root.
 - Mermaid is a lazy chunk with `publicPath: "auto"`: no single-chunk limit, no runtime-chunk split; re-check with `npm run pw:verify` after webpack changes. The three known webpack warnings are expected.
 
+## Azure DevOps Services and Server compatibility
+
+Azure DevOps Services URLs are commonly `https://dev.azure.com/{org}/{project}`;
+Azure DevOps Server carries its collection, and sometimes a virtual directory,
+in the path: `https://server/{collection}/{project}` or
+`https://server/tfs/{collection}/{project}`. Do not reconstruct an API or hub
+base from an origin plus a project name. When a wiki supplies `remoteUrl`, derive
+the base from everything before `/_git/`; this preserves the collection and
+virtual directory. SDK REST clients use relative route templates and already
+inherit the active host base, so prefer them to hand-built URLs.
+
+For an absolute attachment URL, a direct Azure DevOps URL must match both the
+active wiki's origin and its path before `/_git/`; otherwise an attachment from
+another collection or project can be mistaken for one in the current wiki. CDN
+attachment URLs remain an explicit allowlist. Test relevant URL changes against
+modern Services (`dev.azure.com`), Server with and without a virtual directory,
+and a same-server/different-collection rejection.
+
+### Open Server compatibility checklist for AI agents
+
+These are deliberately temporary. When an entry is solved, verified, and its
+tests/docs are updated, **delete the entry** rather than leaving it checked.
+
+- [ ] Measure Azure DevOps Server wiki search. `almsearch.dev.azure.com` is a
+  Services endpoint; either use the measured Server equivalent or withhold
+  server-side content search on Server while retaining local title search.
+- [ ] Measure Server support for shareable absolute PowerWiki page/heading
+  links. Implement a Server-safe base only if the host supports it; otherwise
+  document and preserve the current in-page fallback.
+- [ ] Measure Server support for native query and work-item browser fallback
+  URLs. Use a Server-safe base only when measured; SDK navigation remains the
+  preferred path.
+- [ ] Run a browser canary against an Azure DevOps Server installation covering
+  relative and absolute attachments, a collection path, and a virtual directory;
+  record the result in `docs/azure-devops-constraints.md`.
+
 ## Testing before release
 
 **Do not publish to the public Marketplace in order to test a change.** There is no staged rollout: 20+ organizations auto-update within minutes and a version number can never be republished. Use the cheapest layer that catches the bug ([`docs/testing-layers.md`](docs/testing-layers.md)):
