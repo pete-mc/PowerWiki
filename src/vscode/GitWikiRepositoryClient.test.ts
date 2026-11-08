@@ -176,6 +176,31 @@ describe("GitWikiRepositoryClient", () => {
     await expect(client.getItemBytes(root, "/../../etc/passwd")).rejects.toThrow("outside the wiki");
   });
 
+  it("refuses an attachment symlink that resolves outside the wiki root", async () => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "powerwiki-outside-"));
+    const link = path.join(root, ".attachments", "outside.bin");
+    try {
+      await fs.mkdir(path.dirname(link), { recursive: true });
+      await fs.writeFile(path.join(outside, "secret.bin"), "not a wiki attachment");
+
+      try {
+        await fs.symlink(path.join(outside, "secret.bin"), link, "file");
+      } catch (error: unknown) {
+        // Windows machines without Developer Mode or the symlink privilege cannot
+        // create one. The production guard remains covered on platforms where
+        // symlinks are available.
+        if ((error as NodeJS.ErrnoException).code === "EPERM") {
+          return;
+        }
+        throw error;
+      }
+
+      await expect(client.getItemBytes(root, "/.attachments/outside.bin")).rejects.toThrow("outside the wiki");
+    } finally {
+      await fs.rm(outside, { force: true, recursive: true });
+    }
+  });
+
   it("has no comments, and says so rather than pretending", async () => {
     expect(await client.listComments()).toEqual([]);
     await expect(client.addComment()).rejects.toThrow("not available offline");

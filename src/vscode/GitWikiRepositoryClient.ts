@@ -337,7 +337,7 @@ export class GitWikiRepositoryClient implements WikiRepositoryClient {
   /** Raw bytes of a file under the wiki root, used by export and by images. */
   public async getItemBytes(repositoryId: string, repoPath: string): Promise<ArrayBuffer> {
     const root = this.rootFor(repositoryId);
-    const buffer = await fs.readFile(resolveWithinRoot(root, repoPath));
+    const buffer = await fs.readFile(await resolveExistingWithinRoot(root, repoPath));
     return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
   }
 
@@ -501,13 +501,33 @@ function joinPagePath(parentPath: string, fileStem: string): string {
 function resolveWithinRoot(root: string, repoPath: string): string {
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, trimLeadingSlash(repoPath));
-  const relative = path.relative(resolvedRoot, resolved);
-
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (!isWithin(resolvedRoot, resolved)) {
     throw new Error(`Path is outside the wiki: ${repoPath}`);
   }
 
   return resolved;
+}
+
+/**
+ * Resolves an existing item under a wiki root without following a symlink out
+ * of that root. A lexical check alone stops `../../`, but `readFile` follows
+ * symlinks, so a malicious clone could otherwise expose an arbitrary local
+ * file through the webview's attachment/export path.
+ */
+async function resolveExistingWithinRoot(root: string, repoPath: string): Promise<string> {
+  const lexicalPath = resolveWithinRoot(root, repoPath);
+  const [realRoot, realPath] = await Promise.all([fs.realpath(root), fs.realpath(lexicalPath)]);
+
+  if (!isWithin(realRoot, realPath)) {
+    throw new Error(`Path is outside the wiki: ${repoPath}`);
+  }
+
+  return realPath;
+}
+
+function isWithin(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 function trimLeadingSlash(value: string): string {
