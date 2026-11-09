@@ -5,6 +5,11 @@
 // PW_AUTH_PASSWORD are set, this answers the ordinary sign-in prompts (account,
 // password, "Stay signed in?") so a run can sign itself back in.
 //
+// With PW_AUTH_USER alone it only re-selects that account where the browser is
+// already signed in to Microsoft: it clicks the account's tile on "Pick an
+// account" and answers "Stay signed in?", and types nothing. Any prompt for an
+// account name or a password stops it, so it never signs in as anyone new.
+//
 // It answers nothing else. A one-time code, an app approval, a password change
 // or a request for security details is a person's decision, so it stops and
 // says which prompt it met. The values are only ever handed to `fill()`: never
@@ -23,7 +28,12 @@ const NEEDS_A_PERSON = [
 ];
 
 export function hasSignInCredentials() {
-  return Boolean(process.env.PW_AUTH_USER && process.env.PW_AUTH_PASSWORD);
+  return Boolean(process.env.PW_AUTH_USER);
+}
+
+/** True when only the account picker can be answered (no password to type). */
+export function isAccountPickerOnly() {
+  return Boolean(process.env.PW_AUTH_USER && !process.env.PW_AUTH_PASSWORD);
 }
 
 export function isOnSignInPage(page) {
@@ -38,8 +48,8 @@ export function isOnSignInPage(page) {
 export async function signIn(page, { timeoutMs = 120000 } = {}) {
   const user = process.env.PW_AUTH_USER;
   const password = process.env.PW_AUTH_PASSWORD;
-  if (!user || !password) {
-    throw new Error("Sign-in needs PW_AUTH_USER and PW_AUTH_PASSWORD.");
+  if (!user) {
+    throw new Error("Sign-in needs PW_AUTH_USER (and PW_AUTH_PASSWORD to type a password).");
   }
 
   const start = Date.now();
@@ -60,7 +70,7 @@ export async function signIn(page, { timeoutMs = 120000 } = {}) {
       ["other ways", /^\s*other ways to sign in\s*$/i],
     ]) {
       const link = page.getByText(pattern).first();
-      if (!followed.has(name) && (await link.isVisible().catch(() => false))) {
+      if (password && !followed.has(name) && (await link.isVisible().catch(() => false))) {
         followed.add(name);
         await link.click();
         choseMethod = true;
@@ -164,11 +174,19 @@ async function answerPrompt(page, user, password) {
   }
 
   if (await visible('input[type="password"]')) {
+    if (!password) {
+      throw new Error("Microsoft sign-in asked for a password; PW_AUTH_PASSWORD is not set, so it was not answered.");
+    }
     await fill('input[type="password"]', password);
     return submit();
   }
 
   if (await visible('input[type="email"], input[name="loginfmt"]')) {
+    if (!password) {
+      throw new Error(
+        "Microsoft sign-in asked for an account name; with PW_AUTH_USER alone only an account already signed in on the picker is chosen."
+      );
+    }
     await fill('input[type="email"], input[name="loginfmt"]', user);
     return submit();
   }

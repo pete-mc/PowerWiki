@@ -47,6 +47,12 @@ Setup and use (details in `tools/pw/README.md`):
    the run with the page's title. The values are only handed to `fill()`: never
    logged, never in an error, no screenshot while a sign-in page shows. Keep them
    in the environment only, never on a command line or in a file.
+5. Account picker only: with `PW_AUTH_USER` set and **no** `PW_AUTH_PASSWORD`,
+   a profile that is still signed in to Microsoft is re-selected without typing
+   anything. The run clicks that account's tile on "Pick an account" and answers
+   "Stay signed in?"; a prompt for an account name or a password stops it. This
+   suits a maintainer desktop where the Azure DevOps session expires but the
+   Microsoft sign-in in the profile does not.
 
 Extend `tools/pw/verify.mjs` with a new assertion whenever you add a feature
 worth guarding, so the harness doubles as a regression smoke test.

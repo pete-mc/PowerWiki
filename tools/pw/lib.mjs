@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
-import { hasSignInCredentials, isOnSignInPage, signIn } from "./signIn.mjs";
+import { hasSignInCredentials, isAccountPickerOnly, isOnSignInPage, signIn } from "./signIn.mjs";
 
 // Which Azure DevOps organization/project to drive, and which published
 // extension. Point it at any org that has the extension installed and a wiki to
@@ -123,7 +123,11 @@ export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
       // a sign-in that did not take is a failure to report, not to retry.
       if (hasSignInCredentials() && !triedSignIn) {
         triedSignIn = true;
-        console.log("  signing in to Azure DevOps with PW_AUTH_USER / PW_AUTH_PASSWORD...");
+        console.log(
+          isAccountPickerOnly()
+            ? "  choosing the PW_AUTH_USER account on the Microsoft account picker..."
+            : "  signing in to Azure DevOps with PW_AUTH_USER / PW_AUTH_PASSWORD..."
+        );
         await signIn(page);
         continue;
       }

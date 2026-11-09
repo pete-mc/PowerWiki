@@ -4,6 +4,8 @@
 // for you to complete Azure DevOps sign-in (or for Windows SSO to auto-complete).
 // With PW_AUTH_USER and PW_AUTH_PASSWORD set it signs in by itself, headless
 // unless PW_HEADED=1 (see signIn.mjs for what it will and will not answer).
+// With PW_AUTH_USER alone it only re-selects that account on Microsoft's account
+// picker, for a profile already signed in to Microsoft.
 // After it succeeds, the session is stored in the profile and pw:verify can run
 // unattended until the session eventually expires. Re-run this if verify starts
 // reporting that it's waiting for sign-in.
@@ -15,7 +17,7 @@ const { context, page } = await launch({ headless: unattended && process.env.PW_
 console.log(`Profile: ${PROFILE_DIR}`);
 console.log(
   unattended
-    ? "Opening PowerWiki — signing in with PW_AUTH_USER / PW_AUTH_PASSWORD if prompted..."
+    ? "Opening PowerWiki — answering the Microsoft sign-in with PW_AUTH_USER if prompted..."
     : "Opening PowerWiki — complete the Microsoft sign-in in the window if prompted..."
 );
 
