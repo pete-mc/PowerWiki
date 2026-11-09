@@ -163,11 +163,15 @@ export interface ServerWikiSearchRequest {
 /** Injected so tests exercise the mapping without a network or the SDK. */
 export type SearchTransport = (url: string, body: unknown) => Promise<RawWikiSearchResponse>;
 
+const SERVICES_SEARCH_PAGE_SIZE = 50;
+const SERVER_SEARCH_PAGE_SIZE = 25;
+const SERVER_SEARCH_API_VERSION = "7.1";
+
 function searchBody(request: Pick<WikiSearchRequest, "searchText" | "skip" | "top">): object {
   return {
     searchText: request.searchText,
     $skip: request.skip ?? 0,
-    $top: request.top ?? 50
+    $top: request.top ?? SERVICES_SEARCH_PAGE_SIZE
   };
 }
 
@@ -176,7 +180,7 @@ function serverSearchBody(request: Pick<ServerWikiSearchRequest, "searchText" | 
   return {
     searchText: request.searchText,
     $skip: request.skip ?? 0,
-    $top: request.top ?? 25,
+    $top: request.top ?? SERVER_SEARCH_PAGE_SIZE,
     filters: {}
   };
 }
@@ -206,7 +210,7 @@ export async function searchServerWiki(
     `${encodeURIComponent(request.projectId)}/_apis/search/wikiSearchResults`,
     collectionUri
   );
-  url.searchParams.set("api-version", "7.1");
+  url.searchParams.set("api-version", SERVER_SEARCH_API_VERSION);
   const body = await transport(url.toString(), serverSearchBody(request));
   return toOutcome(body);
 }

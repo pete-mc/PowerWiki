@@ -178,8 +178,8 @@ export class AzureDevOpsWikiHost implements WikiHost {
       this.fullScreen = azureDevOpsFullScreen;
     }
 
-    // Services uses a separate Search host. Server has a measured, supported
-    // collection-local REST route; both accept the extension bearer token.
+    // Services uses a separate Search host. Server uses its measured,
+    // collection-local REST route and browser session.
     const { collectionUri, organizationName, projectId, projectName } = context;
     // Older Azure DevOps Server builds omit `isHosted` altogether. Only an
     // explicit `true` identifies Services; treating an absent value as Services

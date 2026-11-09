@@ -50,9 +50,8 @@ export function createWikiSearchTransport({
 
 /**
  * Azure DevOps Server's in-product search uses `Vss-Fetch` plus the existing
- * same-origin session cookie. A bearer token here makes Server choose the
- * bearer challenge over that session, which presents the browser's login
- * dialog. Keep the authentication mechanism exactly as the built-in search.
+ * same-origin session cookie. Mirror that browser contract instead of sending
+ * Server requests to the Services search host.
  */
 export function createServerWikiSearchTransport({ fetchImpl }: ServerWikiSearchTransportOptions = {}): SearchTransport {
   return async (url, body) => {
@@ -71,11 +70,7 @@ export function createServerWikiSearchTransport({ fetchImpl }: ServerWikiSearchT
 
 async function readSearchResponse(response: Response): Promise<WikiSearchResponseBody> {
   if (!response.ok) {
-    const errorBody: unknown = await response.json().catch(() => undefined);
-    const message =
-      typeof errorBody === "object" && errorBody !== null && typeof (errorBody as { message?: unknown }).message === "string"
-        ? (errorBody as { message: string }).message
-        : undefined;
+    const message = await responseMessage(response);
     throw new Error(message ? `Wiki search failed: ${response.status}: ${message}` : `Wiki search failed: ${response.status}`);
   }
 
@@ -89,6 +84,14 @@ async function readSearchResponse(response: Response): Promise<WikiSearchRespons
   }
 
   return payload as WikiSearchResponseBody;
+}
+
+async function responseMessage(response: Response): Promise<string | undefined> {
+  const body: unknown = await response.json().catch(() => undefined);
+  if (typeof body !== "object" || body === null || typeof (body as { message?: unknown }).message !== "string") {
+    return undefined;
+  }
+  return (body as { message: string }).message;
 }
 
 /** The transport PowerWiki uses inside a real Azure DevOps hub. */
