@@ -27,6 +27,8 @@ import type { LinkedWorkItemsResult } from "../workItems/LinkedWorkItem";
 export interface WikiHostContext {
   readonly organizationName?: string;
   readonly organizationIsHosted?: boolean;
+  /** Base URI of the current collection, including its virtual-directory path. */
+  readonly collectionUri?: string;
   readonly projectName?: string;
   /** Project GUID, used for artifact subscriptions (follow). */
   readonly projectId?: string;
@@ -232,6 +234,14 @@ export interface WikiHost {
    * so returning undefined degrades rather than failing.
    */
   readonly searchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
+
+  /**
+   * Why full-text search is unavailable while the regular search box remains
+   * useful for title matches. This is host-owned: a Server host must not make a
+   * request to the Services-only search endpoint merely to discover that it
+   * cannot use it.
+   */
+  readonly contentSearchUnavailableReason?: string;
 
   /** Absent where the capability is false. Callers must handle undefined. */
   readonly workItems?: WorkItemProvider;

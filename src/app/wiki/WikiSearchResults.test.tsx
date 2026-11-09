@@ -15,13 +15,20 @@ let root: Root | undefined;
 
 function render(
   query: string,
-  onSearchContent?: (searchText: string) => Promise<WikiSearchOutcome>
+  onSearchContent?: (searchText: string) => Promise<WikiSearchOutcome>,
+  contentSearchUnavailableReason?: string
 ): HTMLDivElement {
   container = document.createElement("div");
   root = createRoot(container);
   act(() => {
     root!.render(
-      <WikiSearchResults onSearchContent={onSearchContent} onSelect={() => {}} pages={PAGES} query={query} />
+      <WikiSearchResults
+        contentSearchUnavailableReason={contentSearchUnavailableReason}
+        onSearchContent={onSearchContent}
+        onSelect={() => {}}
+        pages={PAGES}
+        query={query}
+      />
     );
   });
   return container;
@@ -56,6 +63,16 @@ describe("WikiSearchResults", () => {
     const element = render("mermaid");
     expect(element.textContent).toContain("Mermaid gallery");
     expect(element.textContent).toContain("only page titles are searched");
+  });
+
+  it("explains when the host deliberately withholds full-text search", () => {
+    const element = render(
+      "mermaid",
+      undefined,
+      "Full-text search is not available on this Azure DevOps Server yet. Page-title search is still available."
+    );
+    expect(element.textContent).toContain("not available on this Azure DevOps Server yet");
+    expect(element.textContent).toContain("Mermaid gallery");
   });
 
   // The case that made this worth doing: a 200 with zero results is not the

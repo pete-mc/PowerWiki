@@ -21,8 +21,8 @@ import { fetchAttachmentDataUrl, fetchAttachmentObjectUrl } from "../wiki/attach
 import { AzureDevOpsWikiRepositoryClient } from "../wiki/AzureDevOpsWikiRepositoryClient";
 import { buildGitItemUrl } from "../wiki/gitItemUrl";
 import { WikiFollowClient } from "../wiki/followClient";
-import { searchWiki, type WikiSearchOutcome } from "../wiki/wikiSearch";
-import { azureDevOpsWikiSearchTransport } from "../wiki/wikiSearchTransport";
+import { searchServerWiki, searchWiki, type WikiSearchOutcome } from "../wiki/wikiSearch";
+import { azureDevOpsServerWikiSearchTransport, azureDevOpsWikiSearchTransport } from "../wiki/wikiSearchTransport";
 import type { WikiSummary } from "../wiki/WikiPage";
 import type { WikiRepositoryClient } from "../wiki/WikiRepositoryClient";
 import type {
@@ -76,6 +76,7 @@ export async function createAzureDevOpsWikiHost(surface: AzureDevOpsSurface = "h
     {
       organizationIsHosted: host.isHosted,
       organizationName: host.name,
+      collectionUri: collectionUriFromAssetUrl(window.location.href, host.name, document.referrer),
       projectName: webContext.project?.name,
       projectId: webContext.project?.id,
       userDisplayName: user.displayName,
@@ -84,6 +85,26 @@ export async function createAzureDevOpsWikiHost(surface: AzureDevOpsSurface = "h
     },
     surface
   );
+}
+
+/**
+ * Extension assets can be served at the site root (`/_apis/public/...`), while
+ * the embedding hub page carries the collection path. Prefer that referrer;
+ * otherwise use an asset path that already contains `/_apis/`. Keep a virtual
+ * directory (for example `/tfs/Collection/`) instead of assuming a root site.
+ */
+export function collectionUriFromAssetUrl(assetUrl: string, collectionName: string, referrerUrl = ""): string {
+  const url = new URL(assetUrl);
+  const apiIndex = url.pathname.toLowerCase().indexOf("/_apis/");
+  const assetCollectionPath = apiIndex >= 0 ? url.pathname.slice(0, apiIndex + 1) : "/";
+  const referrer = referrerUrl ? new URL(referrerUrl) : undefined;
+  const collectionSuffix = `/${collectionName.toLowerCase()}/`;
+  const referrerPath = referrer?.pathname ?? "";
+  const collectionIndex = referrerPath.toLowerCase().indexOf(collectionSuffix);
+  const referrerCollectionPath =
+    collectionIndex >= 0 ? referrerPath.slice(0, collectionIndex + collectionSuffix.length) : undefined;
+  const collectionPath = referrerCollectionPath ?? (assetCollectionPath !== "/" ? assetCollectionPath : `/${collectionName}/`);
+  return new URL(collectionPath, url.origin).toString();
 }
 
 /** Exported for tests; construct through `createAzureDevOpsWikiHost` in real code. */
@@ -98,6 +119,7 @@ export class AzureDevOpsWikiHost implements WikiHost {
   public readonly linkedPages?: LinkedPagesProvider;
   public readonly fullScreen?: FullScreenProvider;
   public readonly searchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
+  public readonly contentSearchUnavailableReason?: string;
   private readonly onWorkItem: boolean;
 
   public constructor(context: WikiHostContext, surface: AzureDevOpsSurface = "hub") {
@@ -156,12 +178,19 @@ export class AzureDevOpsWikiHost implements WikiHost {
       this.fullScreen = azureDevOpsFullScreen;
     }
 
-    // Content search runs against the Azure DevOps Search service, which indexes
-    // the same wikis the built-in search covers — the alternative, downloading
-    // every page and searching in the browser, costs one request per page and
-    // does not scale.
-    const { organizationName, projectName } = context;
-    if (organizationName && projectName) {
+    // Services uses a separate Search host. Server has a measured, supported
+    // collection-local REST route; both accept the extension bearer token.
+    const { collectionUri, organizationName, projectId, projectName } = context;
+    // Older Azure DevOps Server builds omit `isHosted` altogether. Only an
+    // explicit `true` identifies Services; treating an absent value as Services
+    // leaks the Server collection name to almsearch.dev.azure.com.
+    if (context.organizationIsHosted !== true && collectionUri && projectId) {
+      this.searchContent = (searchText: string) =>
+        searchServerWiki({ collectionUri, projectId, searchText }, azureDevOpsServerWikiSearchTransport);
+    } else if (context.organizationIsHosted !== true) {
+      this.contentSearchUnavailableReason =
+        "Full-text search needs a collection and project context on this Azure DevOps Server. Page-title search is still available.";
+    } else if (organizationName && projectName) {
       this.searchContent = (searchText: string) =>
         searchWiki({ organizationName, projectName, searchText }, azureDevOpsWikiSearchTransport);
     }

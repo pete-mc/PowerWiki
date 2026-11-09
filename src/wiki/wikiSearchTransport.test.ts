@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createWikiSearchTransport } from "./wikiSearchTransport";
+import { createServerWikiSearchTransport, createWikiSearchTransport } from "./wikiSearchTransport";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -45,6 +45,16 @@ describe("createWikiSearchTransport", () => {
     await expect(transport("https://example.invalid", {})).rejects.toThrow("Wiki search failed: 403");
   });
 
+  it("includes the Server validation message when the response supplies one", async () => {
+    const transport = createServerWikiSearchTransport({
+      fetchImpl: async () => jsonResponse({ message: "filters must include Wiki" }, 400)
+    });
+
+    await expect(transport("http://server/DefaultCollection/project/_apis/search/wikiSearchResults", {})).rejects.toThrow(
+      "Wiki search failed: 400: filters must include Wiki"
+    );
+  });
+
   // A signed-out Azure DevOps request is answered with a sign-in page and a 2xx
   // status, so "the status was fine" tells us nothing about the body.
   it("treats a successful response that is not JSON as a sign-in problem", async () => {
@@ -55,5 +65,26 @@ describe("createWikiSearchTransport", () => {
     });
 
     await expect(transport("https://example.invalid", {})).rejects.toThrow(/signed in/);
+  });
+});
+
+describe("createServerWikiSearchTransport", () => {
+  it("uses the existing same-origin session rather than a bearer token", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const transport = createServerWikiSearchTransport({
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return jsonResponse({ count: 0, infoCode: 0, results: [] });
+      }
+    });
+
+    await transport("http://server/DefaultCollection/project/_apis/search/wikiSearchResults", { searchText: "mermaid" });
+
+    expect(calls[0].init).toMatchObject({
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "Vss-Fetch" }
+    });
+    expect(calls[0].init?.headers).not.toHaveProperty("Authorization");
   });
 });
