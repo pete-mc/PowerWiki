@@ -9,12 +9,12 @@ export function buildGitItemUrl(
   wiki: WikiSummary,
   wikiPath: string
 ): string | undefined {
-  if (!wiki.repositoryId || !wiki.remoteUrl) {
+  if (!wiki.repositoryId || !wiki.repositoryRemoteUrl) {
     return undefined;
   }
 
   try {
-    const remoteUrl = new URL(wiki.remoteUrl);
+    const remoteUrl = new URL(wiki.repositoryRemoteUrl);
     const gitIndex = remoteUrl.pathname.toLowerCase().indexOf("/_git/");
     if (gitIndex === -1) {
       return undefined;

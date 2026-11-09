@@ -9,6 +9,7 @@ interface RecordedRequest {
 
 const requests: RecordedRequest[] = [];
 const wikis: WikiV2[] = [];
+const getRepository = vi.fn();
 const getWiki = vi.fn((_project: string, wikiId: string) =>
   Promise.resolve(wikis.find((wiki) => wiki.id === wikiId || wiki.name === wikiId))
 );
@@ -24,6 +25,7 @@ vi.mock("azure-devops-extension-api/Common", () => ({
     };
     client.getAllWikis = () => Promise.resolve(wikis);
     client.getWiki = getWiki;
+    client.getRepository = getRepository;
     return client;
   },
 }));
@@ -66,6 +68,8 @@ describe("AzureDevOpsWikiRepositoryClient page branch", () => {
     requests.length = 0;
     wikis.splice(0, wikis.length, codeWiki, projectWiki);
     getWiki.mockClear();
+    getRepository.mockReset();
+    getRepository.mockResolvedValue({ remoteUrl: "https://dev.azure.com/Example/Example/_git/example-project.wiki" });
   });
 
   // Issue #85: a code wiki rejected every write with "The versionType should
@@ -103,6 +107,23 @@ describe("AzureDevOpsWikiRepositoryClient page branch", () => {
       expect.objectContaining(mainBranch),
     ]);
     expect(getWiki).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("wiki repository URLs", () => {
+  beforeEach(() => {
+    wikis.splice(0, wikis.length, projectWiki);
+    getRepository.mockReset();
+    getRepository.mockResolvedValue({ remoteUrl: "http://server/DefaultCollection/Example/_git/example-project.wiki" });
+  });
+
+  it("uses the backing repository URL separately from the wiki API URL", async () => {
+    const client = new AzureDevOpsWikiRepositoryClient("Example");
+
+    const [wiki] = await client.getWikis();
+
+    expect(wiki.repositoryRemoteUrl).toBe("http://server/DefaultCollection/Example/_git/example-project.wiki");
+    expect(getRepository).toHaveBeenCalledWith(projectWiki.id, "Example");
   });
 });
 

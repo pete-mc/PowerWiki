@@ -327,13 +327,17 @@ export class AzureDevOpsWikiRepositoryClient implements WikiRepositoryClient {
       this.wikiBranches.set(wiki.name, branch);
     }
 
-    return wikis.map((wiki) => ({
-      id: wiki.id,
-      mappedPath: normalizeMappedPath(wiki.mappedPath),
-      name: wiki.name,
-      repositoryId: wiki.repositoryId ?? (wiki as WikiWithRepositoryFallback).repository?.id ?? wiki.id,
-      remoteUrl: wiki.remoteUrl,
-      version: wiki.versions?.[0]?.version,
+    return Promise.all(wikis.map(async (wiki) => {
+      const repositoryId = wiki.repositoryId ?? (wiki as WikiWithRepositoryFallback).repository?.id ?? wiki.id;
+      return {
+        id: wiki.id,
+        mappedPath: normalizeMappedPath(wiki.mappedPath),
+        name: wiki.name,
+        repositoryId,
+        repositoryRemoteUrl: await this.getRepositoryCloneUrl(repositoryId),
+        remoteUrl: wiki.remoteUrl,
+        version: wiki.versions?.[0]?.version,
+      };
     }));
   }
 

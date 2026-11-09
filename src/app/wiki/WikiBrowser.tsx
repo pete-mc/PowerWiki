@@ -2096,7 +2096,7 @@ export function WikiBrowser({
       // attachment URLs. They still name a file in this repository, so map them
       // back to a repository path and let the host serve it — that is what makes
       // those images render off a local clone with no service to call.
-      const azureDevOpsPath = resolveAzureDevOpsImagePath(src, activeWiki.remoteUrl);
+      const azureDevOpsPath = resolveAzureDevOpsImagePath(src, activeWiki.repositoryRemoteUrl);
       if (azureDevOpsPath) {
         return host.buildAttachmentUrl(activeWiki, azureDevOpsPath);
       }

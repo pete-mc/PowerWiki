@@ -10,6 +10,9 @@ export interface WikiSummary {
   readonly mappedPath?: string;
   readonly name: string;
   readonly repositoryId?: string;
+  /** Backing Git repository URL (`.../_git/<repository>`), used for Git API URLs. */
+  readonly repositoryRemoteUrl?: string;
+  /** Wiki API URL (`.../_wiki/wikis/<id>`), not a Git repository URL. */
   readonly remoteUrl?: string;
   /** Branch the wiki is served from (e.g. "wikiMaster"), used for history lookups. */
   readonly version?: string;

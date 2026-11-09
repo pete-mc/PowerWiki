@@ -7,7 +7,7 @@ const wiki: WikiSummary = {
   id: "wiki-id",
   name: "Product.wiki",
   repositoryId: "repo-id",
-  remoteUrl: "https://dev.azure.com/contoso/Product/_git/Product.wiki"
+  repositoryRemoteUrl: "https://dev.azure.com/contoso/Product/_git/Product.wiki"
 };
 
 // This builds the authenticated Items API URL that every attachment image in the
@@ -28,7 +28,7 @@ describe("buildGitItemUrl", () => {
   // carried across to the API URL. On visualstudio.com it is the subdomain and
   // the path starts at the project, so adding a prefix would produce a 404.
   it("omits the organisation prefix on a legacy visualstudio.com host", () => {
-    const legacy = { ...wiki, remoteUrl: "https://contoso.visualstudio.com/Product/_git/Product.wiki" };
+    const legacy = { ...wiki, repositoryRemoteUrl: "https://contoso.visualstudio.com/Product/_git/Product.wiki" };
 
     const url = new URL(buildGitItemUrl(legacy, "/.attachments/a.png") ?? "");
 
@@ -48,7 +48,7 @@ describe("buildGitItemUrl", () => {
   // request that cannot work.
   it("returns undefined when the wiki does not identify a repository", () => {
     expect(buildGitItemUrl({ ...wiki, repositoryId: undefined }, "/a.png")).toBeUndefined();
-    expect(buildGitItemUrl({ ...wiki, remoteUrl: undefined }, "/a.png")).toBeUndefined();
+    expect(buildGitItemUrl({ ...wiki, repositoryRemoteUrl: undefined }, "/a.png")).toBeUndefined();
   });
 
   it("encodes a repository id that needs it", () => {
@@ -70,15 +70,15 @@ describe("buildGitItemUrl", () => {
   it.each([
     ["https://server/DefaultCollection/Product/_git/Product.wiki", "/DefaultCollection/Product"],
     ["https://server/tfs/DefaultCollection/Product/_git/Product.wiki", "/tfs/DefaultCollection/Product"]
-  ])("preserves the Azure DevOps Server API base path for %s", (remoteUrl, apiBasePath) => {
-    const serverWiki = { ...wiki, remoteUrl };
+  ])("preserves the Azure DevOps Server API base path for %s", (repositoryRemoteUrl, apiBasePath) => {
+    const serverWiki = { ...wiki, repositoryRemoteUrl };
     const url = new URL(buildGitItemUrl(serverWiki, "/.attachments/a.png") ?? "");
 
     expect(url.pathname).toBe(`${apiBasePath}/_apis/git/repositories/repo-id/Items`);
   });
 
   it("returns undefined for an invalid or non-Git remote URL", () => {
-    expect(buildGitItemUrl({ ...wiki, remoteUrl: "not a URL" }, "/a.png")).toBeUndefined();
-    expect(buildGitItemUrl({ ...wiki, remoteUrl: "https://dev.azure.com/contoso/Product" }, "/a.png")).toBeUndefined();
+    expect(buildGitItemUrl({ ...wiki, repositoryRemoteUrl: "not a URL" }, "/a.png")).toBeUndefined();
+    expect(buildGitItemUrl({ ...wiki, repositoryRemoteUrl: "https://dev.azure.com/contoso/Product" }, "/a.png")).toBeUndefined();
   });
 });
