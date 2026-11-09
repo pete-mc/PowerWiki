@@ -16,6 +16,17 @@ to write a new file and repoint its references (see `src/drawio/`), unless the
 extension takes `vso.code_write` to push to the wiki repository directly — which
 would force every organization to re-approve the extension, so don't.
 
+**Azure DevOps Server uses the remote URL's base for Git API URLs.** A wiki
+remote can take the modern Services form
+`https://dev.azure.com/{org}/{project}/_git/{repository}`, a legacy Services
+form `https://{org}.visualstudio.com/{project}/_git/{repository}`, or an Azure
+DevOps Server form with a collection and, optionally, a virtual directory, such
+as `https://server/tfs/{collection}/{project}/_git/{repository}`. For all of
+them, derive the API base from everything in `remoteUrl` before `/_git/`, rather
+than reconstructing it from an organization and project. That preserves Server
+collection and virtual-directory paths. Direct absolute attachment URLs must
+match that origin and base path; CDN attachment URLs are handled separately.
+
 **A code wiki's page writes must name its branch.** A project wiki has one
 branch and every pages call can omit `versionDescriptor`. A code wiki (a Git
 folder published as a wiki) reads fine without one, but creating and editing a
