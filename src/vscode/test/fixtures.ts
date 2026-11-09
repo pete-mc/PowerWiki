@@ -38,6 +38,7 @@ export async function createTestWorkspace(): Promise<TestWorkspace> {
   // The code folder is its own repository, so the nested wiki has a mapped path
   // — the layout the "wiki in a subfolder" case actually looks like in practice.
   await fs.mkdir(path.join(codeFolderPath, ".git"), { recursive: true });
+  await fs.writeFile(path.join(codeFolderPath, ".git", "HEAD"), "ref: refs/heads/main\n");
   await fs.mkdir(path.join(codeFolderPath, "src"), { recursive: true });
   await fs.writeFile(path.join(codeFolderPath, "src", "index.ts"), "export const x = 1;\n");
   // A Markdown file that is *not* in a wiki, so the tests can prove PowerWiki
