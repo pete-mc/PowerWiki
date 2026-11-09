@@ -149,19 +149,43 @@ export async function findRepositoryRoot(startPath: string): Promise<string | un
   let current = path.resolve(startPath);
 
   for (;;) {
-    try {
-      // A worktree or submodule has `.git` as a file, not a directory, so this
-      // deliberately checks for existence rather than for a directory.
-      await fs.stat(path.join(current, ".git"));
+    if (await hasGitMetadata(current)) {
       return current;
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+}
+
+async function hasGitMetadata(directory: string): Promise<boolean> {
+  const gitPath = path.join(directory, ".git");
+  try {
+    // Read the file first. Checking its type with stat() and then reading it
+    // creates a time-of-check/time-of-use race that CodeQL correctly flags.
+    return (await fs.readFile(gitPath, "utf8")).trimStart().startsWith("gitdir:");
+  } catch (error: unknown) {
+    if (!isErrnoCode(error, "EISDIR")) {
+      return false;
+    }
+
+    // A normal checkout has a `.git` directory. EISDIR is the result of trying
+    // to read it as the worktree/submodule metadata file above; its HEAD proves
+    // that this is Git metadata rather than an unrelated directory.
+    try {
+      await fs.access(path.join(gitPath, "HEAD"));
+      return true;
     } catch {
-      const parent = path.dirname(current);
-      if (parent === current) {
-        return undefined;
-      }
-      current = parent;
+      return false;
     }
   }
+}
+
+function isErrnoCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 async function subdirectories(directory: string): Promise<string[]> {
