@@ -45,6 +45,15 @@ The current implementation follows the Microsoft Azure DevOps web extension stru
 
 The manifest contributes Power Wiki as a project-level hub group and also under the Azure DevOps project Overview menu. It intentionally does not replace or hide the default Azure DevOps Wiki, so teams can choose either experience.
 
+### Azure DevOps Server support
+
+Azure DevOps Server support starts at **Azure DevOps Server vNext / 26H2** (or
+later), which Microsoft maps to REST API 7.2. PowerWiki uses `7.2-preview` Git
+API endpoints through `azure-devops-extension-api` for repository metadata,
+attachment listings, and page history. Azure DevOps Server 2022, including
+2022.1, and earlier releases are **not supported**; there is no compatibility
+fallback for their older REST APIs.
+
 ### Two hosts
 
 The same UI also runs as a **VS Code extension** (`vscode/`) against a cloned wiki

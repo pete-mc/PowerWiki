@@ -106,7 +106,8 @@ PowerWiki stores nothing outside your wiki's Git repository. Every page remains 
 
 ## Requirements & permissions
 
-- An Azure DevOps project with at least one wiki (Services; Server where extension APIs are available).
+- An Azure DevOps project with at least one wiki.
+- Azure DevOps Services is supported. Azure DevOps Server support starts at **Azure DevOps Server vNext / 26H2** (or later), which Microsoft maps to REST API 7.2. PowerWiki uses `7.2-preview` Git API endpoints, so Azure DevOps Server 2022, including 2022.1, and earlier are **not supported**.
 - Scopes: **Wiki (read/write)** for pages and attachments; **Work Items (read)** for badges, query tables, and the links between pages and work items; **Code (read)** for page history, the byline, and attachment listings from the wiki's Git repository; **Notifications (write)** for follow/unfollow page subscriptions.
 - Light, dark, and custom Azure DevOps themes are detected automatically.
 
