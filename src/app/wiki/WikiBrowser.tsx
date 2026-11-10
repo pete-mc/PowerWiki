@@ -456,6 +456,7 @@ export function WikiBrowser({
   // hub). The search box still matches page titles locally then, rather than
   // failing outright.
   const searchContent = host.searchContent;
+  const contentSearchUnavailableReason = host.contentSearchUnavailableReason;
   // Attachment images are fetched through the host: the hub needs an access
   // token for them, VS Code needs a webview URI for a file on disk.
   const loadImageObjectUrl = useCallback((url: string) => host.loadImageObjectUrl(url), [host]);
@@ -2525,6 +2526,7 @@ export function WikiBrowser({
           <WikiSearchResults
             activeWikiName={activeWiki?.name}
             onSearchContent={searchContent}
+            contentSearchUnavailableReason={contentSearchUnavailableReason}
             onSelect={handleSearchResultSelected}
             pages={pageLinks}
             query={searchQuery}

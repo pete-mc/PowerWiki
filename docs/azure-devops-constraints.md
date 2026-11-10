@@ -78,6 +78,18 @@ wrapped in the service's own `<highlighthit>` markup around wiki content, so the
 are parsed into `{ text, isMatch }` segments and rendered as React text nodes —
 they must never reach `innerHTML`.
 
+**Do not call Azure DevOps Server's Elasticsearch service directly.** Server
+installs Wiki Search as an Azure DevOps-managed extension backed by a modified
+Elasticsearch service; its address and credentials are administrator-managed,
+not a browser API. Server instead exposes a collection-local browser route at
+`<collection-uri>/<project-guid>/_apis/search/wikiSearchResults?api-version=7.1`.
+Its result shape matches Services, but its request requires `filters: {}` and
+limits pages to 25 items. Its browser contract is `Vss-Fetch` plus the
+same-origin session cookie. Keep the collection URI's virtual-directory path
+(for example `/tfs/Collection/`), and never send a Server token to
+`almsearch.dev.azure.com`. Older Server versions omit `host.isHosted`; only an
+explicit `true` identifies Services.
+
 **The work item form tab cannot have an icon, and cannot be icon-only.**
 Microsoft documents it plainly on the extensibility-points reference: `icon` and
 `iconName` "work for hubs, menus, and toolbars only. They don't work for tab

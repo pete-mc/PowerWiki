@@ -4,6 +4,7 @@ import {
   interpretInfoCode,
   pagePathFromGitPath,
   parseHighlight,
+  searchServerWiki,
   searchWiki,
   toOutcome
 } from "./wikiSearch";
@@ -130,5 +131,20 @@ describe("searchWiki", () => {
       "https://almsearch.dev.azure.com/my%20org/my%20project/_apis/search/wikisearchresults?api-version=7.1"
     );
     expect(seenBody).toEqual({ searchText: "hello", $skip: 10, $top: 5 });
+  });
+
+  it("posts to Azure DevOps Server's collection-local route", async () => {
+    let seenUrl = "";
+    let seenBody: unknown;
+    await searchServerWiki(
+      { collectionUri: "http://server/tfs/DefaultCollection/", projectId: "project guid", searchText: "hello" },
+      async (url, body) => {
+        seenUrl = url;
+        seenBody = body;
+        return { count: 0, infoCode: 0, results: [] };
+      }
+    );
+    expect(seenUrl).toBe("http://server/tfs/DefaultCollection/project%20guid/_apis/search/wikiSearchResults?api-version=7.1");
+    expect(seenBody).toEqual({ searchText: "hello", $skip: 0, $top: 25, filters: {} });
   });
 });

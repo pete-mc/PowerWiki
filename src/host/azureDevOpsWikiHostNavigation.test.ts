@@ -21,7 +21,7 @@ vi.mock("azure-devops-extension-sdk", () => ({
 const NAVIGATION_SERVICE = "ms.vss-features.host-navigation-service";
 const LOCATION_SERVICE = "ms.vss-features.location-service";
 
-const { AzureDevOpsWikiHost, withQueryRoute } = await import("./azureDevOpsWikiHost");
+const { AzureDevOpsWikiHost, collectionUriFromAssetUrl, withQueryRoute } = await import("./azureDevOpsWikiHost");
 
 const CONTEXT = {
   organizationName: "org",
@@ -80,6 +80,50 @@ describe("the host navigation service", () => {
     await host.getNavigation();
 
     expect(askedForNavigation()).toBe(true);
+  });
+});
+
+describe("content search host selection", () => {
+  it("keeps Services full-text search available", () => {
+    const host = new AzureDevOpsWikiHost({ ...CONTEXT, organizationIsHosted: true }, "hub");
+
+    expect(host.searchContent).toBeTypeOf("function");
+    expect(host.contentSearchUnavailableReason).toBeUndefined();
+  });
+
+  it("uses the collection-local full-text endpoint on Azure DevOps Server", () => {
+    const host = new AzureDevOpsWikiHost({ ...CONTEXT, organizationIsHosted: false, collectionUri: "http://server/DefaultCollection/" }, "hub");
+
+    expect(host.searchContent).toBeTypeOf("function");
+    expect(host.contentSearchUnavailableReason).toBeUndefined();
+  });
+
+  it("treats an older Server host that omits isHosted as Server", () => {
+    const host = new AzureDevOpsWikiHost({ ...CONTEXT, collectionUri: "http://server/DefaultCollection/" }, "hub");
+
+    expect(host.searchContent).toBeTypeOf("function");
+    expect(host.contentSearchUnavailableReason).toBeUndefined();
+  });
+});
+
+describe("Server collection URI", () => {
+  it("keeps a Server virtual directory while removing the extension asset path", () => {
+    expect(
+      collectionUriFromAssetUrl(
+        "http://server/tfs/DefaultCollection/_apis/public/gallery/publisher/powerwiki/assetbyname/index.html",
+        "DefaultCollection"
+      )
+    ).toBe("http://server/tfs/DefaultCollection/");
+  });
+
+  it("uses the embedding hub page when an asset is served from the site root", () => {
+    expect(
+      collectionUriFromAssetUrl(
+        "http://server/_apis/public/gallery/publisher/powerwiki/assetbyname/dist/powerwiki.html",
+        "DefaultCollection",
+        "http://server/tfs/DefaultCollection/project/_apps/hub/publisher.powerwiki.wiki"
+      )
+    ).toBe("http://server/tfs/DefaultCollection/");
   });
 });
 

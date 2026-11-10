@@ -151,8 +151,39 @@ export interface WikiSearchRequest {
   readonly skip?: number;
 }
 
+/** The Azure DevOps Server route is collection-scoped and identifies projects by GUID. */
+export interface ServerWikiSearchRequest {
+  readonly collectionUri: string;
+  readonly projectId: string;
+  readonly searchText: string;
+  readonly top?: number;
+  readonly skip?: number;
+}
+
 /** Injected so tests exercise the mapping without a network or the SDK. */
 export type SearchTransport = (url: string, body: unknown) => Promise<RawWikiSearchResponse>;
+
+const SERVICES_SEARCH_PAGE_SIZE = 50;
+const SERVER_SEARCH_PAGE_SIZE = 25;
+const SERVER_SEARCH_API_VERSION = "7.1";
+
+function searchBody(request: Pick<WikiSearchRequest, "searchText" | "skip" | "top">): object {
+  return {
+    searchText: request.searchText,
+    $skip: request.skip ?? 0,
+    $top: request.top ?? SERVICES_SEARCH_PAGE_SIZE
+  };
+}
+
+/** Azure DevOps Server validates filters and limits a result page to 25 items. */
+function serverSearchBody(request: Pick<ServerWikiSearchRequest, "searchText" | "skip" | "top">): object {
+  return {
+    searchText: request.searchText,
+    $skip: request.skip ?? 0,
+    $top: request.top ?? SERVER_SEARCH_PAGE_SIZE,
+    filters: {}
+  };
+}
 
 export async function searchWiki(
   request: WikiSearchRequest,
@@ -161,10 +192,25 @@ export async function searchWiki(
   const url =
     `https://almsearch.dev.azure.com/${encodeURIComponent(request.organizationName)}` +
     `/${encodeURIComponent(request.projectName)}/_apis/search/wikisearchresults?api-version=7.1`;
-  const body = await transport(url, {
-    searchText: request.searchText,
-    $skip: request.skip ?? 0,
-    $top: request.top ?? 50
-  });
+  const body = await transport(url, searchBody(request));
+  return toOutcome(body);
+}
+
+/**
+ * Searches Azure DevOps Server's supported, collection-local wiki endpoint.
+ * This must not be sent to the Services-only almsearch host: Server exposes
+ * the same response contract at its own authenticated REST route.
+ */
+export async function searchServerWiki(
+  request: ServerWikiSearchRequest,
+  transport: SearchTransport
+): Promise<WikiSearchOutcome> {
+  const collectionUri = request.collectionUri.endsWith("/") ? request.collectionUri : `${request.collectionUri}/`;
+  const url = new URL(
+    `${encodeURIComponent(request.projectId)}/_apis/search/wikiSearchResults`,
+    collectionUri
+  );
+  url.searchParams.set("api-version", SERVER_SEARCH_API_VERSION);
+  const body = await transport(url.toString(), serverSearchBody(request));
   return toOutcome(body);
 }
