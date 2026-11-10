@@ -190,6 +190,44 @@ try {
   check(!!(await frame.$(".powerwiki-work-item-badge-rich")), "work item badge still enriched after navigation");
   check(!!(await frame.$(".powerwiki-query-table table")), "query table still rendered after navigation");
 
+  // 2b. Full-text search reaches the host's search service. The route differs
+  // by host (Services: almsearch.dev.azure.com; Server: the collection's own
+  // route), and the choice rests on the SDK's `isHosted`, which only a real host
+  // reports - unit tests and the sandbox both inject it. "sequenceDiagram" is in
+  // page content (Mermaid Gallery, Rendering Details) but in no title, so a hit
+  // can only come from content search. An index that is still building is a
+  // status notice, not a failure, and is reported as such.
+  try {
+    const searchBox = frame.locator(".powerwiki-header-search-input");
+    await searchBox.fill("sequenceDiagram");
+    const contentSection = frame.locator(".powerwiki-search-section", { hasText: "In page content" });
+    await frame
+      .waitForFunction(
+        () => {
+          const section = [...document.querySelectorAll(".powerwiki-search-section")].find((s) =>
+            /In page content/.test(s.textContent || "")
+          );
+          return section && !/Searching…/.test(section.textContent || "") && section.querySelector(".powerwiki-search-hit, .powerwiki-search-note");
+        },
+        { timeout: 30000 }
+      )
+      .catch(() => {});
+    const failure = await contentSection.locator('[role="alert"]').textContent().catch(() => null);
+    const notice = await contentSection.locator('[role="status"]').textContent().catch(() => null);
+    const hits = await contentSection.locator(".powerwiki-search-hit").count();
+    const unavailable = await contentSection.locator(".powerwiki-search-note").first().textContent().catch(() => "");
+    check(!failure, `full-text search request succeeds${failure ? ` (${failure.trim()})` : ""}`);
+    check(
+      hits > 0 || /indexing/i.test(notice || ""),
+      `full-text search returns content hits (hits=${hits}${notice ? `, notice=${JSON.stringify(notice.trim())}` : ""}${
+        hits === 0 && !notice ? `, note=${JSON.stringify((unavailable || "").trim())}` : ""
+      })`
+    );
+    await searchBox.fill("");
+  } catch (error) {
+    check(false, `full-text search failed: ${error.message}`);
+  }
+
   // Scroll resets to the top on in-app navigation. The content area persists
   // across pages (it lives outside the per-page boundary), so a scrolled page
   // would otherwise carry its scroll to the next. Uses a real in-app tree click,
