@@ -14,6 +14,8 @@ import { matchWikiTitles, type WikiSearchablePage } from "./wikiTitleMatch";
 interface WikiSearchResultsProps {
   /** Name of the wiki being browsed, so hits from another wiki can be labelled. */
   readonly activeWikiName?: string;
+  /** Host-provided explanation when title search works but full text cannot. */
+  readonly contentSearchUnavailableReason?: string;
   readonly onSelect: (path: string, wikiName?: string) => void;
   /** Runs a content search. Absent when there is no project context to search in. */
   readonly onSearchContent?: (searchText: string) => Promise<WikiSearchOutcome>;
@@ -81,6 +83,7 @@ export function clampSegments(
 
 export function WikiSearchResults({
   activeWikiName,
+  contentSearchUnavailableReason,
   onSearchContent,
   onSelect,
   pages,
@@ -154,7 +157,8 @@ export function WikiSearchResults({
 
         {contentState.kind === "idle" && !onSearchContent ? (
           <p className="powerwiki-search-note">
-            Content search needs an Azure DevOps project context, so only page titles are searched here.
+            {contentSearchUnavailableReason ??
+              "Content search needs an Azure DevOps project context, so only page titles are searched here."}
           </p>
         ) : null}
 
