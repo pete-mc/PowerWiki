@@ -14,8 +14,14 @@
   },
   "targets": [
     {
-      "id": "Microsoft.VisualStudio.Services"
+      "id": "Microsoft.VisualStudio.Services.Cloud"
+    },
+    {
+      "id": "Microsoft.TeamFoundation.Server"
     }
+  ],
+  "demands": [
+    "api-version/7.2"
   ],
   "content": {
     "details": {
