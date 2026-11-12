@@ -25,15 +25,26 @@ import { hasSignInCredentials, isAccountPickerOnly, isOnSignInPage, signIn } fro
 //   PW_EXTENSION=powerwiki-canary npm run pw:verify
 //
 // PW_HUB still overrides the whole URL for hosts that don't match the
-// dev.azure.com shape (e.g. Azure DevOps Server).
+// dev.azure.com shape (e.g. Azure DevOps Server). API calls derive their
+// collection URL from it, preserving a Server collection and virtual directory.
 export const ORG = process.env.PW_ORG ?? "dataversepowertools";
-export const PROJECT = process.env.PW_PROJECT ?? "PowerWiki";
+const DEFAULT_PROJECT = "PowerWiki";
 const PUBLISHER = process.env.PW_PUBLISHER ?? "dataversepowertools";
 const EXTENSION = process.env.PW_EXTENSION ?? "powerwiki";
 
 export const HUB =
   process.env.PW_HUB ??
-  `https://dev.azure.com/${ORG}/${PROJECT}/_apps/hub/${PUBLISHER}.${EXTENSION}.wiki`;
+  `https://dev.azure.com/${ORG}/${process.env.PW_PROJECT ?? DEFAULT_PROJECT}/_apps/hub/${PUBLISHER}.${EXTENSION}.wiki`;
+
+const hubMatch = new URL(HUB).pathname.match(/^(.*)\/([^/]+)\/_apps\/hub\//);
+const hubUrl = new URL(HUB);
+
+// PW_PROJECT remains useful when a custom hub has an unusual shape, but a
+// normal hub URL supplies the right project on both Services and Server.
+export const PROJECT = process.env.PW_PROJECT ?? hubMatch?.[2] ?? DEFAULT_PROJECT;
+export const COLLECTION_URL =
+  process.env.PW_COLLECTION_URL ??
+  (hubMatch ? `${hubUrl.origin}${hubMatch[1]}` : `https://dev.azure.com/${ORG}`);
 
 // Which browser binary to drive. Defaults to the system Chrome install, which
 // is what a maintainer desktop has. Set PW_CHANNEL=chromium on a machine with
@@ -50,6 +61,36 @@ export const PROFILE_DIR = path.join(os.homedir(), ".powerwiki-pw", "chrome-prof
 export const ARTIFACTS_DIR = path.join(import.meta.dirname, "artifacts");
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * A small `context.request`-compatible adapter that makes same-origin requests
+ * from the rendered Azure DevOps page. Unlike Playwright's request context, it
+ * carries Windows Integrated Authentication on Azure DevOps Server.
+ */
+export function browserRequestContext(page) {
+  const request = async (url, init = {}) => {
+    const result = await page.evaluate(
+      async ({ requestUrl, requestInit }) => {
+        const response = await fetch(requestUrl, { ...requestInit, credentials: "include" });
+        return { ok: response.ok, status: response.status, body: await response.text() };
+      },
+      { requestUrl: url, requestInit: init }
+    );
+    return {
+      ok: () => result.ok,
+      status: () => result.status,
+      json: async () => JSON.parse(result.body),
+      text: async () => result.body
+    };
+  };
+  return {
+    request: {
+      get: (url) => request(url),
+      post: (url, { headers, data }) =>
+        request(url, { method: "POST", headers, body: JSON.stringify(data) })
+    }
+  };
+}
 
 /** Launches the browser (system Chrome, or PW_CHANNEL) against the persistent profile. */
 export async function launch({ headless = false } = {}) {
@@ -146,8 +187,9 @@ export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
  * `pw-smoke-*` file per verify forever. The upload tests are the only thing that
  * writes to /.attachments, and nothing reads them afterwards.
  *
- * Uses context.request, which shares the browser's signed-in cookie jar, so this
- * needs no token of its own. There is no REST call to delete a wiki attachment —
+ * Uses a browser-backed request context, so this needs no token of its own and
+ * carries Windows Integrated Authentication on Azure DevOps Server. There is no
+ * REST call to delete a wiki attachment —
  * attachments are files in the wiki's Git repository — so it is one push with a
  * delete change per file. Best effort by design: a failure here must never fail
  * an otherwise passing verify, so it reports and moves on.
@@ -164,11 +206,11 @@ export async function powerWikiFrame(page, { timeoutMs = 240000 } = {}) {
 export async function sweepSmokeAttachments(context) {
   try {
     const api = context.request;
-    const wikis = await api.get(`https://dev.azure.com/${ORG}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
+    const wikis = await api.get(`${COLLECTION_URL}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
     const all = (await wikis.json()).value;
     const wiki = all.find((w) => w.type === "projectWiki") ?? all[0];
     const items = await api.get(
-      `https://dev.azure.com/${ORG}/_apis/git/repositories/${wiki.repositoryId}/items?scopePath=/.attachments&recursionLevel=oneLevel&api-version=7.1`
+      `${COLLECTION_URL}/_apis/git/repositories/${wiki.repositoryId}/items?scopePath=/.attachments&recursionLevel=oneLevel&api-version=7.1`
     );
     if (!items.ok()) {
       return;
@@ -188,7 +230,7 @@ export async function sweepSmokeAttachments(context) {
 
 /** The project's wiki with this name, or undefined when there is none. */
 export async function findWiki(context, name) {
-  const wikis = await context.request.get(`https://dev.azure.com/${ORG}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
+  const wikis = await context.request.get(`${COLLECTION_URL}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
   return ((await wikis.json()).value ?? []).find((w) => w.name === name);
 }
 
@@ -202,7 +244,7 @@ export async function deleteAttachments(context, paths, wikiName) {
   }
   try {
     const api = context.request;
-    const wikis = await api.get(`https://dev.azure.com/${ORG}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
+    const wikis = await api.get(`${COLLECTION_URL}/${PROJECT}/_apis/wiki/wikis?api-version=7.1`);
     const all = (await wikis.json()).value;
     const wiki = wikiName ? all.find((w) => w.name === wikiName) : all.find((w) => w.type === "projectWiki") ?? all[0];
     // A project wiki's repository id is the wiki id, and its branch is whatever
@@ -210,10 +252,10 @@ export async function deleteAttachments(context, paths, wikiName) {
     // A code wiki's branch is the one it is published from.
     const branch = (wiki.versions?.[0]?.version) ?? "wikiMaster";
     const refs = await api.get(
-      `https://dev.azure.com/${ORG}/_apis/git/repositories/${wiki.repositoryId}/refs?filter=heads/${branch}&api-version=7.1`
+      `${COLLECTION_URL}/_apis/git/repositories/${wiki.repositoryId}/refs?filter=heads/${branch}&api-version=7.1`
     );
     const head = (await refs.json()).value[0];
-    const push = await api.post(`https://dev.azure.com/${ORG}/_apis/git/repositories/${wiki.repositoryId}/pushes?api-version=7.1`, {
+    const push = await api.post(`${COLLECTION_URL}/_apis/git/repositories/${wiki.repositoryId}/pushes?api-version=7.1`, {
       headers: { "Content-Type": "application/json" },
       data: {
         refUpdates: [{ name: `refs/heads/${branch}`, oldObjectId: head.objectId }],
