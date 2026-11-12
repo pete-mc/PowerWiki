@@ -48,7 +48,8 @@ defaults to the maintainer's org; override with environment variables:
 | --- | --- | --- |
 | `PW_ORG` | `dataversepowertools` | Azure DevOps organization |
 | `PW_PROJECT` | `PowerWiki` | Project containing the wiki |
-| `PW_HUB` | *(derived)* | Full hub URL, for hosts that aren't `dev.azure.com` (e.g. Azure DevOps Server) |
+| `PW_HUB` | *(derived)* | Full hub URL. On Azure DevOps Server this lets the harness derive the collection URL and project correctly. |
+| `PW_COLLECTION_URL` | *(derived from `PW_HUB`)* | API collection base override, including any Server virtual-directory path; normally leave unset. |
 | `PW_TEAM_ID` | *(PowerWiki Team)* | Identity GUID used by the `@mention` check |
 | `PW_TEAM_NAME` | `PowerWiki Team` | Display name that GUID must resolve to |
 | `PW_EXTENSION` | `powerwiki` | Which published build to drive: `powerwiki-canary` for the pre-release canary |
@@ -64,8 +65,9 @@ from the published extension rather than from your organization.
 
 Note that `verify.mjs` asserts against specific wiki content (a `Home` page with
 a work-item reference and an embedded query table, and a `PowerWiki Showcase`
-page). Against a different wiki, expect those content-specific checks to fail
-until you adapt them.
+page). This is independent of the host: provision equivalent fixture pages in
+an Azure DevOps Server test wiki before expecting those content-specific checks
+to pass.
 
 ## Verify a build
 
