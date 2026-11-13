@@ -81,6 +81,17 @@ Full measured findings: [`docs/azure-devops-constraints.md`](docs/azure-devops-c
 
 The localhost-served dev extension (`powerwiki-dev`) is retired; don't bring it back without reading why in `docs/testing-layers.md`. The canary **must** use a different extension id from public `powerwiki` (`tools/release/assert-private.mjs` enforces it) and be relabelled.
 
+### Cloud and Server isolation
+
+Cloud Services and Azure DevOps Server are separate compatibility targets. A
+Server-only workaround must be guarded by explicit hosting metadata or host
+capabilities and must not change the cloud request, URL, authentication, or
+rendering path; a cloud-only assumption must likewise not enter the Server
+path. Validate both whenever shared host code changes. Local Server testing
+ships only the private `powerwiki-canary` extension with a fourth build
+component — never alter the public `powerwiki` extension id or the repository's
+three-part release version for a Server canary. See `docs/on-prem-verification.md`.
+
 ## Publishing
 
 Both extensions ship from one version number and one commit; details, PAT scopes and the failed-publish traps are in [`docs/publishing.md`](docs/publishing.md).
