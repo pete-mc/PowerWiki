@@ -84,3 +84,38 @@ Three things follow, all already in the harness:
   accumulated in one afternoon before this existed. Note that cleanup deletes by
   *pushing a commit* to the wiki repository, which is why it can remove an
   attachment at all: the wiki attachments API is create-only, git is not.
+
+## Cloud canary release gate
+
+Before a public Marketplace release, run the harness against the private
+`powerwiki-canary` in Azure DevOps **Services**. Do not substitute an Azure
+DevOps Server result: the cloud host, extension CDN, and authentication path
+are separate compatibility targets.
+
+```powershell
+$env:PW_EXTENSION = "powerwiki-canary"
+# Use the Services organization/project fixture. Do not set PW_HUB to a Server URL.
+npm run pw:auth
+npm run pw:verify
+```
+
+Record the installed canary version, organization/project, browser, and result.
+The run must have no failed assertions. For token-safe attachment loading, its
+required checks are:
+
+- The crafted `data-powerwiki-image` target is stripped and never requested.
+- A normal wiki attachment renders through the authenticated Git Items path,
+  including an attachment thumbnail.
+- A stored draw.io diagram still opens, so the same guard covers its data-URL
+  loading path.
+- An ordinary external image remains a normal unauthenticated browser image.
+- Record whether a successful cloud Git Items attachment request redirects. If
+  it does, do not relax `redirect: "error"` or ship a redirect-following
+  workaround until every redirect destination is independently validated before
+  a bearer token can be sent.
+
+These checks validate both halves of the security boundary: author-controlled
+URLs cannot select the token destination, while host-generated attachment URLs
+continue to work. A passing Server canary does not waive this Services gate, and
+a passing Services canary does not waive Server coverage for Server-specific
+changes.

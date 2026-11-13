@@ -25,6 +25,46 @@ That produces `powerwiki-canary` version `1.10.0.3` when the public manifest is
 `1.10.0`. This keeps Server validation private and separate from Marketplace
 publishing.
 
+### Build, upload, and verify a replacement canary
+
+Do this after a local code change that needs Server coverage. **Do not change
+`package.json`, `vss-extension.json`, or `vscode/package.json` for this.** Pick
+the next unused fourth component of the already-installed private canary (for
+example, use `4` after `1.10.0.3`):
+
+```powershell
+npm test
+npm run build
+npm run manifest:canary -- --build 4
+npx tfx-cli extension create --manifest-globs vss-extension.canary.json
+```
+
+The output VSIX is a private `powerwiki-canary` package (for example,
+`dataversepowertools.powerwiki-canary-1.10.0.4.vsix`). In the local Server,
+open **Collection settings → Extensions**, locate **PowerWiki (Canary)**, select
+**Upload new version**, choose that VSIX, and wait for the install/update to
+finish. Never upload this package under the public `powerwiki` extension id.
+
+Then test the exact installed build with Edge. Keep the full hub URL explicit
+so the collection path is preserved:
+
+```powershell
+$env:PW_CHANNEL = "msedge"
+$env:PW_EXTENSION = "powerwiki-canary"
+$env:PW_HUB = "http://server/DefaultCollection/project/_apps/hub/dataversepowertools.powerwiki-canary.wiki"
+$env:PW_CODE_WIKI = "" # skip unless a CodeWikiTest fixture exists
+npm run pw:auth
+npm run pw:verify
+```
+
+Record the canary's four-part version and the `pw:verify` outcome. The generated
+`vss-extension.canary.json` and VSIX are build outputs: do not commit them.
+
+This upload affects only the local Server's private `powerwiki-canary` install.
+Do not use it to test, update, or replace the cloud `powerwiki` extension, and
+do not add a Server workaround to the cloud path (or the reverse) without an
+explicit host/capability guard and coverage for both hosts.
+
 Server URLs may have a collection and a virtual directory, for example:
 
 ```text
