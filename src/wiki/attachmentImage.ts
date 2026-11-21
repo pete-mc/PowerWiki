@@ -31,7 +31,11 @@ export async function fetchAttachmentDataUrl(url: string): Promise<string> {
 
 async function fetchAttachmentBlob(url: string): Promise<Blob> {
   const token = await SDK.getAccessToken();
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  // Never let fetch follow a redirect while carrying the Azure DevOps bearer
+  // token. A redirect is not proof that its destination is still Azure DevOps;
+  // callers must explicitly measure and, if needed, implement a separately
+  // validated redirect flow rather than relying on fetch's default behaviour.
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, redirect: "error" });
   if (!response.ok) {
     throw new Error(`Image fetch failed: ${response.status}`);
   }

