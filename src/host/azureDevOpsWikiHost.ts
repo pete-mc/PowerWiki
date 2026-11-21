@@ -93,7 +93,7 @@ export async function createAzureDevOpsWikiHost(surface: AzureDevOpsSurface = "h
  * otherwise use an asset path that already contains `/_apis/`. Keep a virtual
  * directory (for example `/tfs/Collection/`) instead of assuming a root site.
  */
-export function collectionUriFromAssetUrl(assetUrl: string, collectionName: string, referrerUrl = ""): string {
+export function collectionUriFromAssetUrl(assetUrl: string, collectionName: string, referrerUrl = ""): string | undefined {
   const url = new URL(assetUrl);
   const apiIndex = url.pathname.toLowerCase().indexOf("/_apis/");
   const assetCollectionPath = apiIndex >= 0 ? url.pathname.slice(0, apiIndex + 1) : "/";
@@ -103,7 +103,14 @@ export function collectionUriFromAssetUrl(assetUrl: string, collectionName: stri
   const collectionIndex = referrerPath.toLowerCase().indexOf(collectionSuffix);
   const referrerCollectionPath =
     collectionIndex >= 0 ? referrerPath.slice(0, collectionIndex + collectionSuffix.length) : undefined;
-  const collectionPath = referrerCollectionPath ?? (assetCollectionPath !== "/" ? assetCollectionPath : `/${collectionName}/`);
+  // A root-served asset does not tell us whether Server is mounted below a
+  // virtual directory (for example, /tfs). If the embedding page's path is
+  // unavailable too, guessing /{collectionName}/ produces a share link that
+  // can be wrong. Omit the absolute link and retain the in-page heading anchor.
+  const collectionPath = referrerCollectionPath ?? (assetCollectionPath !== "/" ? assetCollectionPath : undefined);
+  if (!collectionPath) {
+    return undefined;
+  }
   return new URL(collectionPath, url.origin).toString();
 }
 

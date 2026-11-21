@@ -1326,7 +1326,7 @@ try {
         `?path=${encodeURIComponent(`${mapped}/${name}.md`)}&versionDescriptor.version=${encodeURIComponent(branch)}` +
         `&versionDescriptor.versionType=branch&api-version=7.1`;
       // A single file comes back raw, not as JSON (and a new page is empty).
-      const response = await context.request.get(url);
+      const response = await authenticatedRequestContext.request.get(url);
       return response.ok() ? await response.text() : undefined;
     };
     const wikiHash = (pagePath) => `#/wikis/${encodeURIComponent(codeWikiName)}/${encodeURI(pagePath)}`;
