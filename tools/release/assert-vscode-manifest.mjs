@@ -20,6 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { decodePng } from "../media/png.mjs";
+import { vscodeEngineProblems } from "./vscode-engine.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -71,6 +72,10 @@ if (manifest.icon) {
     problems.push(...iconProblems(iconPath));
   }
 }
+
+// The API src/vscode/ compiled against must exist in the oldest VS Code the
+// manifest admits; see vscode-engine.mjs for why vsce does not catch this.
+problems.push(...vscodeEngineProblems());
 
 for (const required of ["README.md", "CHANGELOG.md", "LICENSE"]) {
   if (!fs.existsSync(path.join(REPO_ROOT, "vscode", required))) {
