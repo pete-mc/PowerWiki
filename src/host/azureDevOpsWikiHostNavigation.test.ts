@@ -125,6 +125,15 @@ describe("Server collection URI", () => {
       )
     ).toBe("http://server/tfs/DefaultCollection/");
   });
+
+  it("does not guess a Server collection path when a root-served asset has no referrer", () => {
+    expect(
+      collectionUriFromAssetUrl(
+        "http://server/_apis/public/gallery/publisher/powerwiki/assetbyname/dist/powerwiki.html",
+        "DefaultCollection"
+      )
+    ).toBeUndefined();
+  });
 });
 
 // A shareable link carries its route in the query as well as the hash, because
