@@ -75,6 +75,11 @@ wiki — clicking through the tree, following links between pages — leaves one
 tab, not a trail of them. Double-clicking, or starting to edit, makes the tab
 permanent, and a page that is already open is revealed rather than opened again.
 
+On VS Code 1.90–1.96, following a link inside a page opens it in a new tab
+instead of reusing the preview tab: those releases ignore the preview request
+when an extension opens a custom editor. VS Code 1.97 and later behave as
+described above.
+
 ## Saving
 
 Saving writes the file. It does **not** commit — that stays with your normal Git

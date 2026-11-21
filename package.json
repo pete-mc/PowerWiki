@@ -23,7 +23,7 @@
     "pw:auth": "node tools/pw/auth.mjs",
     "pw:verify": "node tools/pw/verify.mjs",
     "test:unit": "vitest run",
-    "test": "npm run typecheck && vitest run",
+    "test": "npm run typecheck && node tools/release/vscode-engine.mjs && vitest run",
     "test:vscode": "npm run build:vscode && node vscode/dist/test/runTests.js",
     "test:e2e": "npm run build:dev && node tools/e2e/run.mjs"
   },
@@ -79,7 +79,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/turndown": "^5.0.6",
-    "@types/vscode": "^1.146.0",
+    "@types/vscode": "~1.90.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.1",
     "copy-webpack-plugin": "^14.0.0",

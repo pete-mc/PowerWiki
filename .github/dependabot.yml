@@ -28,6 +28,15 @@ updates:
         update-types:
           - minor
           - patch
+    # @types/vscode must not be newer than vscode/package.json engines.vscode,
+    # or src/vscode/ type-checks against APIs that supported VS Code builds lack
+    # (tools/release/vscode-engine.mjs fails `npm test` if it is). Moving it is
+    # a deliberate engine raise, done by hand together with the engine.
+    ignore:
+      - dependency-name: "@types/vscode"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
     # Majors stay ungrouped: renderer upgrades are deliberate, fixture-backed
     # changes (see AGENTS.md), so they deserve their own PR and review.
     labels:
