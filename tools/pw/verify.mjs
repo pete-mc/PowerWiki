@@ -693,6 +693,13 @@ try {
       queryIds.plain > 0 && queryIds.richInTable === 0,
       `query id column uses plain links, not badges (plain=${queryIds.plain}, richInTable=${queryIds.richInTable})`
     );
+    const nativeQueryUrl = await frame
+      .$eval(".powerwiki-query-table a[target='_blank']", (link) => link.getAttribute("href") ?? "")
+      .catch(() => "");
+    check(
+      nativeQueryUrl.startsWith(`${COLLECTION_URL}/${PROJECT}/_queries/query/`),
+      `query native link preserves the host collection URL (${JSON.stringify(nativeQueryUrl)})`
+    );
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-query-ids.png") });
   } catch (error) {
     check(false, `query id column check failed: ${error.message}`);
