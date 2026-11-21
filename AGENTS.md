@@ -93,7 +93,7 @@ Both extensions ship from one version number and one commit; details, PAT scopes
 
 ## Verifying in the browser (Playwright)
 
-Use `tools/pw/` (the extension iframe is cross-origin; browser-extension automation cannot see it). Setup and the Chromium crash findings: [`docs/browser-verification.md`](docs/browser-verification.md).
+Use `tools/pw/` (the extension iframe is cross-origin; browser-extension automation cannot see it). Setup and the Chromium crash findings: [`docs/browser-verification.md`](docs/browser-verification.md). For Azure DevOps Server setup, fixture pages, local-team configuration and Windows-auth cleanup notes, read [`docs/on-prem-verification.md`](docs/on-prem-verification.md).
 
 - `npm run pw:auth` once, headed, to sign in to the profile at `~/.powerwiki-pw` (session cookies — never commit it).
 - `npm run pw:verify` runs headless against `PW_EXTENSION=powerwiki|powerwiki-canary` (`PW_ORG`, `PW_PROJECT`, `PW_PUBLISHER`, `PW_HUB`, `PW_CHANNEL`, `PW_HEADED=1`). Extend `tools/pw/verify.mjs` when you add a guarded feature.

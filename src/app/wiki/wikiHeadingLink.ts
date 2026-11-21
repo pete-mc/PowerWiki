@@ -28,6 +28,8 @@ export interface HubLinkContext {
   readonly organizationName?: string;
   readonly projectName?: string;
   readonly organizationIsHosted?: boolean;
+  /** Base URI of the current collection, including a Server virtual directory. */
+  readonly collectionUri?: string;
   /** Full contribution id of the current hub, e.g. "publisher.ext.wiki". */
   readonly contributionId?: string;
 }
@@ -58,14 +60,14 @@ export function withHashAnchor(pageHash: string, slug: string): string {
 }
 
 /**
- * Absolute dev.azure.com URL for a PowerWiki hub route hash, optionally deep
+ * Absolute Azure DevOps hub URL for a PowerWiki route hash, optionally deep
  * linked to a heading. The route goes in both the query (survives sign-in) and
- * the hash (what the app has always read). Returns undefined for on-prem/unknown contexts, where the
- * host base can't be constructed — callers keep the default in-page anchor then.
+ * the hash (what the app has always read). Azure DevOps Server builds from its
+ * collection URI so virtual-directory paths are preserved.
  */
 export function buildHubPageUrl(context: HubLinkContext, pageHash: string, slug?: string): string | undefined {
-  const { organizationName, projectName, organizationIsHosted, contributionId } = context;
-  if (!organizationName || !projectName || !organizationIsHosted || !contributionId) {
+  const { organizationName, projectName, organizationIsHosted, collectionUri, contributionId } = context;
+  if (!projectName || !contributionId) {
     return undefined;
   }
 
@@ -74,8 +76,14 @@ export function buildHubPageUrl(context: HubLinkContext, pageHash: string, slug?
   // Slashes are left readable; everything else is escaped so the value comes
   // back from the query exactly as the route hash it was built from.
   const query = encodeURIComponent(normalized).replace(/%2F/g, "/");
-  return (
-    `https://dev.azure.com/${encodeURIComponent(organizationName)}/${encodeURIComponent(projectName)}` +
-    `/_apps/hub/${contributionId}?${HUB_ROUTE_PARAM}=${query}#${normalized}`
-  );
+  const project = encodeURIComponent(projectName);
+  const hubPath = `/${project}/_apps/hub/${contributionId}`;
+  const base =
+    organizationIsHosted === true && organizationName
+      ? `https://dev.azure.com/${encodeURIComponent(organizationName)}`
+      : collectionUri?.replace(/\/$/, "");
+  if (!base) {
+    return undefined;
+  }
+  return `${base}${hubPath}?${HUB_ROUTE_PARAM}=${query}#${normalized}`;
 }

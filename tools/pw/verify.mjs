@@ -8,10 +8,12 @@ import path from "node:path";
 import JSZip from "jszip";
 import {
   ARTIFACTS_DIR,
+  browserRequestContext,
+  HUB,
   launch,
   deleteAttachments,
   findWiki,
-  ORG,
+  COLLECTION_URL,
   PROJECT,
   sweepSmokeAttachments,
   openWikiPage,
@@ -84,6 +86,7 @@ fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 // session instead; `npm run pw:auth` is always headed, because signing in needs
 // a real window.
 const { context, page } = await launch({ headless: process.env.PW_HEADED !== "1" });
+const authenticatedRequestContext = browserRequestContext(page);
 // Answer confirms (discard edits, delete) by accepting, and prompts (new page
 // title) with the current promptResponse.
 let promptResponse = "";
@@ -126,7 +129,11 @@ page.on("response", async (r) => {
 
 try {
   // Tidy up after any earlier run that died before its own cleanup could run.
-  await sweepSmokeAttachments(context);
+  // The browser starts on about:blank, where a same-origin request to Azure
+  // DevOps would fail CORS before Windows Integrated Authentication can run.
+  // Establish the hub origin before the browser-backed cleanup request.
+  await page.goto(HUB, { waitUntil: "domcontentloaded" });
+  await sweepSmokeAttachments(authenticatedRequestContext);
 
   // 1. Home: rendering, work-item/query enrichment, byline.
   let frame = await openWikiPage(page, "#/Home", { timeoutMs: 300000 });
@@ -624,7 +631,7 @@ try {
       return a ? a.getAttribute("href") : null;
     });
     check(
-      !!heading && heading.startsWith("https://dev.azure.com/") && heading.includes("&anchor="),
+      !!heading && heading.startsWith(`${COLLECTION_URL}/${PROJECT}/`) && heading.includes("&anchor="),
       `heading permalink is an absolute deep link (${JSON.stringify(heading)})`
     );
 
@@ -655,7 +662,7 @@ try {
       title: (a.textContent || "").trim(),
     }));
     check(
-      pageLink.href.startsWith("https://dev.azure.com/") && pageLink.href.includes("?route="),
+      pageLink.href.startsWith(`${COLLECTION_URL}/${PROJECT}/`) && pageLink.href.includes("?route="),
       `page links are absolute Azure DevOps URLs carrying the route (${JSON.stringify(pageLink.href)})`
     );
 
@@ -1303,7 +1310,7 @@ try {
   // back from Git. Skipped when the project has no code wiki of that name
   // (PW_CODE_WIKI, default "CodeWikiTest", published from a repository folder).
   const codeWikiName = process.env.PW_CODE_WIKI ?? "CodeWikiTest";
-  const codeWiki = await findWiki(context, codeWikiName).catch(() => undefined);
+  const codeWiki = await findWiki(authenticatedRequestContext, codeWikiName).catch(() => undefined);
   if (codeWiki?.type !== "codeWiki") {
     console.log(`code wiki checks skipped (no code wiki named ${codeWikiName})`);
   } else {
@@ -1315,7 +1322,7 @@ try {
     const mapped = (codeWiki.mappedPath ?? "/").replace(/\/+$/, "");
     const readStored = async (name) => {
       const url =
-        `https://dev.azure.com/${ORG}/${PROJECT}/_apis/git/repositories/${codeWiki.repositoryId}/items` +
+        `${COLLECTION_URL}/${PROJECT}/_apis/git/repositories/${codeWiki.repositoryId}/items` +
         `?path=${encodeURIComponent(`${mapped}/${name}.md`)}&versionDescriptor.version=${encodeURIComponent(branch)}` +
         `&versionDescriptor.versionType=branch&api-version=7.1`;
       // A single file comes back raw, not as JSON (and a new page is empty).
@@ -1388,7 +1395,7 @@ try {
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "24-code-wiki-error.png") });
     } finally {
       // The upload went to the code wiki's repository, not the project wiki's.
-      await deleteAttachments(context, uploadedAttachments.splice(codeWikiUploads), codeWikiName);
+      await deleteAttachments(authenticatedRequestContext, uploadedAttachments.splice(codeWikiUploads), codeWikiName);
     }
   }
 } catch (error) {
@@ -1408,7 +1415,7 @@ try {
     path.join(ARTIFACTS_DIR, "summary.json"),
     JSON.stringify({ failures, consoleErrors: errorNoise }, null, 2)
   );
-  await deleteAttachments(context, uploadedAttachments);
+  await deleteAttachments(authenticatedRequestContext, uploadedAttachments);
   console.log(`\n${failures.length === 0 ? "ALL CHECKS PASSED" : `${failures.length} CHECK(S) FAILED`}`);
   await context.close();
   process.exitCode = failures.length === 0 ? 0 : 1;

@@ -61,7 +61,20 @@ describe("buildHubPageUrl", () => {
     );
   });
 
-  it("returns undefined for on-prem or incomplete context", () => {
+  it("builds an absolute Server hub URL from the collection URI", () => {
+    expect(
+      buildHubPageUrl(
+        { ...context, organizationIsHosted: false, collectionUri: "http://server/tfs/DefaultCollection/" },
+        "/Home",
+        "x"
+      )
+    ).toBe(
+      "http://server/tfs/DefaultCollection/dataversepowertools/_apps/hub/" +
+        "dataversepowertools.powerwiki.wiki?route=/Home%26anchor%3Dx#/Home&anchor=x"
+    );
+  });
+
+  it("returns undefined for incomplete context", () => {
     expect(buildHubPageUrl({ ...context, organizationIsHosted: false }, "/Home", "x")).toBeUndefined();
     expect(buildHubPageUrl({ ...context, contributionId: undefined }, "/Home", "x")).toBeUndefined();
     expect(buildHubPageUrl({ ...context, projectName: undefined }, "/Home", "x")).toBeUndefined();
