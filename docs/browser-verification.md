@@ -100,22 +100,18 @@ npm run pw:verify
 ```
 
 Record the installed canary version, organization/project, browser, and result.
-The run must have no failed assertions. For token-safe attachment loading, its
-required checks are:
+The run must have no failed assertions. For attachment loading it covers:
 
-- The crafted `data-powerwiki-image` target is stripped and never requested.
 - A normal wiki attachment renders through the authenticated Git Items path,
   including an attachment thumbnail.
-- A stored draw.io diagram still opens, so the same guard covers its data-URL
-  loading path.
-- An ordinary external image remains a normal unauthenticated browser image.
-- Record whether a successful cloud Git Items attachment request redirects. If
-  it does, do not relax `redirect: "error"` or ship a redirect-following
-  workaround until every redirect destination is independently validated before
-  a bearer token can be sent.
+- A stored draw.io diagram still opens.
 
-These checks validate both halves of the security boundary: author-controlled
-URLs cannot select the token destination, while host-generated attachment URLs
-continue to work. A passing Server canary does not waive this Services gate, and
+Checks for the token boundary itself (a crafted `data-powerwiki-image` target
+is stripped and never requested, an external image stays an ordinary
+unauthenticated image, and how cloud Git Items requests handle redirects) are
+not in `verify.mjs` yet. Add them alongside the attachment-fetch hardening that
+needs them, and list them here then.
+
+A passing Server canary does not waive this Services gate, and
 a passing Services canary does not waive Server coverage for Server-specific
 changes.
