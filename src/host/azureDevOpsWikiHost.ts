@@ -114,6 +114,31 @@ export function collectionUriFromAssetUrl(assetUrl: string, collectionName: stri
   return new URL(collectionPath, url.origin).toString();
 }
 
+/**
+ * Azure DevOps project URL for an in-host work item or query. Services uses
+ * its well-known dev.azure.com base; Server must retain the collection URI,
+ * including an optional virtual directory such as /tfs/.
+ */
+export function buildAzureDevOpsHubUrl(
+  context: Pick<WikiHostContext, "organizationIsHosted" | "organizationName" | "collectionUri" | "projectName">,
+  suffix: string
+): string | undefined {
+  const { organizationIsHosted, organizationName, collectionUri, projectName } = context;
+  if (!projectName) {
+    return undefined;
+  }
+
+  const base =
+    organizationIsHosted === true && organizationName
+      ? `https://dev.azure.com/${encodeURIComponent(organizationName)}`
+      : collectionUri?.replace(/\/$/, "");
+  if (!base) {
+    return undefined;
+  }
+
+  return `${base}/${encodeURIComponent(projectName)}/${suffix}`;
+}
+
 /** Exported for tests; construct through `createAzureDevOpsWikiHost` in real code. */
 export class AzureDevOpsWikiHost implements WikiHost {
   public readonly capabilities: WikiHostCapabilities;
@@ -360,14 +385,6 @@ class AzureDevOpsHostWorkItems implements WorkItemProvider {
   }
 
   private hubUrl(suffix: string): string | undefined {
-    const { organizationName, projectName, organizationIsHosted } = this.context;
-    if (!organizationName || !projectName || !organizationIsHosted) {
-      return undefined;
-    }
-
-    return (
-      `https://dev.azure.com/${encodeURIComponent(organizationName)}` +
-      `/${encodeURIComponent(projectName)}/${suffix}`
-    );
+    return buildAzureDevOpsHubUrl(this.context, suffix);
   }
 }
