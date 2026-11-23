@@ -162,6 +162,16 @@ The current implementation provides a working Power Wiki experience:
 - Renders emoji shortcodes such as `:green_circle:` and `:tada:` — the full GitHub shortcode set, plus the emoji standardised since it was published (Unicode 15.1 and 16.0). ASCII emoticons (`:)`, `:/`) are deliberately not converted, so paths and ranges in technical pages stay as typed, and saving from the rich text editor keeps the shortcode in the file rather than replacing it with the character.
 - Resizable page tree rail (drag its edge, double-click to reset), and an editor that fills the available height.
 
+## Built-in Wiki refresh behavior
+
+PowerWiki and the built-in Wiki store pages in the same backing repository, but
+the built-in Wiki can keep its page tree in its own browser cache. If someone
+already has the built-in Wiki open when a page is added in PowerWiki, they need
+to refresh the built-in Wiki before that cached tree shows the new page.
+PowerWiki cannot trigger this selectively: the native Wiki is a separate Azure
+DevOps hub outside the extension iframe, and Azure DevOps provides no supported
+page-tree cache-invalidation API.
+
 ## Word export templates
 
 Word exports can carry a customer's own styling instead of PowerWiki's. Two
