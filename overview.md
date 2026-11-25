@@ -104,7 +104,7 @@ Wiki pages are linked to work items using Azure DevOps' own **Wiki Page** links 
 
 PowerWiki stores nothing outside your wiki's Git repository. Every page remains plain, portable Markdown that renders in the built-in wiki, in clones, and in any Markdown tool. PowerWiki-specific niceties (badges, query tables, callouts) degrade to readable text everywhere else. The built-in wiki stays available to your whole team — PowerWiki is purely additive.
 
-> **Built-in Wiki refresh:** If the built-in Wiki is already open when someone adds a page in PowerWiki, refresh it to update its cached page tree. Both experiences use the same backing repository, but Azure DevOps does not expose a supported way for PowerWiki to invalidate the native Wiki's browser cache.
+> **Built-in Wiki refresh:** If a page is added elsewhere while the built-in Wiki is open, for example in PowerWiki in another tab or by another person, refresh the built-in Wiki if its page tree does not show the new page. This behavior is not specific to PowerWiki. Both experiences use the same backing repository, but Azure DevOps does not expose a supported way for PowerWiki to refresh the native Wiki's page tree.
 
 ## Requirements & permissions
 

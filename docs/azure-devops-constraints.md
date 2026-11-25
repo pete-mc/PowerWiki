@@ -172,16 +172,20 @@ not offered on the work item form, where the tab sits inside the work item dialo
 
 **PowerWiki cannot selectively invalidate the built-in Wiki's page-tree cache.**
 The native Wiki is a separate Azure DevOps hub, outside PowerWiki's iframe.
-Loading the native Wiki, switching to PowerWiki, creating and saving a page,
-then returning without a browser reload can leave that already-mounted native
-tree without the new page. The extension SDK exposes host navigation and a
+On Services, a native Wiki open in another tab did not show a page added in
+PowerWiki until a browser reload. A page created through the REST API behaved
+the same way, so this is not specific to PowerWiki. In a single-tab Services
+test, navigating through the project menu from Wiki to PowerWiki and back via
+Overview showed the new page without a reload. On Server, switching from the
+native Wiki to PowerWiki, creating a page, and returning without a reload left
+the new page absent until refresh. The extension SDK exposes host navigation and a
 whole-host `reload()`, but no native-Wiki lifecycle, tree-refresh,
 cache-invalidation, or cross-tab broadcast API. A host reload can refresh only
 the creator's current tab; it cannot affect other users or tabs.
 
-When PowerWiki adds a page, people who already have the built-in Wiki open must
-manually refresh it before its cached page tree shows that page. A browser
-reload or a later native-Wiki remount rebuilds the tree from the backing wiki.
+People who have the built-in Wiki open may need to refresh it to see a page
+added elsewhere. In the tests above, a browser reload rebuilt the tree from the
+backing wiki.
 PowerWiki cannot trigger that selective refresh because the native hub's DOM
 and private client cache sit outside its iframe; relying on those internals
 would be unsupported and brittle.

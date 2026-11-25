@@ -165,9 +165,13 @@ The current implementation provides a working Power Wiki experience:
 ## Built-in Wiki refresh behavior
 
 PowerWiki and the built-in Wiki store pages in the same backing repository, but
-the built-in Wiki can keep its page tree in its own browser cache. If someone
-already has the built-in Wiki open when a page is added in PowerWiki, they need
-to refresh the built-in Wiki before that cached tree shows the new page.
+the built-in Wiki can keep its page tree in its own browser cache. If a page is
+added elsewhere, for example in PowerWiki in another tab or by another person,
+someone with the built-in Wiki already open may need to refresh it to see the
+new page. This also happens for pages added through the Azure DevOps REST API.
+On Azure DevOps Server, this was also observed after switching between the two
+Wiki hubs in one tab; on Services, the new page appeared when returning to the
+built-in Wiki through the project menu.
 PowerWiki cannot trigger this selectively: the native Wiki is a separate Azure
 DevOps hub outside the extension iframe, and Azure DevOps provides no supported
 page-tree cache-invalidation API.
