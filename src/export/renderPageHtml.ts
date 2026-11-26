@@ -42,13 +42,15 @@ export interface RenderPageOptions {
 export type PageRenderOptions = Omit<RenderPageOptions, "currentPath">;
 
 const renderer = createMarkdownRenderer();
+let exportDocumentId = 0;
 
 /**
  * Renders Markdown to an enriched DOM element attached offscreen (Mermaid needs
  * layout to measure). The caller must call element.remove() when finished.
  */
 export async function renderPageToElement(markdown: string, options: RenderPageOptions): Promise<HTMLElement> {
-  let html = sanitizeRenderedHtml(renderer.render(markdown));
+  // Multi-page exports combine several rendered pages in one document.
+  let html = sanitizeRenderedHtml(renderer.render(markdown, { docId: `export${++exportDocumentId}` }));
   if (options.resolveImageSrc) {
     html = rewriteImageSources(html, options.currentPath, options.resolveImageSrc);
   }

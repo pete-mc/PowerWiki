@@ -37,6 +37,11 @@ an edit surviving a save and a navigation — so it fails when a user would see
 something wrong rather than when an internal value changes. It runs unattended
 and is part of CI, which is what `tools/pw/` cannot be.
 
+To use an installed Microsoft Edge instead of Playwright's Chromium on Windows,
+set `$env:PW_E2E_CHANNEL = "msedge"` before running the command. The Rich Text
+checks include clipboard paste and a simulated IME composition through the
+Chromium debugging protocol; the latter does not replace testing a real IME.
+
 It cannot see anything *below* the host boundary: REST contracts, permissions,
 the SDK handshake, CDN paths. That is what the canary is for. When you add
 a feature above the boundary, add a case here; when you add one below it, extend

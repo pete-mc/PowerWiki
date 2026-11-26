@@ -44,7 +44,7 @@ async function test(name, body) {
     results.push(`  PASS  ${name}`);
   } catch (error) {
     failures += 1;
-    results.push(`  FAIL  ${name}\n        ${error.message.split("\n")[0]}`);
+    results.push(`  FAIL  ${name}\n        ${error.message.split("\n").slice(0, 4).join(" ")}`);
   }
 }
 
@@ -77,14 +77,17 @@ async function main() {
   const consoleErrors = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
-      consoleErrors.push(message.text());
+      const location = message.location();
+      consoleErrors.push(`${message.text()}${location.url ? ` (${location.url})` : ""}`);
     }
   });
   page.on("pageerror", (error) => consoleErrors.push(String(error)));
 
   try {
     // A deliberate latency so loading states exist to be caught; see the sandbox.
-    await page.goto(`${BASE}/dist/sandbox.html?latency=40`, { waitUntil: "domcontentloaded" });
+    const query = new URLSearchParams({ latency: "40" });
+    if (process.env.PW_E2E_THEME) query.set("theme", process.env.PW_E2E_THEME);
+    await page.goto(`${BASE}/dist/sandbox.html?${query}`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector(".powerwiki-shell", { timeout: 30_000 });
 
     await runSuite(page);
@@ -198,6 +201,215 @@ async function runSuite(page) {
 
     await page.locator(".wiki-editor-toolbar-actions button", { hasText: "Cancel" }).click();
     await page.waitForSelector(".wiki-editor-shell", { state: "detached", timeout: 15_000 });
+  });
+
+  await test("footnotes render, navigate and survive rich text editing", async () => {
+    await openPage(page, "Markdown-reference", "/Guides/Markdown-reference");
+    await clickMenuItem(page, "Edit page");
+    await page.waitForSelector(".wiki-editor-shell", { timeout: 60_000 });
+    try {
+      await page.locator(".wiki-editor-mode-select").selectOption("splitCode");
+      await page.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 60_000 });
+      await page.evaluate(() => {
+        const model = window.monaco.editor.getModels()[0];
+        model.setValue("# Footnotes\n\nA reference");
+        const editor = window.monaco.editor.getEditors()[0];
+        editor.setSelection(new window.monaco.Selection(3, 3, 3, model.getLineMaxColumn(3)));
+      });
+      await page.locator('button[title="Insert a footnote"]').click();
+      await page.getByRole("menuitem", { name: "New footnote" }).click();
+      let source = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+      assert(source.includes("A reference[^1]") && source.includes("[^1]: Footnote text"), `new footnote was not inserted: ${source}`);
+      await page.evaluate(() => {
+        const model = window.monaco.editor.getModels()[0];
+        window.monaco.editor.getEditors()[0].setPosition({ lineNumber: 3, column: model.getLineMaxColumn(3) });
+      });
+      await page.locator('button[title="Insert a footnote"]').click();
+      await page.getByRole("menuitem", { name: "Reference 1" }).click();
+      source = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+      assert(source.includes("A reference[^1][^1]") && (source.match(/\[\^1\]:/g) ?? []).length === 1, `reused reference was not inserted: ${source}`);
+      const preview = page.locator(".wiki-editor-split-pane-preview .markdown-preview");
+      await preview.locator(".footnote-item").waitFor();
+      assert((await preview.locator(".footnote-item").innerText()).includes("Footnote text"), "footnote text missing");
+      await page.evaluate(() => {
+        window.__footnoteTargets = [];
+        const original = Element.prototype.scrollIntoView;
+        window.__originalScrollIntoView = original;
+        Element.prototype.scrollIntoView = function (...args) {
+          window.__footnoteTargets.push(this.id);
+          return original.apply(this, args);
+        };
+      });
+      await preview.locator(".footnote-ref a[href]").first().click();
+      await preview.locator(".footnote-backref").first().click();
+      const targets = await page.evaluate(() => window.__footnoteTargets);
+      assert(targets.includes("footnote1") && targets.includes("footnote-ref1"), `incorrect navigation targets: ${targets}`);
+      await page.locator(".wiki-editor-mode-select").selectOption("richText");
+      const richEditor = page.locator(".wiki-richtext-editor");
+      await richEditor.waitFor();
+      assert((await richEditor.locator(".wiki-richtext-footnote-ref").first().innerText()) === "[1]", "footnote reference was not rendered in Rich Text");
+      assert((await richEditor.locator(".wiki-richtext-footnote").innerText()).includes("Footnote text"), "footnote content was not rendered in Rich Text");
+      await richEditor.locator("h1").click();
+      await page.keyboard.press("Control+Home");
+      await page.keyboard.type("Updated ");
+      await page.evaluate(() => {
+        const paragraph = document.querySelector(".wiki-richtext-editor p");
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        range.collapse(false);
+        const selection = document.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      await page.locator('.wiki-richtext-toolbar button[title="Insert a footnote"]').click();
+      page.once("dialog", (dialog) => dialog.accept("Rich <note> & text"));
+      await page.getByRole("menuitem", { name: "New footnote" }).click();
+      await page.waitForSelector(".wiki-richtext-editor [data-powerwiki-footnote-definition]", { timeout: 5000 });
+      assert((await page.locator(".wiki-richtext-pending-footnotes").innerText()).includes("[2] Rich <note> & text"), "new footnote text is not visible");
+      const borders = await page.evaluate(() => ({
+        first: getComputedStyle(document.querySelector(".wiki-richtext-footnote")).borderTopWidth,
+        pending: getComputedStyle(document.querySelector(".wiki-richtext-pending-footnotes")).borderTopWidth,
+      }));
+      assert(parseFloat(borders.first) > 0 && parseFloat(borders.pending) === 0, `incorrect footnote separators: ${JSON.stringify(borders)}`);
+      await page.keyboard.press("Control+z");
+      assert(await page.locator(".wiki-richtext-editor [data-powerwiki-footnote-definition]").count() === 0, "undo did not remove the new footnote");
+      await page.keyboard.press("Control+y");
+      await page.waitForSelector(".wiki-richtext-editor [data-powerwiki-footnote-definition]", { timeout: 5000 });
+      await page.evaluate(() => {
+        const paragraph = document.querySelector(".wiki-richtext-editor p");
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        range.collapse(false);
+        const selection = document.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      await page.locator('.wiki-richtext-toolbar button[title="Insert a footnote"]').click();
+      await page.getByRole("menuitem", { name: "Reference 2" }).click();
+      assert(await page.locator(".wiki-richtext-editor [data-powerwiki-footnote-definition]").count() === 2, "the repeated reference cannot preserve its new definition");
+      await page.evaluate(() => {
+        const paragraph = document.querySelector(".wiki-richtext-editor p");
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        range.collapse(true);
+        const selection = document.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      await page.locator('.wiki-richtext-toolbar button[title="Insert a footnote"]').click();
+      page.once("dialog", (dialog) => dialog.accept("Earlier note"));
+      await page.getByRole("menuitem", { name: "New footnote" }).click();
+      await page.waitForFunction(() => document.querySelectorAll(".wiki-richtext-editor [data-powerwiki-footnote-definition]").length === 3);
+      const renumbered = await richEditor.locator(".wiki-richtext-footnote-ref").allInnerTexts();
+      assert(JSON.stringify(renumbered) === JSON.stringify(["[1]", "[2]", "[2:1]", "[3]", "[3:1]"]), `incorrect renumbering: ${renumbered}`);
+      await page.keyboard.press("Control+z");
+      await page.waitForFunction(() => document.querySelectorAll(".wiki-richtext-editor [data-powerwiki-footnote-definition]").length === 2);
+      const afterUndo = await richEditor.locator(".wiki-richtext-footnote-ref").allInnerTexts();
+      assert(JSON.stringify(afterUndo) === JSON.stringify(["[1]", "[1:1]", "[2]", "[2:1]"]), `undo did not restore numbering: ${afterUndo}`);
+      await page.locator(".wiki-editor-mode-select").selectOption("splitCode");
+      await page.waitForSelector(".wiki-editor-split-pane-code .monaco-editor");
+      const restored = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+      assert(restored.includes("[^1][^1][^2][^2]") && restored.includes("[^1]: Footnote text") && restored.includes("[^2]: Rich <note> & text") && restored.includes("Updated"), `rich-text editing changed the footnotes: ${JSON.stringify(restored)}`);
+
+      await page.evaluate(() => window.monaco.editor.getModels()[0].setValue("# Notes\n\nNamed[^n] inline^[**Inline note**] repeated[^n].\n\n[^n]: Original note"));
+      await page.locator(".wiki-editor-mode-select").selectOption("richText");
+      await page.locator('.wiki-richtext-pending-footnotes[aria-label="Inline footnotes"]').waitFor();
+      const mixedNumbers = await richEditor.locator(".wiki-richtext-footnote-ref").allInnerTexts();
+      assert(JSON.stringify(mixedNumbers) === JSON.stringify(["[1]", "[2]", "[1:1]"]), `inline numbering incorrect: ${mixedNumbers}`);
+      assert(await page.locator('[aria-label="Inline footnotes"] strong').innerText() === "Inline note", "inline note formatting missing");
+      await richEditor.locator("p").first().click();
+      await page.keyboard.press("End");
+      await page.keyboard.type(" temporary");
+      await page.keyboard.press("Control+z");
+      await page.keyboard.type(" continuation");
+      assert((await richEditor.locator("p").first().innerText()).includes("continuation"), "typing after undo moved away from the original paragraph");
+      await page.keyboard.press("Control+z");
+      await richEditor.locator("h1").click();
+      await page.keyboard.press("End");
+      await page.keyboard.type(" before");
+      await richEditor.getByRole("button", { name: "Edit footnote n" }).click();
+      await page.getByLabel("Footnote text (Markdown)").fill("Changed **note**\n\nSecond paragraph");
+      await page.getByRole("button", { name: "Apply" }).click();
+      assert((await richEditor.locator(".wiki-richtext-footnote").innerText()).includes("Second paragraph"), "edited footnote missing");
+      await richEditor.locator("h1").click();
+      await page.keyboard.press("End");
+      await page.keyboard.type(" later");
+      await page.keyboard.press("Control+z");
+      assert(!(await richEditor.locator("h1").innerText()).includes("later"), "typing after footnote edit was not undone");
+      await page.keyboard.press("Control+z");
+      assert((await richEditor.locator(".wiki-richtext-footnote").innerText()).includes("Original note"), "footnote edit was not undoable");
+      await page.keyboard.press("Control+z");
+      assert(!(await richEditor.locator("h1").innerText()).includes("before"), "typing before footnote edit was not undone");
+      await page.keyboard.press("Control+y");
+      assert((await richEditor.locator("h1").innerText()).includes("before"), "typing before footnote edit was not redoable");
+      await page.keyboard.press("Control+y");
+      assert((await richEditor.locator(".wiki-richtext-footnote").innerText()).includes("Second paragraph"), "footnote edit was not redoable");
+      await page.keyboard.press("Control+y");
+      assert((await richEditor.locator("h1").innerText()).includes("later"), "typing after footnote edit was not redoable");
+      await richEditor.evaluate((editor) => editor.dispatchEvent(new InputEvent("beforeinput", { inputType: "historyUndo", bubbles: true, cancelable: true })));
+      assert(!(await richEditor.locator("h1").innerText()).includes("later"), "browser undo action was not handled");
+      await richEditor.evaluate((editor) => editor.dispatchEvent(new InputEvent("beforeinput", { inputType: "historyRedo", bubbles: true, cancelable: true })));
+      assert((await richEditor.locator("h1").innerText()).includes("later"), "browser redo action was not handled");
+      await richEditor.locator("h1").click();
+      await page.keyboard.press("End");
+      await page.keyboard.type(" extra");
+      await page.keyboard.press("Control+z");
+      await page.keyboard.type(" changed");
+      await page.keyboard.press("Control+y");
+      assert((await richEditor.locator("h1").innerText()).includes("changed") && !(await richEditor.locator("h1").innerText()).includes("extra"), "new typing after undo did not clear redo");
+      await page.locator('[aria-label="Inline footnotes"]').getByRole("button", { name: "Edit" }).click();
+      await page.getByLabel("Footnote text (Markdown)").fill("Updated inline");
+      await page.getByRole("button", { name: "Apply" }).click();
+      await page.locator(".wiki-editor-mode-select").selectOption("splitCode");
+      const editedNotes = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+      assert(editedNotes.includes("[^n]: Changed **note**") && editedNotes.includes("    Second paragraph") && editedNotes.includes("^[Updated inline]") && editedNotes.includes("repeated[^n]"), `footnote edit lost Markdown: ${editedNotes}`);
+
+      const fixture = "# Test\n\nMiddle text\n\n[^1]: Existing\n\n```md\n[^fake]: example\n```\n\nUnfinished[^2]";
+      await page.evaluate((value) => {
+        const model = window.monaco.editor.getModels()[0];
+        model.setValue(value);
+        window.monaco.editor.getEditors()[0].setPosition({ lineNumber: 3, column: 7 });
+      }, fixture);
+      const footnoteButton = page.locator('button[title="Insert a footnote"]');
+      await footnoteButton.focus();
+      await page.keyboard.press("Enter");
+      await page.getByRole("menuitem", { name: "Reference 1" }).waitFor();
+      assert(await page.getByRole("menuitem", { name: "Reference fake" }).count() === 0, "code example offered as a footnote");
+      await page.keyboard.press("Escape");
+      assert(await page.getByRole("menu", { name: "Footnotes" }).count() === 0, "Escape did not close the footnote menu");
+      await page.waitForFunction(() => document.querySelector(".monaco-editor")?.contains(document.activeElement), undefined, { timeout: 5000 });
+      await footnoteButton.focus();
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Enter");
+      const middle = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+      assert(middle.includes("Middle[^3] text") && middle.includes("[^3]: Footnote text"), `middle insertion or label collision failed: ${middle}`);
+      await page.keyboard.press("Control+z");
+      assert(await page.evaluate(() => window.monaco.editor.getModels()[0].getValue()) === fixture, "undo did not remove the marker and definition together");
+      await page.evaluate(() => {
+        const model = window.monaco.editor.getModels()[0];
+        window.monaco.editor.getEditors()[0].setPosition(model.getPositionAt(model.getValueLength()));
+      });
+      await footnoteButton.click();
+      await page.getByRole("menuitem", { name: "New footnote" }).click();
+      assert((await page.evaluate(() => window.monaco.editor.getModels()[0].getValue())).endsWith("[^3]\n\n[^3]: Footnote text\n"), "end-of-page insertion failed");
+      await page.keyboard.press("Control+z");
+      assert(await page.evaluate(() => window.monaco.editor.getModels()[0].getValue()) === fixture, "end-of-page undo failed");
+      await page.evaluate(() => window.monaco.editor.getModels()[0].setValue("A code example: `[^note]`"));
+      await page.locator(".wiki-editor-mode-select").selectOption("richText");
+      await page.locator(".wiki-richtext-editor").waitFor({ timeout: 10000 });
+    } finally {
+      if (await page.getByRole("dialog").count()) await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+      await page.evaluate(() => {
+        if (window.__originalScrollIntoView) Element.prototype.scrollIntoView = window.__originalScrollIntoView;
+      });
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.locator(".wiki-editor-toolbar-actions button", { hasText: "Cancel" }).click();
+      await page.waitForSelector(".wiki-editor-shell", { state: "detached", timeout: 15_000 });
+    }
   });
 
   await test("the tree filter narrows the page list", async () => {
@@ -332,7 +544,73 @@ async function runSuite(page) {
     // A new page is empty, so it opens in the editor rather than showing a blank
     // preview and making the user find "Edit".
     await page.waitForSelector(".wiki-editor-shell", { timeout: 30_000 });
-
+    await page.locator(".wiki-editor-mode-select").selectOption("richText");
+    const editor = page.locator(".wiki-richtext-editor");
+    await editor.click();
+    await page.keyboard.type("First text");
+    await page.keyboard.press("Control+z");
+    assert(!(await editor.innerText()).includes("First text"), "undo failed on an empty page");
+    await page.keyboard.press("Control+y");
+    assert((await editor.innerText()).includes("First text"), "redo failed on an empty page");
+    await editor.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.keyboard.press("Control+b");
+    assert(await editor.locator("b, strong").count() > 0, "bold formatting was not applied");
+    await page.keyboard.press("Control+z");
+    assert(await editor.locator("b, strong").count() === 0 && (await editor.innerText()).includes("First text"), "undo lost text or failed to remove formatting");
+    await page.keyboard.press("Control+y");
+    assert(await editor.locator("b, strong").count() > 0, "redo did not restore formatting");
+    await editor.click();
+    await page.keyboard.press("Control+End");
+    await page.locator('.wiki-richtext-toolbar button', { hasText: "Table" }).click();
+    assert(await editor.locator("table").count() === 1, "table was not inserted");
+    await page.keyboard.press("Control+z");
+    assert(await editor.locator("table").count() === 0, "undo did not remove the table");
+    await page.keyboard.press("Control+y");
+    assert(await editor.locator("table").count() === 1, "redo did not restore the table");
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.evaluate(() => navigator.clipboard.writeText("Pasted text åäö"));
+    await editor.locator("td").first().click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Control+v");
+    assert((await editor.innerText()).includes("Pasted text åäö"), "clipboard paste failed");
+    await page.keyboard.press("Control+z");
+    assert(!(await editor.innerText()).includes("Pasted text åäö"), "undo did not remove pasted text");
+    await page.keyboard.press("Control+y");
+    assert((await editor.innerText()).includes("Pasted text åäö"), "redo did not restore pasted text");
+    await editor.locator("td").first().click();
+    await page.keyboard.press("End");
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.imeSetComposition", { text: "に", selectionStart: 1, selectionEnd: 1 });
+    await cdp.send("Input.imeSetComposition", { text: "日本", selectionStart: 2, selectionEnd: 2 });
+    await cdp.send("Input.insertText", { text: "日本" });
+    await cdp.detach();
+    assert((await editor.innerText()).includes("日本"), "IME composition was not committed");
+    await page.keyboard.press("Control+z");
+    assert(!(await editor.innerText()).includes("日本") && !(await editor.innerText()).includes("に"), "undo did not remove the whole IME composition");
+    await page.keyboard.press("Control+y");
+    assert((await editor.innerText()).includes("日本"), "redo did not restore the IME composition");
+    await page.locator(".wiki-editor-mode-select").selectOption("splitCode");
+    await page.waitForSelector(".wiki-editor-split-pane-code .monaco-editor");
+    const largeMarkdown = `# Large page\n\n${"A representative wiki paragraph with ordinary text and links.\n\n".repeat(2500)}Reference[^n].\n\n[^n]: A note.`;
+    await page.evaluate((value) => window.monaco.editor.getModels()[0].setValue(value), largeMarkdown);
+    await page.locator(".wiki-editor-mode-select").selectOption("richText");
+    await editor.locator("h1").click();
+    await page.keyboard.press("End");
+    const largeStart = performance.now();
+    await page.keyboard.type("1234567890");
+    const largeElapsed = performance.now() - largeStart;
+    await page.keyboard.press("Control+z");
+    assert(!(await editor.locator("h1").innerText()).includes("1234567890"), "large-page typing was not undoable");
+    await page.keyboard.press("Control+y");
+    assert((await editor.locator("h1").innerText()).includes("1234567890"), "large-page typing was not redoable");
+    console.log(`Large page: ${largeMarkdown.length} Markdown characters, 10 typed characters in ${Math.round(largeElapsed)} ms`);
+    page.once("dialog", (dialog) => void dialog.accept());
     await page.locator(".wiki-editor-toolbar-actions button", { hasText: "Cancel" }).click();
     await page.waitForSelector(".wiki-editor-shell", { state: "detached", timeout: 15_000 });
   });
@@ -530,13 +808,13 @@ function startServer() {
  * without fighting over one apt-managed browser.
  */
 async function launchBrowser() {
-  const options = { headless: HEADLESS, args: ["--no-sandbox", "--disable-gpu"] };
+  const options = { headless: HEADLESS, args: ["--no-sandbox", "--disable-gpu"], ...(process.env.PW_E2E_CHANNEL ? { channel: process.env.PW_E2E_CHANNEL } : {}) };
   try {
     return await chromium.launch(options);
   } catch (error) {
     throw new Error(
       `Could not launch Chromium: ${error.message}\n` +
-        "Run `npx playwright install chromium` (not `install chrome`, which is a global apt install)."
+      "Install Playwright Chromium, or set PW_E2E_CHANNEL=msedge to use Microsoft Edge."
     );
   }
 }

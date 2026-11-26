@@ -97,6 +97,44 @@ describe("an in-wiki link", () => {
 });
 
 describe("links that are not to wiki pages", () => {
+  it("navigates footnotes and return links within the preview", () => {
+    const scroll = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      render("Text[^n].\n\n[^n]: Note.");
+      const reference = container!.querySelector<HTMLAnchorElement>(".footnote-ref a[href]")!;
+      const back = container!.querySelector<HTMLAnchorElement>(".footnote-backref")!;
+      expect(click(reference).defaultPrevented).toBe(true);
+      expect(click(back).defaultPrevented).toBe(true);
+      expect(scroll).toHaveBeenCalledTimes(2);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("does not navigate the iframe if a footnote target is missing", () => {
+    render("Text[^n].\n\n[^n]: Note.");
+    const reference = container!.querySelector<HTMLAnchorElement>(".footnote-ref a[href]")!;
+    container!.querySelector(".footnote-item")!.remove();
+    expect(click(reference).defaultPrevented).toBe(true);
+  });
+
+  it("targets the note even when a heading has the same id", () => {
+    const scroll = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      render("# footnote1\n\nText[^n].\n\n[^n]: Note.");
+      const note = container!.querySelector<HTMLElement>(".footnote-item")!;
+      note.scrollIntoView = scroll;
+      click(container!.querySelector<HTMLAnchorElement>(".footnote-ref a[href]")!);
+      expect(scroll).toHaveBeenCalledOnce();
+      expect(scroll.mock.instances[0]).toBe(note);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
   it("leaves external links alone", () => {
     const { link } = render("[Docs](https://learn.microsoft.com/)");
 

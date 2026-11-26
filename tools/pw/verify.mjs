@@ -356,6 +356,15 @@ try {
     await frame.waitForSelector(`[aria-label="Actions for ${pageName}"]`, { timeout: 60000 });
     check(true, "created a new page (tree shows it)");
 
+    await frame.locator(".wiki-editor-mode-select").selectOption("richText");
+    const blankEditor = frame.locator(".wiki-richtext-editor");
+    await blankEditor.click();
+    await page.keyboard.type("First text");
+    await page.keyboard.press("Control+z");
+    const blankUndo = !(await blankEditor.innerText()).includes("First text");
+    await page.keyboard.press("Control+y");
+    check(blankUndo && (await blankEditor.innerText()).includes("First text"), "undo and redo work on a new empty page");
+
     await frame.click(`[aria-label="Actions for ${pageName}"]`);
     await frame.getByRole("menuitem", { name: "Delete" }).click();
     await frame.waitForSelector(`[aria-label="Actions for ${pageName}"]`, {
@@ -427,6 +436,132 @@ try {
   } catch (error) {
     check(false, `rendering features failed: ${error.message}`);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-rendering-error.png") });
+  }
+
+  // Footnotes stay within the extension iframe and preserve their source when
+  // switching edit modes. The draft is not saved to the wiki.
+  try {
+    const footnoteMd = "# Footnotes\n\nReference[^note].\n\n[^note]: A canary footnote.\n";
+    await frame.evaluate((value) => window.monaco.editor.getModels()[0].setValue(value), footnoteMd);
+    const preview = ".wiki-editor-split-pane-preview .markdown-preview";
+    await frame.waitForSelector(`${preview} .footnote-item`, { timeout: 30000 });
+    const noteText = await frame.$eval(`${preview} .footnote-item`, (item) => item.textContent);
+    check(noteText.includes("A canary footnote."), "footnote renders in the packaged extension");
+    await frame.evaluate(() => {
+      window.__footnoteTargets = [];
+      window.__footnoteScroll = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (...args) {
+        window.__footnoteTargets.push(this.id);
+        return window.__footnoteScroll.apply(this, args);
+      };
+    });
+    try {
+      await frame.click(`${preview} .footnote-ref a[href]`);
+      await frame.click(`${preview} .footnote-backref`);
+      const targets = await frame.evaluate(() => window.__footnoteTargets);
+      check(targets.includes("footnote1") && targets.includes("footnote-ref1"), "footnote links navigate within the preview");
+    } finally {
+      await frame.evaluate(() => { Element.prototype.scrollIntoView = window.__footnoteScroll; });
+    }
+    await frame.selectOption(".wiki-editor-mode-select", "richText");
+    await frame.waitForSelector(".wiki-richtext-editor");
+    const richFootnote = await frame.locator(".wiki-richtext-footnote").innerText();
+    const richReference = await frame.locator(".wiki-richtext-footnote-ref").first().innerText();
+    check(richReference === "[1]" && richFootnote.includes("A canary footnote."), "rich text renders the footnote reference and content");
+    await frame.click(".wiki-richtext-editor h1");
+    await page.keyboard.press("Control+Home");
+    await page.keyboard.type("Updated ");
+    await frame.evaluate(() => {
+      const paragraph = document.querySelector(".wiki-richtext-editor p");
+      const range = document.createRange();
+      range.selectNodeContents(paragraph);
+      range.collapse(false);
+      const selection = document.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    promptResponse = "Rich text note";
+    await frame.click('.wiki-richtext-toolbar button[title="Insert a footnote"]');
+    await frame.getByRole("menuitem", { name: "New footnote" }).click();
+    await frame.waitForSelector(".wiki-richtext-editor [data-powerwiki-footnote-definition]", { timeout: 10000 });
+    await frame.evaluate(() => {
+      const paragraph = document.querySelector(".wiki-richtext-editor p");
+      const range = document.createRange();
+      range.selectNodeContents(paragraph);
+      range.collapse(false);
+      const selection = document.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await frame.click('.wiki-richtext-toolbar button[title="Insert a footnote"]');
+    await frame.getByRole("menuitem", { name: "Reference 1" }).click();
+    await frame.selectOption(".wiki-editor-mode-select", "splitCode");
+    await frame.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 30000 });
+    const restored = await frame.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+    check(restored.includes("Reference[^note]") && restored.includes("[^note]: A canary footnote.") && restored.includes("Updated"), "footnote Markdown survives rich-text editing");
+    check(restored.includes("[^1][^1]") && restored.includes("[^1]: Rich text note"), "rich-text toolbar creates and reuses footnotes");
+    await frame.evaluate(() => window.monaco.editor.getModels()[0].setValue("# Notes\n\nNamed[^n] inline^[Inline note] repeated[^n].\n\n[^n]: Original note"));
+    await frame.selectOption(".wiki-editor-mode-select", "richText");
+    await frame.waitForSelector('[aria-label="Inline footnotes"]');
+    const numbers = await frame.locator(".wiki-richtext-editor .wiki-richtext-footnote-ref").allInnerTexts();
+    check(JSON.stringify(numbers) === JSON.stringify(["[1]", "[2]", "[1:1]"]) && (await frame.locator('[aria-label="Inline footnotes"]').innerText()).includes("Inline note"), "rich text displays inline and repeated footnotes with preview numbers");
+    await frame.locator(".wiki-richtext-editor h1").click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" before");
+    await frame.getByRole("button", { name: "Edit footnote n" }).click();
+    await frame.getByLabel("Footnote text (Markdown)").fill("Updated note");
+    await frame.getByRole("button", { name: "Apply" }).click();
+    await frame.locator(".wiki-richtext-editor h1").click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" after");
+    await page.keyboard.press("Control+z");
+    const afterTypingUndo = !(await frame.locator(".wiki-richtext-editor h1").innerText()).includes("after");
+    await page.keyboard.press("Control+z");
+    const afterNoteUndo = (await frame.locator(".wiki-richtext-footnote").innerText()).includes("Original note");
+    await page.keyboard.press("Control+z");
+    const afterEarlierUndo = !(await frame.locator(".wiki-richtext-editor h1").innerText()).includes("before");
+    await page.keyboard.press("Control+y");
+    await page.keyboard.press("Control+y");
+    await page.keyboard.press("Control+y");
+    const redoComplete = (await frame.locator(".wiki-richtext-editor h1").innerText()).includes("before after") && (await frame.locator(".wiki-richtext-footnote").innerText()).includes("Updated note");
+    check(afterTypingUndo && afterNoteUndo && afterEarlierUndo && redoComplete, "undo and redo span edits before and after a footnote change");
+    const paragraph = frame.locator(".wiki-richtext-editor p").first();
+    await paragraph.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" temporary");
+    await page.keyboard.press("Control+z");
+    await page.keyboard.type(" continuation");
+    check((await paragraph.innerText()).includes("continuation"), "undo restores the caret in the original paragraph");
+    await page.keyboard.press("Control+z");
+    await frame.locator('[aria-label="Inline footnotes"]').getByRole("button", { name: "Edit" }).click();
+    await frame.getByLabel("Footnote text (Markdown)").fill("Updated inline");
+    await frame.getByRole("button", { name: "Apply" }).click();
+    await frame.selectOption(".wiki-editor-mode-select", "splitCode");
+    await frame.waitForSelector(".wiki-editor-split-pane-code .monaco-editor", { timeout: 30000 });
+    const edited = await frame.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+    check(edited.includes("[^n]: Updated note") && edited.includes("^[Updated inline]") && edited.includes("repeated[^n]"), "rich text edits named and inline footnotes without losing repeated references");
+    await frame.evaluate(() => {
+      const model = window.monaco.editor.getModels()[0];
+      model.setValue("Canary text");
+      window.monaco.editor.getEditors()[0].setPosition(model.getPositionAt(model.getValueLength()));
+    });
+    await frame.click('button[title="Insert a footnote"]');
+    await frame.getByRole("menuitem", { name: "New footnote" }).click();
+    const inserted = await frame.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+    check(inserted.includes("Canary text[^1]") && inserted.includes("[^1]: Footnote text"), "footnote toolbar inserts a reference and definition");
+    await frame.evaluate(() => {
+      const model = window.monaco.editor.getModels()[0];
+      window.monaco.editor.getEditors()[0].setPosition({ lineNumber: 1, column: model.getLineMaxColumn(1) });
+    });
+    await frame.click('button[title="Insert a footnote"]');
+    await frame.getByRole("menuitem", { name: "Reference 1" }).click();
+    const reused = await frame.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+    check(reused.includes("Canary text[^1][^1]") && (reused.match(/\[\^1\]:/g) ?? []).length === 1, "footnote toolbar reuses the existing definition");
+  } catch (error) {
+    check(false, `footnote verification failed: ${error.message}`);
+    await frame.selectOption(".wiki-editor-mode-select", "splitCode").catch(() => {});
   }
 
   // Headings written without a space after the hashes render as headings, with
@@ -761,7 +896,7 @@ try {
     });
     check(boldValue === "**word**", `Ctrl+B wraps the selection in bold (got ${JSON.stringify(boldValue)})`);
 
-    await frame.click(".wiki-format-linkpicker > button");
+    await frame.click('button[title="Insert a link to another wiki page"]');
     await frame.waitForSelector(".wiki-format-linkpicker-popover", { timeout: 10000 });
     const pickerCount = await frame.$$eval(".wiki-format-linkpicker-item", (els) => els.length);
     check(pickerCount > 0, `page-link picker lists pages (${pickerCount})`);

@@ -523,6 +523,19 @@ export function MarkdownPreview({
       return;
     }
 
+    // Keep footnote navigation inside this preview, including the return link.
+    if (href.startsWith("#") && (anchor.closest(".footnote-ref") || anchor.classList.contains("footnote-backref"))) {
+      event.preventDefault();
+      const id = href.slice(1);
+      const selector = anchor.classList.contains("footnote-backref") ? ".footnote-anchor[id]" : ".footnote-item[id]";
+      const target = Array.from(previewRef.current?.querySelectorAll<HTMLElement>(selector) ?? [])
+        .find((element) => element.id === id);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+
     // External links: open in a new tab (the extension runs inside an iframe).
     if (HAS_SCHEME.test(href) || href.startsWith("//")) {
       anchor.setAttribute("target", "_blank");

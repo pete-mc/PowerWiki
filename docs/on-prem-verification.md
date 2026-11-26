@@ -57,6 +57,9 @@ npm run pw:auth
 npm run pw:verify
 ```
 
+Confirm the installed four-part version in the Server extension-management UI;
+the version reported by the app's `pw:verify` output is the three-part package
+version and does not establish which fourth-component build is installed.
 Record the canary's four-part version and the `pw:verify` outcome. The generated
 `vss-extension.canary.json` and VSIX are build outputs: do not commit them.
 

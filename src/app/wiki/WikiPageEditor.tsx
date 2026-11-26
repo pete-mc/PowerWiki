@@ -15,6 +15,7 @@ import {
 import { diagramMarkdown } from "../../drawio/drawioDiagram";
 import type { WikiAttachment } from "../../wiki/WikiPage";
 import { MERMAID_SNIPPETS } from "./mermaidSnippets";
+import { footnoteLabels, nextFootnoteLabel } from "./footnoteAuthoring";
 import { formatEditorLoadError, loadMonaco, type MonacoApi } from "./monacoLoader";
 import { registerMentionCompletions, setMentionSearchHandler, type MentionSearch } from "./mentionCompletions";
 import { registerSlashCommands, setDiagramCommandHandler } from "./slashCommands";
@@ -79,6 +80,7 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
   // external change from such a stale echo, which it must not re-apply.
   const emittedValuesRef = useRef<string[]>([]);
   const mermaidRef = useRef<HTMLDivElement>(null);
+  const footnoteRef = useRef<HTMLDivElement>(null);
   const linkPickerRef = useRef<HTMLDivElement>(null);
   const linkSearchRef = useRef<HTMLInputElement>(null);
   const attachPickerRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,7 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [mermaidOpen, setMermaidOpen] = useState(false);
+  const [footnoteOpen, setFootnoteOpen] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
   const [attachPickerOpen, setAttachPickerOpen] = useState(false);
@@ -99,6 +102,51 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
 
   const formattingDisabled = Boolean(disabled) || isLoading || Boolean(loadError);
   const uploadDisabled = formattingDisabled || !onUploadAttachment;
+
+  useEffect(() => {
+    if (!footnoteOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!footnoteRef.current?.contains(event.target as Node)) setFootnoteOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setFootnoteOpen(false); editorRef.current?.focus(); }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
+  }, [footnoteOpen]);
+
+  const insertFootnote = useCallback((existingLabel?: string) => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const model = editor?.getModel();
+    const selection = editor?.getSelection();
+    if (!editor || !monaco || !model || !selection) return;
+    const source = model.getValue();
+    const label = existingLabel ?? nextFootnoteLabel(source);
+    const marker = `[^${label}]`;
+    const end = selection.getEndPosition();
+    const offset = model.getOffsetAt(end);
+    const endOfDocument = model.getPositionAt(source.length);
+    const separator = source.endsWith("\n\n") ? "" : source.endsWith("\n") ? "\n" : "\n\n";
+    const definition = existingLabel ? "" : `${separator}[^${label}]: Footnote text\n`;
+    const insertRange = new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column);
+    const endRange = new monaco.Range(endOfDocument.lineNumber, endOfDocument.column, endOfDocument.lineNumber, endOfDocument.column);
+    editor.pushUndoStop();
+    editor.executeEdits("wiki-footnote", offset === source.length
+      ? [{ range: insertRange, text: marker + definition }]
+      : [{ range: insertRange, text: marker }, ...(definition ? [{ range: endRange, text: definition }] : [])]);
+    editor.pushUndoStop();
+    if (existingLabel) {
+      editor.setPosition(model.getPositionAt(offset + marker.length));
+    } else {
+      const start = model.getPositionAt(source.length + marker.length + separator.length + label.length + 5);
+      const finish = model.getPositionAt(source.length + marker.length + separator.length + label.length + 5 + "Footnote text".length);
+      editor.setSelection(new monaco.Selection(start.lineNumber, start.column, finish.lineNumber, finish.column));
+    }
+    setFootnoteOpen(false);
+    editor.focus();
+  }, []);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -746,6 +794,17 @@ export function WikiPageEditor({ disabled, onChange, onCreateDiagram, onListAtta
         <span className="wiki-format-sep" aria-hidden="true" />
         <div className="wiki-format-group">
           <button className="wiki-format-button" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={applyLink} title="Link (Ctrl+K)" type="button">Link</button>
+          <div className="wiki-format-linkpicker" ref={footnoteRef}>
+            <button aria-expanded={footnoteOpen} aria-haspopup="menu" className="wiki-format-button" disabled={formattingDisabled} onMouseDown={keepEditorFocus} onClick={() => setFootnoteOpen((open) => !open)} title="Insert a footnote" type="button">Footnote ▾</button>
+            {footnoteOpen ? (
+              <div className="wiki-format-linkpicker-popover" role="menu" aria-label="Footnotes">
+                <button className="wiki-format-button" role="menuitem" onMouseDown={keepEditorFocus} onClick={() => insertFootnote()} type="button">New footnote</button>
+                {footnoteLabels(value).map((label) => (
+                  <button className="wiki-format-button" key={label} role="menuitem" onMouseDown={keepEditorFocus} onClick={() => insertFootnote(label)} type="button">Reference {label}</button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <div className="wiki-format-linkpicker" ref={linkPickerRef}>
             <button
               aria-expanded={linkPickerOpen}

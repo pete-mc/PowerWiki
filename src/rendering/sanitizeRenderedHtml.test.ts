@@ -6,6 +6,16 @@ import { sanitizeRenderedHtml } from "./sanitizeRenderedHtml";
 const md = createMarkdownRenderer();
 
 describe("sanitizeRenderedHtml", () => {
+  it("sanitizes hostile HTML and URLs inside footnote content", () => {
+    const markdown = 'Text[^n].\n\n[^n]: <img src=x onerror="alert(1)"> <script>alert(2)</script> <a href="javascript:alert(3)">bad</a>';
+    const out = sanitizeRenderedHtml(md.render(markdown));
+    const container = document.createElement("div");
+    container.innerHTML = out;
+    expect(container.querySelector(".footnote-item")).not.toBeNull();
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector("img")?.hasAttribute("onerror")).toBe(false);
+    expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
   it("strips script tags", () => {
     const out = sanitizeRenderedHtml("<p>hi</p><script>alert(1)</script>");
     expect(out).toContain("<p>hi</p>");

@@ -7,7 +7,9 @@
 import {
   AlignmentType,
   BorderStyle,
+  Bookmark,
   ExternalHyperlink,
+  InternalHyperlink,
   HeadingLevel,
   ImageRun,
   ImportedXmlComponent,
@@ -19,6 +21,7 @@ import {
   TextRun,
   WidthType,
   type IParagraphOptions,
+  type ParagraphChild,
 } from "docx";
 import { mml2omml } from "mathml2omml";
 
@@ -147,6 +150,7 @@ async function preBlocks(pre: HTMLElement): Promise<DocxBlock[]> {
 
 async function listBlocks(list: HTMLElement, ctx: HtmlToDocxContext, ordered: boolean, level: number): Promise<DocxBlock[]> {
   const blocks: DocxBlock[] = [];
+  let ordinal = 0;
   const itemOpts: IParagraphOptions = ordered
     ? { numbering: { reference: ORDERED_NUMBERING_REFERENCE, level } }
     : { bullet: { level } };
@@ -155,6 +159,7 @@ async function listBlocks(list: HTMLElement, ctx: HtmlToDocxContext, ordered: bo
     if (item.tagName.toLowerCase() !== "li") {
       continue;
     }
+    ordinal++;
     const inlineNodes: Node[] = [];
     const nestedLists: HTMLElement[] = [];
     for (const child of Array.from(item.childNodes)) {
@@ -164,9 +169,13 @@ async function listBlocks(list: HTMLElement, ctx: HtmlToDocxContext, ordered: bo
         inlineNodes.push(child);
       }
     }
-    const runs = await inlineRunsFromNodes(inlineNodes, ctx, {});
+    let runs = await inlineRunsFromNodes(inlineNodes, ctx, {});
+    const isFootnote = item.classList.contains("footnote-item") && Boolean(item.id);
+    if (isFootnote && runs.length > 0) {
+      runs = [new Bookmark({ id: footnoteBookmark(item.id), children: [new TextRun(`[${ordinal}] `), ...runs] })];
+    }
     if (runs.length > 0) {
-      blocks.push(new Paragraph({ ...itemOpts, children: runs }));
+      blocks.push(new Paragraph({ ...(isFootnote ? {} : itemOpts), children: runs }));
     }
     for (const nested of nestedLists) {
       blocks.push(...(await listBlocks(nested, ctx, nested.tagName.toLowerCase() === "ol", level + 1)));
@@ -200,7 +209,7 @@ async function tableBlock(table: HTMLElement, ctx: HtmlToDocxContext): Promise<T
   return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
 }
 
-async function inlineRuns(parent: HTMLElement, ctx: HtmlToDocxContext, style: InlineStyle): Promise<(TextRun | ExternalHyperlink | ImageRun)[]> {
+async function inlineRuns(parent: HTMLElement, ctx: HtmlToDocxContext, style: InlineStyle): Promise<ParagraphChild[]> {
   return inlineRunsFromNodes(Array.from(parent.childNodes), ctx, style);
 }
 
@@ -208,8 +217,8 @@ async function inlineRunsFromNodes(
   nodes: readonly Node[],
   ctx: HtmlToDocxContext,
   style: InlineStyle
-): Promise<(TextRun | ExternalHyperlink | ImageRun)[]> {
-  const out: (TextRun | ExternalHyperlink | ImageRun)[] = [];
+): Promise<ParagraphChild[]> {
+  const out: ParagraphChild[] = [];
 
   for (const node of nodes) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -261,10 +270,17 @@ async function inlineRunsFromNodes(
         break;
       case "a": {
         const href = node.getAttribute("href") ?? "";
+        if (node.classList.contains("footnote-anchor") && node.id) {
+          out.push(new Bookmark({ id: footnoteBookmark(node.id), children: [] }));
+          break;
+        }
         const external = /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("//");
-        const inner = await inlineRunsFromNodes(Array.from(node.childNodes), ctx, { ...style, hyperlink: external });
+        const internalFootnote = href.startsWith("#") && (node.closest(".footnote-ref") || node.classList.contains("footnote-backref"));
+        const inner = await inlineRunsFromNodes(Array.from(node.childNodes), ctx, { ...style, hyperlink: external || Boolean(internalFootnote) });
         if (external && inner.length > 0) {
           out.push(new ExternalHyperlink({ link: href, children: inner }));
+        } else if (internalFootnote && inner.length > 0) {
+          out.push(new InternalHyperlink({ anchor: footnoteBookmark(href.slice(1)), children: inner }));
         } else {
           out.push(...inner);
         }
@@ -289,6 +305,11 @@ async function inlineRunsFromNodes(
   }
 
   return out;
+}
+
+/** Generated footnote IDs contain punctuation that Word bookmark names cannot. */
+function footnoteBookmark(id: string): string {
+  return `pw_${id.replace(/[^a-zA-Z0-9]/g, "_")}`;
 }
 
 /**

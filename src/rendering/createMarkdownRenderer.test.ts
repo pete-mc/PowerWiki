@@ -5,6 +5,13 @@ import { createMarkdownRenderer } from "./createMarkdownRenderer";
 const md = createMarkdownRenderer();
 
 describe("createMarkdownRenderer", () => {
+  it("renders repeated footnote references and their return links", () => {
+    const html = md.render("One[^note], two[^note].\n\n[^note]: A **note**.");
+    expect(html).toContain('href="#footnote1"');
+    expect(html).toContain('id="footnote1"');
+    expect(html).toContain('href="#footnote-ref1:1"');
+    expect(html).toContain("<strong>note</strong>");
+  });
   it("adds slugged anchor ids to headings", () => {
     const html = md.render("# Hello World");
     expect(html).toContain('<h1 id="hello-world"');

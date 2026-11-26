@@ -5,17 +5,94 @@
 // Markdown losing something the author never touched.
 
 import { describe, expect, it } from "vitest";
+import MarkdownIt from "markdown-it";
 
 import { MENTION_ATTR } from "../../rendering/adoMentionsPlugin";
 import { EMOJI_ATTR } from "../../rendering/emojiPlugin";
-import { createRichTextTurndown } from "./richTextTurndown";
+import { createRichTextTurndown, richTextMarkdown } from "./richTextTurndown";
+import { editableFootnotes, FOOTNOTE_PENDING_DEFINITION_ATTR, FOOTNOTE_SOURCE_ATTR, updateEditableFootnoteNumbers } from "./editableFootnotes";
 
 const ADA = "a502d9c7-0cbd-45de-9b3f-1c2d3e4f5a6b";
 const GRACE = "b613e0d8-1dce-46ef-ac40-2d3e4f5a6b7c";
 
 const turndown = createRichTextTurndown();
+const footnoteRenderer = new MarkdownIt({ html: false }).use(editableFootnotes);
 const mentionChip = (id: string, name: string) =>
   `<span class="powerwiki-mention" ${MENTION_ATTR}="${id}">@${name}</span>`;
+
+describe("footnotes", () => {
+  it("shows readable references and formatted notes while preserving their source", () => {
+    const source = "Text[^detail] and again[^detail].\n\n[^detail]: A **bold** note.";
+    const editor = document.createElement("div");
+    editor.innerHTML = footnoteRenderer.render(source);
+    expect([...editor.querySelectorAll(".wiki-richtext-footnote-ref")].map((node) => node.textContent)).toEqual(["[1]", "[1:1]"]);
+    expect(editor.querySelector(".wiki-richtext-footnote strong")?.textContent).toBe("bold");
+    expect(turndown.turndown(editor.innerHTML)).toBe(source);
+  });
+  it("renumbers named footnotes when their reference order changes", () => {
+    const original = "First[^a] second[^b].\n\n[^a]: A.\n\n[^b]: B.";
+    const editor = document.createElement("div");
+    editor.innerHTML = footnoteRenderer.render(original);
+    updateEditableFootnoteNumbers(editor, "First[^b] second[^a].\n\n[^a]: A.\n\n[^b]: B.");
+    expect([...editor.querySelectorAll(".wiki-richtext-footnote-ref")].map((node) => node.textContent)).toEqual(["[2]", "[1]"]);
+    expect([...editor.querySelectorAll(".wiki-richtext-footnote-label")].map((node) => node.textContent)).toEqual(["[2]", "[1]"]);
+    expect(turndown.turndown(editor.innerHTML)).toBe(original);
+  });
+  it("marks only the first note for a separator, including after deletion", () => {
+    const source = "First[^a] second[^b].\n\n[^a]: A.\n\n[^b]: B.";
+    const editor = document.createElement("div");
+    editor.innerHTML = footnoteRenderer.render(source);
+    const definitions = editor.querySelectorAll(".wiki-richtext-footnote");
+    expect(definitions[0].classList.contains("wiki-richtext-footnote-first")).toBe(true);
+    expect(definitions[1].classList.contains("wiki-richtext-footnote-first")).toBe(false);
+    definitions[0].remove();
+    updateEditableFootnoteNumbers(editor, "Second[^b].\n\n[^b]: B.");
+    expect(definitions[1].classList.contains("wiki-richtext-footnote-first")).toBe(true);
+  });
+  it("keeps a new reference and its definition together as the inserted node is undone", () => {
+    const editor = document.createElement("div");
+    const marker = document.createElement("span");
+    marker.setAttribute(FOOTNOTE_SOURCE_ATTR, encodeURIComponent("[^1]"));
+    marker.setAttribute(FOOTNOTE_PENDING_DEFINITION_ATTR, encodeURIComponent("[^1]: A note"));
+    marker.textContent = "[^1]";
+    const p = document.createElement("p");
+    p.append("Text", marker);
+    editor.append(p);
+    expect(richTextMarkdown(editor, turndown)).toBe("Text[^1]\n\n[^1]: A note");
+    const repeated = marker.cloneNode(true) as HTMLElement;
+    p.append(repeated);
+    expect(richTextMarkdown(editor, turndown)).toBe("Text[^1][^1]\n\n[^1]: A note");
+    marker.remove();
+    expect(richTextMarkdown(editor, turndown)).toBe("Text[^1]\n\n[^1]: A note");
+    repeated.remove();
+    expect(richTextMarkdown(editor, turndown)).toBe("Text");
+  });
+  it("preserves repeated references and multi-paragraph definitions", () => {
+    const source = "Text[^a] again[^a].\n\n[^a]: First **note**.\n\n    Second paragraph.\n\nAfter.";
+    expect(turndown.turndown(footnoteRenderer.render(source))).toBe(source);
+  });
+  it("preserves inline and unreferenced notes", () => {
+    const source = "Inline^[a note] and unfinished[^missing].\n\n[^unused]: Definition.";
+    expect(turndown.turndown(footnoteRenderer.render(source))).toBe(source);
+  });
+  it("leaves examples in code blocks unchanged", () => {
+    const source = "```md\n[^a]: code\n```";
+    expect(turndown.turndown(footnoteRenderer.render(source))).toBe(source);
+  });
+  it("preserves footnotes inside block quotes", () => {
+    const source = "> Text[^a].\n>\n> [^a]: Note.";
+    expect(turndown.turndown(footnoteRenderer.render(source)).replace(/^> $/gm, ">")).toBe(source);
+  });
+  it("preserves content with quotes and angle brackets in a footnote", () => {
+    const source = 'Text[^a].\n\n[^a]: "quoted" <value> & more.';
+    expect(turndown.turndown(footnoteRenderer.render(source))).toBe(source);
+  });
+  it("renders nested footnote-like text without recursive rendering", () => {
+    const source = "Text[^n].\n\n[^n]: " + "[^nested]: ".repeat(300) + "content";
+    expect(() => footnoteRenderer.render(source)).not.toThrow();
+    expect(turndown.turndown(footnoteRenderer.render(source))).toBe(source);
+  });
+});
 
 describe("mentions", () => {
   it("writes the identity back, not the display name shown in the editor", () => {
