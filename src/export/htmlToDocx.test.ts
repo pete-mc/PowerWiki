@@ -3,6 +3,8 @@ import JSZip from "jszip";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MERMAID_SOURCE_ATTR } from "../rendering/renderMermaidDiagrams";
+import { createMarkdownRenderer } from "../rendering/createMarkdownRenderer";
+import { sanitizeRenderedHtml } from "../rendering/sanitizeRenderedHtml";
 import { htmlElementToDocxBlocks } from "./htmlToDocx";
 
 // jsdom can't rasterize, so the canvas step is stubbed: these tests cover what
@@ -43,6 +45,34 @@ describe("htmlElementToDocxBlocks", () => {
   beforeEach(() => {
     rasterizeSvgElement.mockReset();
     rasterizeSvgElement.mockResolvedValue(RASTERIZED);
+  });
+
+  it("retains footnote reference and note text in the Word document", async () => {
+    const html = sanitizeRenderedHtml(createMarkdownRenderer().render("Text[^n].\n\n[^n]: Important note."));
+    const blocks = await htmlElementToDocxBlocks(elementFrom(html), { pagePath: "/Home", loadImage: async () => null });
+    const zip = await JSZip.loadAsync(await Packer.toBuffer(new Document({ sections: [{ children: blocks }] })));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    expect(xml).toContain("Important note.");
+    expect(xml).toContain("[1]");
+    expect(xml).toContain('w:anchor="pw_footnote1"');
+    expect(xml).toContain('w:name="pw_footnote1"');
+    expect(xml).toContain('w:anchor="pw_footnote_ref1"');
+    expect(xml).toContain('w:name="pw_footnote_ref1"');
+  });
+
+  it("keeps footnote links and numbering separate across exported pages", async () => {
+    const renderer = createMarkdownRenderer();
+    const source = "Text[^n].\n\n[^n]: Note.";
+    const first = sanitizeRenderedHtml(renderer.render(source, { docId: "export1" }));
+    const second = sanitizeRenderedHtml(renderer.render(source, { docId: "export2" }));
+    const blocks = await htmlElementToDocxBlocks(elementFrom(first + second), { pagePath: "/Home", loadImage: async () => null });
+    const zip = await JSZip.loadAsync(await Packer.toBuffer(new Document({ sections: [{ children: blocks }] })));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    for (const id of ["pw_footnote_export1_1", "pw_footnote_export2_1"]) {
+      expect(xml).toContain(`w:anchor="${id}"`);
+      expect(xml).toContain(`w:name="${id}"`);
+    }
+    expect((xml.match(/\[1\]/g) ?? []).length).toBe(4);
   });
 
   it("converts enriched HTML into a valid .docx (zip)", async () => {

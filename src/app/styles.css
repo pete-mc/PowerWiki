@@ -1211,6 +1211,58 @@ body {
   content: "Start writing...";
 }
 
+.wiki-richtext-pending-footnotes {
+  border-top: 1px solid var(--pw-border);
+  color: var(--pw-text-secondary);
+  padding: 8px 16px;
+  white-space: pre-wrap;
+}
+
+.wiki-richtext-pending-footnotes.has-existing-footnotes {
+  border-top: 0;
+}
+
+.wiki-richtext-footnote-ref {
+  color: var(--pw-accent);
+  cursor: default;
+}
+
+.wiki-richtext-footnote {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.wiki-richtext-footnote-first {
+  border-top: 1px solid var(--pw-border);
+}
+
+.wiki-richtext-footnote-label {
+  color: var(--pw-text-secondary);
+}
+
+.wiki-richtext-footnote-edit {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--pw-border);
+  border-radius: 3px;
+  color: var(--pw-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 2px 6px;
+}
+
+.wiki-richtext-footnote-edit:hover,
+.wiki-richtext-footnote-edit:focus-visible {
+  color: var(--pw-text);
+  border-color: var(--pw-accent);
+}
+
+.wiki-richtext-footnote > div > :first-child {
+  margin-top: 0;
+}
+
 .wiki-richtext-editor table {
   border-collapse: collapse;
   margin: 12px 0;

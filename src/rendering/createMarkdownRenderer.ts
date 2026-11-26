@@ -3,6 +3,7 @@
 import MarkdownItConstructor from "markdown-it";
 import type { MarkdownIt } from "markdown-it";
 import markdownItAnchor from "markdown-it-anchor";
+import { footnote } from "@mdit/plugin-footnote";
 
 import { adoImageSizePlugin } from "./adoImageSizePlugin";
 import { adoMentionsPlugin } from "./adoMentionsPlugin";
@@ -97,6 +98,7 @@ export function createMarkdownRenderer(): MarkdownIt {
     .use(looseHeadingsPlugin)
     .use(calloutsPlugin)
     .use(emojiPlugin)
+    .use(footnote, { backrefAttrs: { "aria-label": "Back to reference" }, containerAttrs: { "aria-label": "Footnotes" } })
     .use(mathPlugin)
     .use(adoWorkItemsPlugin)
     .use(adoMentionsPlugin)

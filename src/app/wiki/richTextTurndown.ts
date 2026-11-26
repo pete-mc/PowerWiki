@@ -13,6 +13,35 @@ import { gfm } from "turndown-plugin-gfm";
 import { MENTION_ATTR } from "../../rendering/adoMentionsPlugin";
 import { EMOJI_ATTR, emojiForShortcode } from "../../rendering/emojiPlugin";
 import { mentionMarkdown } from "./mentionTrigger";
+import { FOOTNOTE_PENDING_DEFINITION_ATTR, FOOTNOTE_SOURCE_ATTR } from "./editableFootnotes";
+import { footnoteLabels } from "./footnoteAuthoring";
+
+export function pendingFootnoteDefinitions(editor: HTMLElement): string[] {
+  const definitions = new Map<string, string>();
+  for (const element of Array.from(editor.querySelectorAll<HTMLElement>(`[${FOOTNOTE_PENDING_DEFINITION_ATTR}]`))) {
+    let definition: string;
+    try { definition = decodeURIComponent(element.getAttribute(FOOTNOTE_PENDING_DEFINITION_ATTR) ?? ""); }
+    catch { continue; }
+    const label = /^\[\^([^\]\s]+)\]:/.exec(definition)?.[1];
+    if (label && !definitions.has(label)) definitions.set(label, definition);
+  }
+  return [...definitions.values()];
+}
+
+/** Include definitions attached to newly inserted references in the same undoable edit. */
+export function richTextMarkdown(editor: HTMLElement, service: TurndownService): string {
+  let markdown = service.turndown(editor.innerHTML);
+  const pending = pendingFootnoteDefinitions(editor);
+  if (pending.length === 0) return markdown;
+  const existing = new Set(footnoteLabels(markdown));
+  for (const definition of pending) {
+    const label = /^\[\^([^\]\s]+)\]:/.exec(definition)![1];
+    if (existing.has(label)) continue;
+    markdown += `${markdown.endsWith("\n") ? "\n" : "\n\n"}${definition}`;
+    existing.add(label);
+  }
+  return markdown;
+}
 
 /** Builds the Turndown service the rich text editor converts its DOM with. */
 export function createRichTextTurndown(): TurndownService {
@@ -28,6 +57,17 @@ export function createRichTextTurndown(): TurndownService {
   // GFM support so HTML tables, strikethrough, and task lists round-trip to
   // Markdown table/`~~`/`- [ ]` syntax instead of being flattened to text.
   service.use(gfm);
+
+  service.addRule("wikiFootnoteSource", {
+    filter: (node) => node.hasAttribute(FOOTNOTE_SOURCE_ATTR),
+    replacement: (_content, node) => {
+      const element = node as HTMLElement;
+      let source: string;
+      try { source = decodeURIComponent(element.getAttribute(FOOTNOTE_SOURCE_ATTR) ?? ""); }
+      catch { source = element.textContent ?? ""; }
+      return element.classList.contains("wiki-richtext-footnote") ? `\n\n${source}\n\n` : source;
+    }
+  });
 
   // Keep line-break intentions when users hit Enter+Shift in rich text mode.
   service.addRule("lineBreak", {
